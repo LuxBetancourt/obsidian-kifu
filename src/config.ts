@@ -5,7 +5,7 @@ export interface KifuSettings {
 	scale: number;
 	/** White paper with black ink, or the colours of the current theme. Per board: `style:`. */
 	style: 'paper' | 'theme';
-	/** Coordinates along the left and bottom edges. Per board: `coords:`. */
+	/** Coordinates beside the board's edges (the real ones, where the part shown has any). Per board: `coords:`. */
 	coords: boolean;
 	/** What a board shows when it has no `view:` line. */
 	view: 'auto' | 'full';

@@ -13,6 +13,16 @@ const U = 100;
 const HALF = U / 2;
 /** Stone radius. */
 const R = 47.5;
+/**
+ * Which sides the coordinates go on: beside the board's real edges, as in print. The
+ * numbers go on the right when the part shown reaches the right edge but not the left
+ * one, otherwise on the left; the letters along the top when it reaches the top edge
+ * but not the bottom one, otherwise along the bottom.
+ */
+export function coordSides(w: number, h: number, v: Rect): { right: boolean; top: boolean } {
+	return { right: v.x1 === w - 1 && v.x0 > 0, top: v.y0 === 0 && v.y1 < h - 1 };
+}
+
 /** Width of the band that holds coordinates. */
 const BAND = 80;
 
@@ -73,8 +83,10 @@ export class BoardSvg {
 		const X1 = (view.x1 + 1) * U;
 		const Y1 = (view.y1 + 1) * U;
 		this.view = view;
-		this.vx = X0 - band - shift;
-		this.vy = Y0 - shift;
+		// the coordinates go beside the board's real edges (see coordSides)
+		const sides = coordSides(w, h, view);
+		this.vx = X0 - (sides.right ? 0 : band) - shift;
+		this.vy = Y0 - (sides.top ? band : 0) - shift;
 		this.vw = X1 - X0 + band;
 		this.vh = Y1 - Y0 + band;
 
@@ -206,12 +218,14 @@ export class BoardSvg {
 
 		if (band) {
 			const fs = 38;
+			const sides = coordSides(w, h, v);
+			const nx = sides.right ? X1 + band / 2 : X0 - band / 2;
+			const ly = sides.top ? Y0 - band / 2 : Y1 + band / 2;
 			for (let y = v.y0; y <= v.y1; y++) {
-				svg(this.fixed, 'text', { x: X0 - band / 2, y: y * U + HALF + fs * 0.355, 'font-size': fs, class: 'kifu-coord' }).textContent =
-					String(h - y);
+				svg(this.fixed, 'text', { x: nx, y: y * U + HALF + fs * 0.355, 'font-size': fs, class: 'kifu-coord' }).textContent = String(h - y);
 			}
 			for (let x = v.x0; x <= v.x1; x++) {
-				svg(this.fixed, 'text', { x: x * U + HALF, y: Y1 + band / 2 + fs * 0.355, 'font-size': fs, class: 'kifu-coord' }).textContent =
+				svg(this.fixed, 'text', { x: x * U + HALF, y: ly + fs * 0.355, 'font-size': fs, class: 'kifu-coord' }).textContent =
 					pointName(x, 0, h).replace(/\d+$/, '');
 			}
 		}

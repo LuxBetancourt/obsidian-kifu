@@ -204,7 +204,7 @@ Option lines come first in the block, one per line, before any SGF.
 | `move` | number, `last` | position to show |
 | `numbers` | see above | numbered figure |
 | `scale` | `80%`, `1.5` | size of this board |
-| `coords` | `on` / `off` | coordinates along the edge |
+| `coords` | `on` / `off` | coordinates beside the board's edges (the real ones, where the part shown has any) |
 | `caption` | text | text under the board at rest |
 | `comments` | `on` / `off` | show move comments under the board |
 | `problem` | `yes` / `no` | judge moves or not |

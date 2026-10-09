@@ -821,6 +821,28 @@ await scenario('a shuffled problem is shown turned and recoloured, solved as sho
 	assert.match(await text(page, 'P.md'), /randomize: on\n\(;GM\[1\]FF\[4\]SZ\[19\]AB\[oa\]/);
 });
 
+await scenario('coordinates sit beside the board\'s real edges, wherever they are', {
+	files: { 'C.md': ['top-right', 'bottom-left', 'top', 'center'].map((v) => '```kifu\ncoords: on\nview: ' + v + ' 7x5\n(;SZ[19]AB[pd])\n```').join('\n\n') + '\n' },
+	panes: [{ path: 'C.md', mode: 'preview' }],
+}, async (page) => {
+	// for each board: are the numbers right of the grid, and the letters above it?
+	const sides = await page.evaluate(() => [...document.querySelectorAll('.kifu-svg')].map((svg) => {
+		const grid = svg.querySelector('.kifu-grid').getBoundingClientRect();
+		const coords = [...svg.querySelectorAll('.kifu-coord')];
+		const nums = coords.filter((t) => /^\d+$/.test(t.textContent)).map((t) => t.getBoundingClientRect());
+		const letters = coords.filter((t) => /^[A-Z]$/.test(t.textContent)).map((t) => t.getBoundingClientRect());
+		return {
+			numbers: nums.every((r) => r.left >= grid.right) ? 'right' : nums.every((r) => r.right <= grid.left) ? 'left' : 'mixed',
+			letters: letters.every((r) => r.bottom <= grid.top) ? 'top' : letters.every((r) => r.top >= grid.bottom) ? 'bottom' : 'mixed',
+		};
+	}));
+	assert.deepEqual(sides.map((s) => `${s.numbers} ${s.letters}`), ['right top', 'left bottom', 'left top', 'left bottom']);
+	// a click still lands on the point under it, with the coordinates on the far side
+	await clickPoint(page, 0, 'qc');
+	await sleep(100);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 }); // (black stones set up: White plays first)
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],
