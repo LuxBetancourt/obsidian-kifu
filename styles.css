@@ -45,9 +45,10 @@
 	--kifu-on-white: #000;
 }
 
-.kifu [hidden],
-.kifu-panel [hidden] {
-	display: none !important;
+/* (body: one step more specific than any rule here that sets display) */
+body .kifu [hidden],
+body .kifu-panel [hidden] {
+	display: none;
 }
 
 /* reached with the Tab key (a mouse click does not show this) */
@@ -521,7 +522,7 @@
 
 /* In Live Preview, Obsidian's own "edit this block" button sits in the same
    top-right corner; for our blocks it moves to the bottom instead. */
-.cm-preview-code-block:has(> .block-language-kifu) > .edit-block-button {
+.cm-preview-code-block.kifu-block-host > .edit-block-button {
 	top: auto;
 	bottom: var(--size-2-2, 4px);
 }

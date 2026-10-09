@@ -10,6 +10,20 @@
 (function () {
 	const listeners = () => new Map();
 
+	// Obsidian adds createEl to every node: make an element in the node's document, give it
+	// classes, text and attributes, and append it.
+	Node.prototype.createEl = function (tag, o) {
+		const e = (this.ownerDocument ?? this).createElement(tag);
+		if (typeof o === 'string') o = { cls: o };
+		if (o) {
+			if (o.cls) for (const c of Array.isArray(o.cls) ? o.cls : [o.cls]) e.classList.add(c);
+			if (o.text !== undefined) e.textContent = o.text;
+			if (o.attr) for (const k in o.attr) if (o.attr[k] != null) e.setAttribute(k, String(o.attr[k]));
+		}
+		this.appendChild(e);
+		return e;
+	};
+
 	class Events {
 		constructor() { this._ev = listeners(); }
 		on(name, cb) { const l = this._ev.get(name) ?? []; l.push(cb); this._ev.set(name, l); return { name, cb, src: this }; }
@@ -377,7 +391,45 @@
 	}
 
 	class SettingTab { constructor(app) { this.app = app; this.containerEl = document.createElement('div'); this.containerEl.className = 'vertical-tab-content'; } }
-	class PluginSettingTab extends SettingTab { constructor(app, plugin) { super(app); } display() {} hide() {} }
+	// As in Obsidian 1.13: a tab that returns setting definitions is drawn from them (display()
+	// stands for the settings window opening it); controls read and write plugin.settings unless
+	// the tab overrides getControlValue / setControlValue.
+	class PluginSettingTab extends SettingTab {
+		constructor(app, plugin) { super(app); this.plugin = plugin; this._cleanups = []; this._shown = false; }
+		getControlValue(key) { return this.plugin.settings?.[key]; }
+		async setControlValue(key, value) { this.plugin.settings[key] = value; await this.plugin.saveData(this.plugin.settings); }
+		display() {
+			const defs = this.getSettingDefinitions ? this.getSettingDefinitions() : [];
+			if (!defs.length) return;
+			this._shown = true;
+			for (const fn of this._cleanups.splice(0)) fn();
+			this.containerEl.replaceChildren();
+			const row = (def) => {
+				if (def.type === 'group') {
+					new Setting(this.containerEl).setName(def.heading).setHeading();
+					for (const d of def.items) row(d);
+					return;
+				}
+				const st = new Setting(this.containerEl).setName(def.name);
+				if (def.desc) st.setDesc(def.desc);
+				if (def.render) {
+					const done = def.render(st);
+					if (typeof done === 'function') this._cleanups.push(done);
+				} else if (def.control) {
+					const c = def.control;
+					const value = this.getControlValue(c.key) ?? c.defaultValue;
+					const set = (v) => void this.setControlValue(c.key, v);
+					if (c.type === 'toggle') st.addToggle((t) => t.setValue(value).onChange(set));
+					else if (c.type === 'slider') st.addSlider((t) => t.setLimits(c.min, c.max, c.step).setValue(value).onChange(set));
+					else if (c.type === 'dropdown') st.addDropdown((t) => { for (const k in c.options) t.addOption(k, c.options[k]); t.setValue(value).onChange(set); });
+					else throw new Error('control type not in the stand-in: ' + c.type);
+				}
+			};
+			for (const d of defs) row(d);
+		}
+		update() { if (this._shown) this.display(); }
+		hide() {}
+	}
 
 	class Setting {
 		constructor(containerEl) {

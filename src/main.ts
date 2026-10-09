@@ -215,6 +215,11 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	/* --------------------------------------------------------------- settings */
 
+	/** Have the settings been read yet? */
+	get settingsReady(): boolean {
+		return this.#settingsReady;
+	}
+
 	/** Settings are read on first use rather than at startup. */
 	settingsLoaded(): Promise<void> {
 		return (this.#settingsLoad ??= (async () => {
@@ -982,6 +987,8 @@ class SgfPicker extends FuzzySuggestModal<TFile> {
 	}
 
 	getItems(): TFile[] {
+		// The one place the vault's files are listed: only while this picker is open, and
+		// only the SGF files are kept.
 		return this.app.vault.getFiles().filter((f) => f.extension.toLowerCase() === 'sgf');
 	}
 

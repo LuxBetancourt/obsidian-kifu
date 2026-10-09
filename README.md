@@ -18,7 +18,7 @@ In Obsidian open **Settings → Community plugins → Browse**, search for **Kif
 
 To install it by hand instead, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/LuxBetancourt/obsidian-kifu/releases/latest), put them in a folder `<your vault>/.obsidian/plugins/kifu/`, and switch **Kifu** on under **Settings → Community plugins** (press the refresh button next to *Installed plugins* if it is not listed).
 
-Needs Obsidian 1.7.2 or later. It works on desktop, tablet and phone. It never goes online and reads nothing outside your vault.
+Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It never goes online and reads nothing outside your vault. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
 
 To see everything at once, copy the two files in `demo/` into your vault and open *Kifu demo*.
 
@@ -246,7 +246,6 @@ The drawing is plain SVG coloured by CSS variables, so a snippet can restyle it:
 - Links inside code blocks are not tracked by Obsidian, so renaming an `.sgf` file does not update `sgf:` lines. Moving it to another folder is fine as long as the name stays unique.
 - Passes in an SGF file are stepped over correctly, but there is no pass button yet.
 - A board in a Canvas text card can be viewed and played, not edited.
-- The settings do not show up in Obsidian's settings *search* (that needs a newer way of declaring them than this version uses).
 
 ## Status
 

@@ -8,10 +8,9 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 	cls?: string,
 	text?: string,
 ): HTMLElementTagNameMap[K] {
-	const e = (parent.ownerDocument as Document).createElement(tag);
-	if (cls) e.className = cls;
+	// (Obsidian's helper: it makes the element in the parent's own window, popouts included)
+	const e = parent.createEl(tag, cls ? { cls: cls.split(' ').filter(Boolean) } : undefined);
 	if (text !== undefined) e.textContent = text;
-	parent.appendChild(e);
 	return e;
 }
 

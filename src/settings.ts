@@ -1,11 +1,11 @@
 /** The settings page. Everything here is a default that a single board can override. */
 
-import { App, PluginSettingTab, Setting, requireApiVersion } from 'obsidian';
+import { App, PluginSettingTab, SettingDefinitionItem } from 'obsidian';
 import type KifuPlugin from './main';
 import { BASE_CELL, DEFAULT_SETTINGS, KifuSettings } from './config';
 import { Session } from './session';
 import { BoardSvg } from './ui/boardsvg';
-import { clear, el } from './ui/dom';
+import { el } from './ui/dom';
 
 // A classic (star point, knight's approach; then knight's answer, slide, 3-3, extension),
 // as a position with four moves played on it, so that the numbering has something to show.
@@ -38,31 +38,139 @@ export function sanitize(data: unknown): KifuSettings {
 
 export class KifuSettingTab extends PluginSettingTab {
 	#plugin: KifuPlugin;
+	/** Redraws the sample board, while it is on screen. */
+	#redraw: (() => void) | null = null;
 
 	constructor(app: App, plugin: KifuPlugin) {
 		super(app, plugin);
 		this.#plugin = plugin;
-		// (shown beside the tab's name; older versions have no such thing)
-		if (requireApiVersion('1.11.0')) this.icon = 'kifu-tree';
+		this.icon = 'kifu-tree';
 	}
 
-	display(): void {
-		clear(this.containerEl);
-		void this.#plugin.settingsLoaded().then(() => this.#build());
+	/*
+	 * Obsidian draws the page from these definitions and indexes them for its settings
+	 * search. They are asked for once when the plugin starts, so building them reads
+	 * nothing: the settings themselves are read when the page is first shown.
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [
+			{
+				name: 'Preview',
+				desc: 'A board drawn with the settings below.',
+				searchable: false,
+				render: (setting) => this.#sample(setting.controlEl),
+			},
+			{
+				name: 'Board scale',
+				desc: 'How big boards are drawn, in percent. One board can differ with a line such as "scale: 80%".',
+				control: { type: 'slider', key: 'scale', min: 50, max: 250, step: 5 },
+			},
+			{
+				name: 'Colors',
+				desc: 'Black ink on white paper like a book, or the colors of your theme. Per board: "style: paper" or "style: theme".',
+				control: { type: 'dropdown', key: 'style', options: { paper: 'White paper', theme: 'Follow the theme' } },
+			},
+			{
+				name: 'Part of the board shown',
+				desc: 'Crop to where the stones are, or always show the whole board. Per board: "view: top-right", "view: full", and so on.',
+				control: { type: 'dropdown', key: 'view', options: { auto: 'Crop to the stones', full: 'Whole board' } },
+			},
+			{
+				name: 'Coordinates',
+				desc: 'Letters and numbers along the edge. Per board: "coords: on" or "coords: off".',
+				control: { type: 'toggle', key: 'coords' },
+			},
+			{
+				name: 'Alignment',
+				desc: 'Where a board sits in the note. Per board: "align: left".',
+				control: { type: 'dropdown', key: 'align', options: { center: 'Center', left: 'Left', right: 'Right' } },
+			},
+			{
+				name: 'New board size',
+				desc: 'Size of a board that has nothing on it yet. Per board: "size: 13" or "size: 13x9".',
+				control: { type: 'dropdown', key: 'boardSize', options: { '19': '19 × 19', '13': '13 × 13', '9': '9 × 9' } },
+			},
+			{
+				type: 'group',
+				heading: 'Playing a position out',
+				items: [
+					{
+						name: 'Number the moves you play',
+						desc: 'Stones played on a locked board are numbered from 1. Otherwise only the latest one is flagged. Per board: "numbers: on" or "numbers: off".',
+						control: { type: 'toggle', key: 'numberPlayed' },
+					},
+					{
+						name: 'Show comments under the board',
+						desc: 'The comment saved with the current move. It is always shown in the move tree panel. Per board: "comments: off".',
+						control: { type: 'toggle', key: 'showComments' },
+					},
+					{
+						name: 'Replies',
+						desc: 'When a saved line has more than one answer to your move: always play the first, or pick one at random.',
+						control: { type: 'dropdown', key: 'reply', options: { first: 'First saved answer', random: 'Random' } },
+					},
+					{
+						name: 'Reply delay',
+						desc: 'Pause before the answer is played, in milliseconds.',
+						control: { type: 'slider', key: 'replyDelay', min: 0, max: 1500, step: 50 },
+					},
+					{
+						name: 'Keep answers out of the move tree',
+						desc: 'While a problem is locked, the panel shows only the moves played so far. Its eye button shows the saved lines.',
+						control: { type: 'toggle', key: 'hideAnswers' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Editing',
+				items: [
+					{
+						name: 'Open the move tree when a board is unlocked',
+						desc: 'Brings the panel in the right sidebar forward, where comments are written.',
+						control: { type: 'toggle', key: 'revealPanel' },
+					},
+				],
+			},
+		];
 	}
 
-	#build(): void {
-		const root = this.containerEl;
-		clear(root);
+	getControlValue(key: string): unknown {
+		const plugin = this.#plugin;
+		if (!plugin.settingsReady) {
+			// First time the page is on screen: read the settings, then draw it again with
+			// them. (When Obsidian only indexes the page, nothing is on screen and nothing is read.)
+			window.setTimeout(() => {
+				if (this.containerEl.isConnected) void plugin.settingsLoaded().then(() => this.update());
+			}, 0);
+		}
+		const s = plugin.settings;
+		// (the slider counts in percent, the dropdown in text)
+		if (key === 'scale') return Math.round(s.scale * 100);
+		if (key === 'boardSize') return String(s.boardSize);
+		return s[key as keyof KifuSettings];
+	}
+
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const plugin = this.#plugin;
+		await plugin.settingsLoaded();
+		const v = key === 'scale' ? Number(value) / 100 : key === 'boardSize' ? parseInt(String(value)) : value;
+		const checked = sanitize({ ...plugin.settings, [key]: v });
+		// a value that does not fit (or a key we do not have) leaves the settings as they were
+		if (!(key in checked) || checked[key as keyof KifuSettings] !== v) return;
+		Object.assign(plugin.settings, checked);
+		this.#redraw?.();
+		await plugin.saveSettings();
+	}
+
+	/** A sample board that follows the settings as they change. */
+	#sample(parent: HTMLElement): () => void {
 		const s = this.#plugin.settings;
-
-		// A sample board that follows the settings as they change.
-		const sampleBox = el(root, 'div', 'kifu kifu-sample');
+		const sampleBox = el(parent, 'div', 'kifu kifu-sample');
 		const frame = el(sampleBox, 'div', 'kifu-frame');
 		const board = new BoardSvg(frame);
 		// (it is only ever looked at: nothing to save, nothing to wait for)
 		const sample = new Session({ settings: s, requestSave: () => undefined, later: () => () => undefined }, '', SAMPLE);
-		sample.goto(sample.home);
 		const redraw = (): void => {
 			sampleBox.className = `kifu kifu-sample kifu-${s.style} kifu-${s.align}`;
 			sample.refresh();
@@ -70,166 +178,9 @@ export class KifuSettingTab extends PluginSettingTab {
 			board.draw(sample.model(), { cell: Math.max(6, Math.round(BASE_CELL * s.scale)), coords: s.coords });
 		};
 		redraw();
-		const save = (): void => {
-			redraw();
-			void this.#plugin.saveSettings();
+		this.#redraw = redraw;
+		return () => {
+			if (this.#redraw === redraw) this.#redraw = null;
 		};
-
-		const scaleDesc = (): string =>
-			`How big boards are drawn: ${Math.round(s.scale * 100)}%. One board can differ with a line such as "scale: 80%".`;
-		const scale = new Setting(root)
-			.setName('Board scale')
-			.setDesc(scaleDesc())
-			.addSlider((c) =>
-				c
-					.setLimits(50, 250, 5)
-					.setValue(Math.round(s.scale * 100))
-					.onChange((v) => {
-						s.scale = v / 100;
-						scale.setDesc(scaleDesc());
-						save();
-					}),
-			);
-
-		new Setting(root)
-			.setName('Colors')
-			.setDesc('Black ink on white paper like a book, or the colors of your theme. Per board: "style: paper" or "style: theme".')
-			.addDropdown((c) =>
-				c
-					.addOption('paper', 'White paper')
-					.addOption('theme', 'Follow the theme')
-					.setValue(s.style)
-					.onChange((v) => {
-						s.style = v === 'theme' ? 'theme' : 'paper';
-						save();
-					}),
-			);
-
-		new Setting(root)
-			.setName('Part of the board shown')
-			.setDesc('Crop to where the stones are, or always show the whole board. Per board: "view: top-right", "view: full", and so on.')
-			.addDropdown((c) =>
-				c
-					.addOption('auto', 'Crop to the stones')
-					.addOption('full', 'Whole board')
-					.setValue(s.view)
-					.onChange((v) => {
-						s.view = v === 'full' ? 'full' : 'auto';
-						save();
-					}),
-			);
-
-		new Setting(root)
-			.setName('Coordinates')
-			.setDesc('Letters and numbers along the edge. Per board: "coords: on" or "coords: off".')
-			.addToggle((c) =>
-				c.setValue(s.coords).onChange((v) => {
-					s.coords = v;
-					save();
-				}),
-			);
-
-		new Setting(root)
-			.setName('Alignment')
-			.setDesc('Where a board sits in the note. Per board: "align: left".')
-			.addDropdown((c) =>
-				c
-					.addOption('center', 'Center')
-					.addOption('left', 'Left')
-					.addOption('right', 'Right')
-					.setValue(s.align)
-					.onChange((v) => {
-						s.align = v === 'left' || v === 'right' ? v : 'center';
-						save();
-					}),
-			);
-
-		new Setting(root)
-			.setName('New board size')
-			.setDesc('Size of a board that has nothing on it yet. Per board: "size: 13" or "size: 13x9".')
-			.addDropdown((c) =>
-				c
-					.addOption('19', '19 × 19')
-					.addOption('13', '13 × 13')
-					.addOption('9', '9 × 9')
-					.setValue(String(s.boardSize))
-					.onChange((v) => {
-						s.boardSize = parseInt(v) || 19;
-						save();
-					}),
-			);
-
-		new Setting(root).setName('Playing a position out').setHeading();
-
-		new Setting(root)
-			.setName('Number the moves you play')
-			.setDesc('Stones played on a locked board are numbered from 1. Otherwise only the latest one is flagged. Per board: "numbers: on" or "numbers: off".')
-			.addToggle((c) =>
-				c.setValue(s.numberPlayed).onChange((v) => {
-					s.numberPlayed = v;
-					save();
-				}),
-			);
-
-		new Setting(root)
-			.setName('Show comments under the board')
-			.setDesc('The comment saved with the current move. It is always shown in the move tree panel. Per board: "comments: off".')
-			.addToggle((c) =>
-				c.setValue(s.showComments).onChange((v) => {
-					s.showComments = v;
-					save();
-				}),
-			);
-
-		new Setting(root)
-			.setName('Replies')
-			.setDesc('When a saved line has more than one answer to your move: always play the first, or pick one at random.')
-			.addDropdown((c) =>
-				c
-					.addOption('first', 'First saved answer')
-					.addOption('random', 'Random')
-					.setValue(s.reply)
-					.onChange((v) => {
-						s.reply = v === 'random' ? 'random' : 'first';
-						save();
-					}),
-			);
-
-		const delayDesc = (): string => `Pause before the answer is played: ${s.replyDelay} ms.`;
-		const delay = new Setting(root)
-			.setName('Reply delay')
-			.setDesc(delayDesc())
-			.addSlider((c) =>
-				c
-					.setLimits(0, 1500, 50)
-					.setValue(s.replyDelay)
-					.onChange((v) => {
-						s.replyDelay = v;
-						delay.setDesc(delayDesc());
-						save();
-					}),
-			);
-
-		new Setting(root)
-			.setName('Keep answers out of the move tree')
-			.setDesc('While a problem is locked, the panel shows only the moves played so far. Its eye button shows the saved lines.')
-			.addToggle((c) =>
-				c.setValue(s.hideAnswers).onChange((v) => {
-					s.hideAnswers = v;
-					save();
-				}),
-			);
-
-		new Setting(root).setName('Editing').setHeading();
-
-		new Setting(root)
-			.setName('Open the move tree when a board is unlocked')
-			.setDesc('Brings the panel in the right sidebar forward, where comments are written.')
-			.addToggle((c) =>
-				c.setValue(s.revealPanel).onChange((v) => {
-					s.revealPanel = v;
-					save();
-				}),
-			);
 	}
 }

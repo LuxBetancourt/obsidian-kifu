@@ -508,6 +508,34 @@ await scenario('figures: numbers option, move option, scale and captions', {
 	await page.screenshot({ path: `${out}/figures.png` });
 });
 
+await scenario('the settings are read only when the page is first shown, and it then shows them', { files: { 'E.md': 'no boards here\n' }, panes: [{ path: 'E.md', mode: 'preview' }], data: { scale: 1.2, coords: true, style: 'theme' } }, async (page) => {
+	// starting the plugin and having the page indexed reads nothing
+	await sleep(100);
+	assert.equal(await page.evaluate(() => window.harness.plugin.settingsReady), false);
+	const indexed = await page.evaluate(() => {
+		const t = window.harness.app._settingTabs[0];
+		return t.getSettingDefinitions().length > 0;
+	});
+	assert.equal(indexed, true);
+	await sleep(100);
+	assert.equal(await page.evaluate(() => window.harness.plugin.settingsReady), false);
+	// opened: read, then drawn again with what was saved
+	await page.evaluate(() => {
+		const t = window.harness.app._settingTabs[0];
+		document.getElementById('main').appendChild(t.containerEl);
+		t.display();
+	});
+	await sleep(150);
+	assert.equal(await page.evaluate(() => window.harness.plugin.settingsReady), true);
+	assert.equal(await page.evaluate(() => document.querySelector('.setting-item input[type=range]').value), '120');
+	assert.equal(await page.evaluate(() => document.querySelectorAll('.setting-item input[type=checkbox]')[0].checked), true);
+	assert.equal(await page.evaluate(() => document.querySelectorAll('.setting-item select')[0].value), 'theme');
+	assert.equal(await page.evaluate(() => document.querySelector('.kifu-sample').className), 'kifu kifu-sample kifu-theme kifu-center');
+	// a value that does not fit changes nothing
+	await page.evaluate(() => window.harness.app._settingTabs[0].setControlValue('boardSize', 'huge'));
+	assert.equal(await page.evaluate(() => window.harness.plugin.settings.boardSize), 19);
+});
+
 await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\n(;SZ[9]AB[cc]AW[dd];B[ee])\n```\n\nline\n' }, panes: [{ path: 'S.md', mode: 'source' }] }, async (page) => {
 	const tab = await page.evaluate(() => {
 		const t = window.harness.app._settingTabs[0];
@@ -517,7 +545,7 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	});
 	assert.ok(tab);
 	await sleep(50);
-	assert.equal(await page.locator('.setting-item').count(), 14); // 12 settings under 2 headings
+	assert.equal(await page.locator('.setting-item').count(), 15); // the preview, and 12 settings under 2 headings
 	assert.equal(await page.locator('.kifu-sample .kifu-svg').count(), 1);
 	const before = await page.evaluate(() => document.querySelector('.cm-content .kifu-svg').getAttribute('width'));
 	assert.equal(before, String(9 * 24));
