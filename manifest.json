@@ -1,9 +1,10 @@
 {
 	"id": "kifu",
 	"name": "Kifu",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"minAppVersion": "1.7.2",
-	"description": "Print-style Go (baduk, weiqi) boards for notes: positions, numbered figures, problems that play back, and SGF files.",
+	"description": "Draw print-style Go (baduk, weiqi) diagrams in your notes: positions, numbered figures, problems that play back, and SGF files.",
 	"author": "Lux",
+	"authorUrl": "https://github.com/LuxBetancourt",
 	"isDesktopOnly": false
 }

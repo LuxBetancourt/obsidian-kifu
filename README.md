@@ -14,10 +14,11 @@ Boards are stored as SGF, either right in the note or in an `.sgf` file the note
 
 ## Install
 
-1. Copy the `kifu` folder (the one holding `main.js`, `manifest.json` and `styles.css`) into `<your vault>/.obsidian/plugins/`.
-2. In Obsidian open **Settings → Community plugins** and switch **Kifu** on. If it is not listed, press the refresh button next to *Installed plugins*.
+In Obsidian open **Settings → Community plugins → Browse**, search for **Kifu**, install it and switch it on.
 
-Needs Obsidian 1.7.2 or later. Nothing in it is desktop-only.
+To install it by hand instead, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/LuxBetancourt/obsidian-kifu/releases/latest), put them in a folder `<your vault>/.obsidian/plugins/kifu/`, and switch **Kifu** on under **Settings → Community plugins** (press the refresh button next to *Installed plugins* if it is not listed).
+
+Needs Obsidian 1.7.2 or later. It works on desktop, tablet and phone. It never goes online and reads nothing outside your vault.
 
 To see everything at once, copy the two files in `demo/` into your vault and open *Kifu demo*.
 
@@ -249,7 +250,13 @@ The drawing is plain SVG coloured by CSS variables, so a snippet can restyle it:
 
 ## Status
 
-Version 0.1.0. It has been tested thoroughly, but **not yet inside Obsidian itself**: the checks run the built plugin in a browser against a stand-in for the Obsidian API, with Live Preview played by a real CodeMirror editor. Wherever Obsidian's behaviour is not documented, the checks are run with the stand-in behaving both ways. The part that writes into notes got the most attention: it was reviewed independently three times, and is exercised by a randomized test on top of the fixed scenarios. None of that is a substitute for the real thing, so try it on a copy of a note first.
+Version 1.0.0, the first public release. Besides being used in Obsidian on the desktop, it is checked automatically: the built plugin runs in a browser against a stand-in for the Obsidian API, with Live Preview played by a real CodeMirror editor, and on touch screens in Safari's engine (WebKit) as well as Chromium. Wherever Obsidian's behaviour is not documented, the checks are run with the stand-in behaving both ways. The part that writes into notes got the most attention: it was reviewed independently three times, and is exercised by a randomized test on top of the fixed scenarios.
+
+Found a bug, or a board that looks wrong? Please [open an issue](https://github.com/LuxBetancourt/obsidian-kifu/issues), with the block's text if you can.
+
+## License
+
+[GNU General Public License v3.0](LICENSE).
 
 ## Building it yourself
 
@@ -267,3 +274,9 @@ npm run lint           # Obsidian's own lint rules
 - `tests/harness/touch.mjs` — taps on tablet and phone profiles, in WebKit (once: `npx playwright install webkit`) and Chromium.
 - `tests/harness/interact.mjs`, `editor.mjs`, `identity.mjs` — the scenarios (the last one is all about boards that read the same, notes rearranged under a board, panes that are behind, and writes that fail); `ONLY='pattern'` in the environment runs the scenarios whose names match. `perf.mjs` — timings; `shots.mjs`, `docs.mjs` — pictures.
 - `tests/harness/monkey.mjs` — a "monkey" that places and removes stones, marks and labels, types comments, locks, scrolls and (in its rougher profiles) edits the note by hand at the same time: types into blocks, deletes, copies and moves them, undoes, changes the file from outside. It does so in ten arrangements of panes and five kinds of note, most of them full of identical boards. After every step it checks that nothing is in a block other than the one whose board was used, and at the end that nothing outside the blocks changed, that every board shows what its block says, that no edit vanished without a notice, that none vanished at all from a block nobody had touched by hand, and that nothing typed by hand was taken back. `node tests/harness/monkey.mjs live,both hands 1-10` runs chosen arrangements, profiles and seeds.
+
+### Releasing
+
+1. Put the new version (`x.y.z`) in `manifest.json` and `package.json`, and add it to `versions.json` with the lowest Obsidian version it needs.
+2. Commit, then push a tag that is exactly the version: `git tag 1.0.1 && git push origin 1.0.1`.
+3. The release workflow (`.github/workflows/release.yml`) checks that the tag matches the manifest, builds, runs the unit tests and publishes the release with `main.js`, `manifest.json` and `styles.css`. Obsidian picks it up from there.
