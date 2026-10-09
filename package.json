@@ -1,0 +1,32 @@
+{
+  "name": "kifu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Print-style Go diagrams, problems and SGF records for Obsidian",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "node run-tests.mjs",
+    "test:browser": "npm run build && node tests/harness/interact.mjs && node tests/harness/editor.mjs && node tests/harness/identity.mjs",
+    "test:monkey": "npm run build && node tests/harness/monkey.mjs all all 1-3",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.38.6",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.25.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "globals": "^17.13.0",
+    "jiti": "^2.7.0",
+    "mdast-util-from-markdown": "^2.1.0",
+    "obsidian": "^1.13.1",
+    "playwright": "^1.56.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}

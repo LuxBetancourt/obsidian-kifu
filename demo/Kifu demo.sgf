@@ -1,0 +1,13 @@
+(;GM[1]FF[4]CA[UTF-8]SZ[19]GN[Three in a row]C[Black to play and kill.]
+AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]
+(;B[ra]C[The middle of three is the vital point.];W[qa];B[sa]C[White is captured.])
+(;B[qa];W[ra]C[White captures and has two eyes.])
+(;B[sa];W[ra]C[White captures and has two eyes.]))
+
+(;GM[1]FF[4]CA[UTF-8]SZ[9]GN[Bent three]C[Black to play and live.]
+AB[ca][cb][bb][bc][ac]AW[da][db][cc][bd][ad]
+(;B[aa]C[Two eyes.])
+(;B[ba];W[aa]C[Only one eye is left.])
+(;B[ab];W[aa]C[Only one eye is left.]))
+
+(;GM[1]FF[4]CA[UTF-8]SZ[19]GN[Knight's approach, slide];B[pd];W[nc];B[qf];W[pb];B[qc];W[kc])

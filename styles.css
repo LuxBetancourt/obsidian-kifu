@@ -1,0 +1,685 @@
+/* Kifu — print-style Go boards.
+   Colours and the font are plain CSS variables: override them in a snippet, e.g.
+   .kifu { --kifu-font: "Gill Sans", sans-serif; } */
+
+.kifu {
+	--kifu-ink: #000;
+	--kifu-paper: #fff;
+	--kifu-black: #000;
+	--kifu-white: #fff;
+	--kifu-on-black: #fff;
+	--kifu-on-white: #000;
+	--kifu-font: var(--font-interface, sans-serif);
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin: 0.75em 0;
+	/* room beside the board for the lock, which never covers the board itself */
+	padding: 0 30px;
+	outline: none;
+}
+
+.kifu.kifu-left {
+	align-items: flex-start;
+	padding-left: 0;
+}
+
+.kifu.kifu-right {
+	align-items: flex-end;
+}
+
+.kifu.kifu-theme {
+	--kifu-ink: var(--text-normal);
+	--kifu-paper: var(--background-primary);
+	--kifu-black: var(--text-normal);
+	--kifu-white: var(--background-primary);
+	--kifu-on-black: var(--background-primary);
+	--kifu-on-white: var(--text-normal);
+}
+
+.theme-dark .kifu.kifu-theme {
+	--kifu-black: #000;
+	--kifu-white: var(--text-normal);
+	--kifu-on-black: var(--text-normal);
+	--kifu-on-white: #000;
+}
+
+.kifu [hidden],
+.kifu-panel [hidden] {
+	display: none !important;
+}
+
+/* reached with the Tab key (a mouse click does not show this) */
+.kifu.is-keyfocus .kifu-frame {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------- the board */
+
+.kifu-frame {
+	position: relative;
+	box-sizing: border-box;
+	max-width: 100%;
+	line-height: 0;
+}
+
+/* the sheet of paper: a little margin, so a figure does not look clipped on a dark page */
+.kifu-paper .kifu-frame {
+	padding: 6px;
+	border-radius: 3px;
+	background: var(--kifu-paper);
+}
+
+.kifu-svg {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	overflow: visible;
+	background: var(--kifu-paper);
+	cursor: default;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.kifu-grid,
+.kifu-edge {
+	fill: none;
+	stroke: var(--kifu-ink);
+	vector-effect: non-scaling-stroke;
+}
+
+.kifu-star {
+	fill: var(--kifu-ink);
+}
+
+.kifu-b {
+	fill: var(--kifu-black);
+}
+
+.kifu-w {
+	fill: var(--kifu-white);
+	stroke: var(--kifu-ink);
+}
+
+/* on a dark page a black stone needs an outline to be seen */
+.theme-dark .kifu-theme .kifu-b {
+	stroke: var(--kifu-ink);
+	stroke-width: 4;
+}
+
+.kifu-text,
+.kifu-coord {
+	font-family: var(--kifu-font);
+	font-weight: 600;
+	font-variant-numeric: lining-nums tabular-nums;
+	text-anchor: middle;
+	pointer-events: none;
+}
+
+.kifu-text.kifu-on-b {
+	fill: var(--kifu-on-black);
+}
+
+.kifu-text.kifu-on-w {
+	fill: var(--kifu-on-white);
+}
+
+.kifu-text.kifu-on-e {
+	fill: var(--kifu-ink);
+}
+
+.kifu-coord {
+	fill: var(--kifu-ink);
+	font-weight: 400;
+	opacity: 0.6;
+}
+
+.kifu-blank {
+	fill: var(--kifu-paper);
+}
+
+.kifu-mark {
+	fill: none;
+	stroke-linejoin: miter;
+	pointer-events: none;
+}
+
+.kifu-mark.kifu-on-b {
+	stroke: var(--kifu-on-black);
+}
+
+.kifu-mark.kifu-on-w {
+	stroke: var(--kifu-on-white);
+}
+
+.kifu-mark.kifu-on-e {
+	stroke: var(--kifu-ink);
+	fill: var(--kifu-paper);
+}
+
+.kifu-last.kifu-on-b {
+	fill: var(--kifu-on-black);
+}
+
+.kifu-last.kifu-on-w {
+	fill: var(--kifu-on-white);
+}
+
+.kifu-ghost {
+	pointer-events: none;
+}
+
+.kifu-ghost-b {
+	fill: var(--kifu-black);
+	opacity: 0.3;
+}
+
+.kifu-ghost-w {
+	fill: var(--kifu-white);
+	stroke: var(--kifu-ink);
+	stroke-width: 4;
+	opacity: 0.55;
+}
+
+.kifu-dim {
+	fill: var(--kifu-paper);
+	opacity: 0.7;
+	pointer-events: none;
+}
+
+.kifu-crop {
+	fill: none;
+	stroke: var(--kifu-ink);
+	stroke-width: 1;
+	stroke-dasharray: 4 3;
+	vector-effect: non-scaling-stroke;
+	opacity: 0.55;
+	pointer-events: none;
+}
+
+.kifu.is-crop .kifu-svg {
+	cursor: crosshair;
+	touch-action: none;
+}
+
+/* ------------------------------------------------- lock and other buttons */
+
+.kifu-ctl {
+	position: absolute;
+	top: 0;
+	left: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-left: 4px;
+	opacity: 0;
+	transition: opacity 0.12s ease;
+}
+
+.kifu:hover .kifu-ctl,
+.kifu-ctl:focus-within,
+.kifu.is-editing .kifu-ctl {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.kifu-ctl {
+		opacity: 0.5;
+	}
+}
+
+.kifu .kifu-btn,
+.kifu-panel .kifu-btn {
+	appearance: none;
+	box-sizing: border-box;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	min-width: 0;
+	height: 26px;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-s, 4px);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.kifu .kifu-btn:hover:not(:disabled),
+.kifu-panel .kifu-btn:hover:not(:disabled) {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* the tool in use: outlined, not coloured, to stay in keeping with the board */
+.kifu .kifu-btn.is-active,
+.kifu-panel .kifu-btn.is-active {
+	background: var(--background-modifier-hover);
+	box-shadow: inset 0 0 0 1.5px var(--text-muted);
+	color: var(--text-normal);
+}
+
+.kifu .kifu-btn:disabled,
+.kifu-panel .kifu-btn:disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+.kifu-ic {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+.kifu-ic-fill {
+	fill: currentColor;
+}
+
+/* stones in icons are really black and white, whatever the theme */
+.kifu-ic-black {
+	fill: #000;
+	stroke: #000;
+	stroke-width: 1.2;
+}
+
+.theme-dark .kifu-ic-black {
+	stroke: #8c8c8c;
+}
+
+.kifu-ic-white {
+	fill: #fff;
+	stroke: #000;
+	stroke-width: 1.2;
+}
+
+.kifu-ic-on-black {
+	stroke: #fff;
+	stroke-width: 2;
+}
+
+.kifu-ic-on-white {
+	stroke: #000;
+	stroke-width: 2;
+}
+
+/* ---------------------------------------------------------------- caption */
+
+.kifu-cap {
+	max-width: 100%;
+	max-height: 9em;
+	margin-top: 6px;
+	overflow-y: auto;
+	color: var(--text-muted);
+	font-size: var(--font-smaller, 0.875em);
+	line-height: 1.45;
+	text-align: center;
+}
+
+.kifu-cap > * + * {
+	margin-left: 0.8em;
+}
+
+/* "try again", right after the verdict */
+.kifu .kifu-cap > .kifu-btn {
+	width: 20px;
+	height: 20px;
+	margin-left: 0.3em;
+	vertical-align: -0.3em;
+}
+
+.kifu-cap > .kifu-btn .kifu-ic {
+	width: 14px;
+	height: 14px;
+}
+
+.kifu-comment {
+	white-space: pre-wrap;
+}
+
+/* (the word sits on the baseline of the text around it; the tick or cross is centred beside it) */
+.kifu-verdict {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+	color: var(--text-normal);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.kifu-verdict .kifu-ic {
+	align-self: center;
+	width: 1.1em;
+	height: 1.1em;
+	stroke-width: 2.6;
+}
+
+.kifu-verdict.is-correct .kifu-ic {
+	stroke: var(--text-success, #2a8a3e);
+}
+
+.kifu-verdict.is-incorrect .kifu-ic {
+	stroke: var(--text-error, #c62f3b);
+}
+
+.kifu-hint,
+.kifu-note {
+	white-space: nowrap;
+}
+
+/* a little stone set in running text */
+.kifu-st {
+	display: inline-block;
+	box-sizing: border-box;
+	min-width: 1.5em;
+	height: 1.5em;
+	margin-right: 0.3em;
+	padding: 0 0.15em;
+	border: 1px solid #000;
+	border-radius: 0.75em;
+	font-family: var(--kifu-font, var(--font-interface));
+	font-size: 0.8em;
+	font-weight: 600;
+	font-variant-numeric: lining-nums;
+	line-height: calc(1.5em - 2px);
+	text-align: center;
+	vertical-align: 0.05em;
+}
+
+.kifu-st:empty {
+	min-width: 0.95em;
+	width: 0.95em;
+	height: 0.95em;
+	padding: 0;
+	vertical-align: -0.08em;
+}
+
+.kifu-st-b {
+	background: #000;
+	color: #fff;
+}
+
+.kifu-st-w {
+	background: #fff;
+	color: #000;
+}
+
+.theme-dark .kifu-st {
+	border-color: var(--text-muted);
+}
+
+.kifu-msg {
+	padding: 6px 12px;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: var(--radius-s, 4px);
+	color: var(--text-muted);
+	font-size: var(--font-smaller, 0.875em);
+}
+
+/* ---------------------------------------------------------- editing tools */
+
+.kifu-tools {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 2px 10px;
+	max-width: 100%;
+	margin-top: 8px;
+	padding: 3px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+}
+
+.kifu-group {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+}
+
+.kifu .kifu-label {
+	box-sizing: border-box;
+	width: 3.4em;
+	height: 22px;
+	margin-left: 3px;
+	padding: 0 4px;
+	font-size: 12px;
+	text-align: center;
+}
+
+@media (pointer: coarse) {
+	.kifu .kifu-btn,
+	.kifu-panel .kifu-btn {
+		width: 34px;
+		height: 34px;
+	}
+
+	.kifu-ic {
+		width: 22px;
+		height: 22px;
+	}
+}
+
+/* In Live Preview, Obsidian's own "edit this block" button sits in the same
+   top-right corner; for our blocks it moves to the bottom instead. */
+.cm-preview-code-block:has(> .block-language-kifu) > .edit-block-button {
+	top: auto;
+	bottom: var(--size-2-2, 4px);
+}
+
+@media print {
+	.kifu-ctl,
+	.kifu-tools {
+		display: none;
+	}
+}
+
+/* -------------------------------------------------------- move tree panel */
+
+.kifu-panel,
+.workspace-leaf-content .view-content.kifu-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+	overflow: hidden;
+	font-size: var(--font-ui-small, 13px);
+}
+
+.kifu-p-empty {
+	padding: 24px 16px;
+	color: var(--text-faint);
+	text-align: center;
+}
+
+.kifu-p-main {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	outline: none;
+}
+
+.kifu-p-nav {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 2px;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.kifu-p-pos {
+	min-width: 5.5em;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+
+.kifu-p-gap {
+	flex: 1;
+}
+
+.kifu-p-game {
+	flex: none;
+	padding: 6px 12px 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller, 12px);
+}
+
+.kifu-p-tree {
+	flex: 1 1 auto;
+	min-height: 60px;
+	overflow: auto;
+}
+
+.kifu-t {
+	display: block;
+	cursor: pointer;
+}
+
+.kifu-t-edge {
+	fill: none;
+	stroke: var(--text-faint);
+	stroke-width: 1.25;
+}
+
+.kifu-t-b {
+	fill: #000;
+	stroke: var(--text-faint);
+	stroke-width: 0.75;
+}
+
+.kifu-t-w {
+	fill: #fff;
+	stroke: #000;
+	stroke-width: 1;
+}
+
+.kifu-t-b.is-temp,
+.kifu-t-w.is-temp {
+	stroke: var(--text-muted);
+	stroke-dasharray: 2.5 2;
+	opacity: 0.55;
+}
+
+.kifu-t-other {
+	fill: var(--background-primary);
+	stroke: var(--text-muted);
+	stroke-width: 1.25;
+}
+
+.kifu-t-note {
+	fill: var(--text-muted);
+}
+
+.kifu-t-num {
+	font-family: var(--font-interface, sans-serif);
+	font-size: 10px;
+	font-weight: 600;
+	font-variant-numeric: lining-nums tabular-nums;
+	text-anchor: middle;
+	pointer-events: none;
+}
+
+.kifu-t-num.is-small {
+	font-size: 8px;
+}
+
+.kifu-t-on-b {
+	fill: #fff;
+}
+
+.kifu-t-on-w {
+	fill: #000;
+}
+
+.kifu-t-badge {
+	fill: none;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.kifu-t-badge.is-correct {
+	stroke: var(--text-success, #2a8a3e);
+}
+
+.kifu-t-badge.is-incorrect {
+	stroke: var(--text-error, #c62f3b);
+}
+
+.kifu-t-cur {
+	fill: none;
+	stroke: var(--interactive-accent);
+	stroke-width: 2;
+	pointer-events: none;
+}
+
+.kifu-p-foot {
+	flex: none;
+	max-height: 50%;
+	padding: 8px 12px 12px;
+	overflow-y: auto;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.kifu-p-info {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+}
+
+.kifu-p-info .kifu-st {
+	margin-right: 0;
+}
+
+.kifu-p-move {
+	font-weight: 600;
+}
+
+.kifu-p-temp {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+.kifu-p-text {
+	margin-top: 6px;
+	color: var(--text-normal);
+	line-height: 1.45;
+	white-space: pre-wrap;
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.kifu-panel .kifu-p-comment {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 7em;
+	margin-top: 8px;
+	resize: vertical;
+	font: inherit;
+	line-height: 1.4;
+}
+
+/* ---------------------------------------------------------- settings page */
+
+.kifu.kifu-sample {
+	margin: 0 0 1.25em;
+	padding: 16px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+}

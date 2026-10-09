@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kifu test harness</title>
+<style>
+/* Rough copy of Obsidian's default theme: enough to see the plugin in context. */
+body { margin: 0; }
+body.theme-light {
+	--background-primary: #ffffff; --background-secondary: #f6f6f6; --background-modifier-border: #e0e0e0;
+	--background-modifier-hover: rgba(0,0,0,.067); --background-modifier-form-field: #fff;
+	--text-normal: #222222; --text-muted: #5c5c5c; --text-faint: #ababab; --text-accent: #8a5cf5; --text-on-accent: #fff;
+	--text-success: #08b94e; --text-error: #e93147; --interactive-accent: #8a5cf5; --interactive-normal: #f2f3f5;
+}
+body.theme-dark {
+	--background-primary: #1e1e1e; --background-secondary: #262626; --background-modifier-border: #363636;
+	--background-modifier-hover: rgba(255,255,255,.067); --background-modifier-form-field: #2a2a2a;
+	--text-normal: #dadada; --text-muted: #b3b3b3; --text-faint: #666666; --text-accent: #a68af9; --text-on-accent: #fff;
+	--text-success: #44cf6e; --text-error: #fb464c; --interactive-accent: #7f6df2; --interactive-normal: #363636;
+}
+body {
+	--font-interface: var(--test-font, Inter), sans-serif; --font-text: var(--test-font, Inter), sans-serif;
+	--radius-s: 4px; --radius-m: 8px; --font-ui-small: 13px; --font-ui-smaller: 12px; --font-smaller: 0.875em; --size-2-2: 4px;
+	font-family: var(--font-interface); font-size: 16px; line-height: 1.5;
+	background: var(--background-primary); color: var(--text-normal);
+}
+#app { display: flex; height: 100vh; }
+#main { flex: 1; display: flex; min-width: 0; }
+#main > .workspace-leaf { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--background-modifier-border); }
+#right { width: 300px; flex: none; display: flex; flex-direction: column; background: var(--background-secondary); border-left: 1px solid var(--background-modifier-border); }
+#right.is-collapsed { display: none; }
+#right > .workspace-leaf { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.view-header { flex: none; padding: 6px 12px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--background-modifier-border); }
+.view-content { flex: 1; min-height: 0; overflow: auto; }
+.markdown-preview-view, .cm-content { max-width: 700px; margin: 0 auto; padding: 16px 32px 60px; outline: none; }
+h1 { font-size: 1.6em; margin: .6em 0 .3em; } h2 { font-size: 1.3em; margin: .6em 0 .3em; } p { margin: .6em 0; }
+pre { background: var(--background-secondary); padding: 8px 12px; border-radius: 4px; font-size: 13px; overflow: auto; }
+/* Obsidian styles every button and text field; the plugin has to hold its own against that */
+button { display: inline-flex; align-items: center; justify-content: center; color: var(--text-normal); font-size: 13px; border-radius: 5px; border: 0; padding: 4px 12px; height: 30px; font-family: inherit; cursor: pointer; }
+button:not(.clickable-icon) { background-color: var(--interactive-normal); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+input[type='text'], textarea { background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); color: var(--text-normal); font-family: inherit; padding: 4px 8px; font-size: 13px; border-radius: 5px; outline: none; }
+input[type='text'] { height: 30px; }
+.cm-preview-code-block { position: relative; }
+.cm-embed-block:hover { box-shadow: 0 0 0 1px var(--background-modifier-border); border-radius: 4px; }
+.edit-block-button { position: absolute; top: 4px; right: 4px; padding: 2px 6px; font-size: 11px; border-radius: 4px; background: var(--background-secondary); color: var(--text-muted); opacity: 0; cursor: pointer; }
+.cm-preview-code-block:hover .edit-block-button { opacity: 1; }
+.vertical-tab-content { max-width: 720px; margin: 0 auto; padding: 24px 32px; }
+.setting-item { display: flex; align-items: center; padding: 10px 0; border-top: 1px solid var(--background-modifier-border); gap: 16px; }
+.setting-item-info { flex: 1; } .setting-item-name { font-size: 14px; } .setting-item-description { font-size: 12px; color: var(--text-muted); }
+.setting-item-heading .setting-item-name { font-weight: 700; }
+/* the CodeMirror live preview (cm-lp.ts) */
+.cm-editor { height: 100%; outline: none; } .cm-scroller { overflow: auto; font-family: inherit; } .cm-line { padding: 0; }
+</style>
+<link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="theme-light">
+<div id="app"><div id="main"></div><div id="right" class="is-collapsed"></div></div>
+<script src="obsidian-mock.js"></script>
+<script>
+(function () {
+	const O = window.__obsidian;
+	window.harness = {
+		O,
+		/** Load the plugin's main.js the way Obsidian does: as the body of a function. */
+		loadPlugin(code) {
+			const module = { exports: {} };
+			const require = (name) => { if (name === 'obsidian') return O; throw new Error('unexpected require: ' + name); };
+			const t0 = performance.now();
+			new Function('require', 'module', 'exports', code)(require, module, module.exports);
+			this.evalMs = performance.now() - t0;
+			this.PluginClass = module.exports.default ?? module.exports;
+		},
+		/** Start "Obsidian": a vault, the plugin, and some open panes. */
+		async boot({ files = {}, panes = [], data = null, asyncRender = false, lagReading = false, reuse = 'pool', autosave = 2000, editorChange = true } = {}) {
+			const app = new O.App({ main: document.getElementById('main'), right: document.getElementById('right') });
+			app._asyncRender = asyncRender; app._lagReading = lagReading; app._reuse = reuse; app._autosave = autosave; app._editorChange = editorChange;
+			for (const [path, text] of Object.entries(files)) app.vault._add(path, text);
+			const plugin = new this.PluginClass(app, { id: 'kifu', name: 'Kifu', version: '0.0.0' });
+			if (data) plugin._data = JSON.stringify(data);
+			const t0 = performance.now();
+			plugin.load();
+			this.loadMs = performance.now() - t0;
+			this.app = app; this.plugin = plugin;
+			this.views = panes.map((p) => app.workspace._open(p.path, p.mode));
+			await this.settle();
+			return this.loadMs;
+		},
+		settle(ms = 30) { return new Promise((r) => setTimeout(r, ms)); },
+		text(path) { return this.app.vault.files.get(path).data; },
+		notices() { return O.Notice.log.slice(); },
+	};
+})();
+</script>
+</body>
+</html>
