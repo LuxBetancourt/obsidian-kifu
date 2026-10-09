@@ -280,5 +280,8 @@ npm run lint           # Obsidian's own lint rules
 ### Releasing
 
 1. Put the new version (`x.y.z`) in `manifest.json` and `package.json`, and add it to `versions.json` with the lowest Obsidian version it needs.
-2. Commit, then push a tag that is exactly the version: `git tag 1.0.1 && git push origin 1.0.1`.
-3. The release workflow (`.github/workflows/release.yml`) checks that the tag matches the manifest, builds, runs the unit tests and publishes the release with `main.js`, `manifest.json` and `styles.css`. Obsidian picks it up from there.
+2. Commit, tag the commit with exactly the version, and push **only the tag**: `git tag -a 1.0.1 -m "Kifu 1.0.1" && git push origin 1.0.1`.
+3. The release workflow (`.github/workflows/release.yml`) checks that the tag matches the manifest, builds, runs the unit tests and publishes the release with `main.js`, `manifest.json` and `styles.css`.
+4. Once the release is there, push the branch: `git push`.
+
+The order matters. Obsidian installs a plugin by reading `manifest.json` on the default branch and downloading the release with that version; if the branch names a version whose release does not exist yet, installing fails.
