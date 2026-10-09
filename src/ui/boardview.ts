@@ -18,7 +18,7 @@ const TOOLS: [Tool, string, string][] = [
 	['MA', 'MA', 'Cross'],
 	['label', 'label', 'Letter or number'],
 	['erase', 'erase', 'Eraser'],
-	['crop', 'crop', 'Choose the part of the board to show (drag; double-click for the default)'],
+	['crop', 'crop', 'Choose the part of the board to show (drag; double-click or double-tap for the default)'],
 ];
 
 /** Events that stay inside a board (see the constructor). */
@@ -55,6 +55,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#toolBtns = new Map<string, HTMLButtonElement>();
 	#labelInput: HTMLInputElement | null = null;
 	#drag: [number, number] | null = null;
+	/** When the last plain tap with the crop tool ended, and when a double tap last reset the crop. */
+	#lastTap = 0;
+	#tapReset = 0;
 	#hover = '';
 	/** Reached with the Tab key (then, and only then, a focus ring is shown). */
 	#keyFocus = false;
@@ -108,7 +111,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		root.addEventListener('keydown', (ev) => this.#onKey(ev));
 		svgEl.addEventListener('click', (ev) => this.#onClick(ev));
 		svgEl.addEventListener('dblclick', () => {
-			if (this.#cropping()) this.session?.setCrop(null);
+			// (a double tap that the browser reports as a double click too was dealt with already)
+			if (this.#cropping() && Date.now() - this.#tapReset > 600) this.session?.setCrop(null);
 		});
 		svgEl.addEventListener('pointerdown', (ev) => this.#onDown(ev));
 		svgEl.addEventListener('pointermove', (ev) => this.#onMove(ev));
@@ -495,7 +499,22 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const rect = p ? this.#rectTo(p) : null;
 		this.#endDrag();
 		// a plain click is not a selection
-		if (rect && (rect.x1 > rect.x0 || rect.y1 > rect.y0)) s.setCrop(rect);
+		if (rect && (rect.x1 > rect.x0 || rect.y1 > rect.y0)) {
+			s.setCrop(rect);
+			this.#lastTap = 0;
+			return;
+		}
+		// Touch screens (iPad Safari among them) do not reliably report a double tap
+		// as a double click, so two quick taps are spotted here.
+		if (!still || ev.pointerType === 'mouse') return;
+		const now = Date.now();
+		if (now - this.#lastTap < 400) {
+			this.#lastTap = 0;
+			this.#tapReset = now;
+			s.setCrop(null);
+		} else {
+			this.#lastTap = now;
+		}
 	}
 
 	#endDrag(): void {

@@ -55,7 +55,7 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | △ □ ○ ✕ | Marks. They belong to the move you are on, so every move can carry its own. |
 | A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. |
 | Eraser | Removes a mark or label; a second click removes the stone under it. |
-| Crop | Drag to choose the part of the board the locked board shows. Double-click to go back to the automatic crop. |
+| Crop | Drag to choose the part of the board the locked board shows. Double-click (or double-tap) to go back to the automatic crop. |
 | ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. |
 | # | Makes the locked board a *numbered figure* of the main line, or takes the numbers off again. Whatever a `numbers:` line said before is put back, so a range like `51-100`, or an `off`, is not lost by trying the switch. |
 | ↶ | Undo (`Ctrl/Cmd+Z` while the board has the keyboard; `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redoes). |
@@ -262,5 +262,6 @@ npm run lint           # Obsidian's own lint rules
 
 - `tests/*.test.ts` — unit tests. `markdown.test.ts` checks the code that finds and rewrites a block against a CommonMark parser on thousands of generated notes.
 - `tests/harness/obsidian-mock.js` — the stand-in for the Obsidian API; `cm-lp.ts` — Live Preview on a real CodeMirror 6.
+- `tests/harness/touch.mjs` — taps on tablet and phone profiles, in WebKit (once: `npx playwright install webkit`) and Chromium.
 - `tests/harness/interact.mjs`, `editor.mjs`, `identity.mjs` — the scenarios (the last one is all about boards that read the same, notes rearranged under a board, panes that are behind, and writes that fail); `ONLY='pattern'` in the environment runs the scenarios whose names match. `perf.mjs` — timings; `shots.mjs`, `docs.mjs` — pictures.
 - `tests/harness/monkey.mjs` — a "monkey" that places and removes stones, marks and labels, types comments, locks, scrolls and (in its rougher profiles) edits the note by hand at the same time: types into blocks, deletes, copies and moves them, undoes, changes the file from outside. It does so in ten arrangements of panes and five kinds of note, most of them full of identical boards. After every step it checks that nothing is in a block other than the one whose board was used, and at the end that nothing outside the blocks changed, that every board shows what its block says, that no edit vanished without a notice, that none vanished at all from a block nobody had touched by hand, and that nothing typed by hand was taken back. `node tests/harness/monkey.mjs live,both hands 1-10` runs chosen arrangements, profiles and seeds.

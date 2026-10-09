@@ -9,7 +9,7 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "node run-tests.mjs",
-    "test:browser": "npm run build && node tests/harness/interact.mjs && node tests/harness/editor.mjs && node tests/harness/identity.mjs",
+    "test:browser": "npm run build && node tests/harness/interact.mjs && node tests/harness/editor.mjs && node tests/harness/identity.mjs && node tests/harness/touch.mjs",
     "test:monkey": "npm run build && node tests/harness/monkey.mjs all all 1-3",
     "lint": "eslint ."
   },

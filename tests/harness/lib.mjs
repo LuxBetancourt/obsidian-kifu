@@ -6,7 +6,7 @@ import path from 'node:path';
 import { readFileSync, mkdirSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
-export const { chromium } = require('playwright');
+export const { chromium, webkit, devices } = require('playwright');
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const out = path.resolve(here, '../out');
 export const pageUrl = 'file://' + path.join(here, 'index.html');
@@ -30,13 +30,16 @@ async function cmLivePreview() {
  * (reading view, or a simple live preview); `live` opens notes in the CodeMirror
  * live preview, with `lp` setting its switches. Everything else goes to harness.boot().
  */
-export async function open(browser, { width = 1280, height = 900, scale = 1, dark = false, font = null, live = [], lp = {}, ...boot } = {}) {
-	const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale });
+export async function open(browser, { width = 1280, height = 900, scale = 1, dark = false, font = null, live = [], lp = {}, device = null, ...boot } = {}) {
+	// (`device`: Playwright context options for a phone or tablet, touch included)
+	const ctx = await browser.newContext(device ?? { viewport: { width, height }, deviceScaleFactor: scale });
 	const page = await ctx.newPage();
 	const errors = [];
 	page.on('pageerror', (e) => errors.push(String(e.stack || e)));
 	page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 	await page.goto(pageUrl);
+	// Obsidian on phones and tablets lays the app out at the device's width
+	if (device) await page.evaluate(() => document.head.insertAdjacentHTML('afterbegin', '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">'));
 	if (dark) await page.evaluate(() => { document.body.className = 'theme-dark'; });
 	if (font) await page.evaluate((f) => document.body.style.setProperty('--test-font', f), font);
 	await page.evaluate((code) => window.harness.loadPlugin(code), mainJs());
