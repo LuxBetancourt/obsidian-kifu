@@ -762,13 +762,23 @@ export class Session {
 
 	/** Undo on a locked board: take back the last step, if anything was done on it at all. */
 	stepBack(): void {
-		if (this.moved) this.prev();
+		if (this.canStepBack) this.prev();
 	}
 
 	/** Redo on a locked board: make again the step that was just taken back. */
 	stepForth(): void {
+		if (this.canStepForth) this.goto(this.lastChild.get(this.cur) as SgfNode);
+	}
+
+	/** Is there a step to take back? Only what was played from the resting position: never the record before it. */
+	get canStepBack(): boolean {
+		return this.belowHome(this.cur);
+	}
+
+	/** Is there a step that was just taken back, to make again? */
+	get canStepForth(): boolean {
 		const was = this.lastChild.get(this.cur);
-		if (was && this.cur.children.includes(was)) this.goto(was);
+		return !!was && this.cur.children.includes(was);
 	}
 
 	/** Step sideways to the previous or next variation of the current move. */
@@ -803,6 +813,7 @@ export class Session {
 		this.cur = this.home;
 		this.burst = null;
 		this.reveal = false; // a fresh try
+		this.lastChild = new WeakMap(); // (nothing to make again on a fresh try)
 		this.emit();
 	}
 
@@ -990,6 +1001,8 @@ export class Session {
 			this.edit = false;
 			this.reveal = false;
 			this.cur = this.home;
+			// steps taken back while editing are not the solver's to make again
+			this.lastChild = new WeakMap();
 			this.host.requestSave(this, true);
 		}
 		this.emit();

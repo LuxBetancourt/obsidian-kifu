@@ -696,6 +696,40 @@ await scenario('a numbered sequence that is not a problem stamps the ✓ its las
 	assert.match(await cap(page), /^Correct/);
 });
 
+await scenario('back and forward under the lock step through the moves played, never the record', {
+	files: { 'B.md': '```kifu\nmove: 1\n(;SZ[9];B[cc];W[ee];B[gg];W[cg])\n```\n' },
+	panes: [{ path: 'B.md', mode: 'preview' }],
+}, async (page) => {
+	const back = page.locator('.kifu-ctl .kifu-btn[aria-label^="Take back"]');
+	const forward = page.locator('.kifu-ctl .kifu-btn[aria-label^="Play it again"]');
+	// nothing played yet: nothing to step through, so no buttons
+	assert.equal(await back.isVisible(), false);
+	assert.equal(await forward.isVisible(), false);
+	assert.deepEqual(await stones(page), { black: 1, white: 0 });
+	await clickPoint(page, 0, 'ee'); // the saved move; the saved reply follows
+	await sleep(700);
+	assert.deepEqual(await stones(page), { black: 2, white: 1 });
+	assert.equal(await back.isVisible(), true);
+	assert.equal(await forward.isDisabled(), true);
+	await back.click();
+	await back.click();
+	assert.deepEqual(await stones(page), { black: 1, white: 0 });
+	assert.equal(await back.isDisabled(), true); // the resting position: the record before it stays out of reach
+	await forward.click();
+	await forward.click();
+	assert.deepEqual(await stones(page), { black: 2, white: 1 });
+	assert.equal(await forward.isDisabled(), true); // W[cg] was never played here
+	// a fresh try: gone again
+	await page.locator('.kifu-ctl .kifu-btn[aria-label^="Back to the starting"]').click();
+	assert.equal(await back.isVisible(), false);
+	// and never while editing (the toolbar has its own)
+	await clickPoint(page, 0, 'ee');
+	await sleep(700);
+	await toggleLock(page);
+	assert.equal(await back.isVisible(), false);
+	assert.equal(await forward.isVisible(), false);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

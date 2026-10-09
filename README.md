@@ -33,7 +33,7 @@ Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu →
 That is an empty 19 × 19 board.
 
 - **Hover** over it: a lock appears beside its upper right corner. (On a touch screen it is always there, faintly.)
-- **Locked** (the normal state), clicking plays stones — captures, ko and all — but nothing you do is saved. The ↺ button under the lock, or `Esc`, puts everything back.
+- **Locked** (the normal state), clicking plays stones — captures, ko and all — but nothing you do is saved. Once you have played, ‹ › buttons appear under the lock: ‹ takes back your last move, › plays it again. They only step through what you played, never into the moves saved in the block, so they do not give a problem's answer away. The ↺ button, or `Esc`, puts everything back.
 - **Click the lock** to edit. Tools appear under the board, and what you do now is written into the block as SGF. Click the lock again when you are done.
 
 What a locked board shows:

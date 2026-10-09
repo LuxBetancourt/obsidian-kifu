@@ -50,6 +50,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#lockBtn: HTMLButtonElement;
 	#resetBtn: HTMLButtonElement;
 	#problemBtn: HTMLButtonElement;
+	#backBtn: HTMLButtonElement;
+	#forwardBtn: HTMLButtonElement;
 	#cap: HTMLElement;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
@@ -81,6 +83,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#board = new BoardSvg(this.#frame);
 		const ctl = el(this.#frame, 'div', 'kifu-ctl');
 		this.#lockBtn = iconButton(ctl, 'lock', 'Unlock to edit', () => this.#toggleLock());
+		// On a locked board: take back the moves played on it, and make them again. Never
+		// a step into the record itself, before the resting position or after it (that
+		// would give a problem's answer away). Unlocked, the toolbar has its own buttons.
+		this.#backBtn = iconButton(ctl, 'prev', 'Take back your last move', () => this.session?.stepBack());
+		this.#forwardBtn = iconButton(ctl, 'next', 'Play it again', () => this.session?.stepForth());
 		this.#resetBtn = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
 		this.#problemBtn = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
 			const s = this.session;
@@ -226,6 +233,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#lockBtn.hidden = true;
 		this.#resetBtn.hidden = true;
 		this.#problemBtn.hidden = true;
+		this.#backBtn.hidden = this.#forwardBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
 	}
@@ -285,6 +293,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#lockBtn.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
 		this.#lockBtn.classList.toggle('is-active', s.edit);
 		this.#resetBtn.hidden = s.edit || !s.moved;
+		// (shown once something has been played, like the reset button)
+		this.#backBtn.hidden = this.#forwardBtn.hidden = s.edit || !(s.canStepBack || s.canStepForth);
+		this.#backBtn.disabled = !s.canStepBack;
+		this.#forwardBtn.disabled = !s.canStepForth;
 		// (while editing, under the lock: is this board a problem?)
 		this.#problemBtn.hidden = !s.edit;
 		this.#problemBtn.classList.toggle('is-active', s.problem);

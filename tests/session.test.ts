@@ -772,6 +772,54 @@ test('the problem switch writes a problem line only where the board would decide
 	assert.deepEqual(g.header, before);
 });
 
+test('stepping back and forth on a locked board stays within the moves played on it', () => {
+	// opens at move 1 of a recorded sequence
+	const s = make('move: 1\n(;SZ[9];B[aa];W[bb];B[cc];W[dd])');
+	assert.equal(moveOf(s.home), 'Baa');
+	assert.equal(s.canStepBack, false); // the record before the resting position is not ours to step into
+	assert.equal(s.canStepForth, false); // nor is the record after it
+	s.stepBack();
+	s.stepForth();
+	assert.equal(s.cur, s.home);
+	click(s, 'bb'); // the saved move, answered by the saved reply
+	assert.equal(moveOf(s.cur), 'Bcc');
+	assert.equal(s.canStepBack, true);
+	s.stepBack();
+	assert.equal(moveOf(s.cur), 'Wbb');
+	s.stepBack();
+	assert.equal(s.cur, s.home);
+	assert.equal(s.canStepBack, false);
+	s.stepBack(); // (stays)
+	assert.equal(s.cur, s.home);
+	s.stepForth();
+	s.stepForth();
+	assert.equal(moveOf(s.cur), 'Bcc');
+	assert.equal(s.canStepForth, false); // W[dd] was never played here
+	// a move of one's own off the record steps the same way
+	s.reset();
+	assert.equal(s.canStepForth, false); // a fresh try has nothing to make again
+	click(s, 'ee');
+	assert.equal(s.cur.temp, true);
+	s.stepBack();
+	assert.equal(s.cur, s.home);
+	s.stepBack(); // (the scratch move is still in the tree: that is no reason to step into the record)
+	assert.equal(s.cur, s.home);
+	s.stepForth();
+	assert.equal(s.cur.temp, true);
+	// steps taken back while editing are not the solver's to make again
+	s.reset();
+	s.setEdit(true);
+	s.next();
+	s.next();
+	s.prev();
+	s.prev();
+	assert.equal(s.cur, s.home);
+	s.setEdit(false);
+	assert.equal(s.canStepForth, false);
+	s.stepForth();
+	assert.equal(s.cur, s.home);
+});
+
 test('a problem with a chosen start is solved from there', () => {
 	const s = make(PROBLEM);
 	s.setEdit(true);
