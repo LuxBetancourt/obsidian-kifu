@@ -697,6 +697,49 @@ test('the start switch chooses the position the board opens at', () => {
 	assert.deepEqual(g.header, ['move: 0']);
 });
 
+test('a board that is not a problem shows the verdict of a marked line played out to its end', () => {
+	// a numbered sequence from an empty board, its last move marked ✓, opening at move 1
+	const body = 'numbers: on\nmove: 1\n(;GM[1]SZ[19];B[pd];W[qf];B[nc];W[rd];B[qc];W[qi]TE[1])';
+	const s = make(body);
+	assert.equal(s.problem, false);
+	assert.equal(moveOf(s.home), 'Bpd');
+	assert.equal(s.status(), null);
+	click(s, 'qf');
+	click(s, 'nc');
+	click(s, 'rd');
+	assert.equal(s.status(), null); // the line goes on
+	click(s, 'qc');
+	click(s, 'qi');
+	assert.equal(moveOf(s.cur), 'Wqi');
+	assert.equal(s.status(), 'correct');
+	assert.equal(s.model().status, 'correct');
+	// resting on the end of the line is not playing it out
+	assert.equal(make('(;SZ[9];B[aa];W[bb]TE[1])').status(), null);
+	// an unmarked line says nothing: no judging by itself
+	const u = make('move: 0\n(;SZ[9];B[aa];W[bb])');
+	click(u, 'aa');
+	assert.equal(moveOf(u.cur), 'Wbb');
+	assert.equal(u.status(), null);
+	// a mark earlier on the line covers what follows; ✗ works the same
+	const x = make('move: 0\n(;SZ[9];B[aa](;W[bb];B[cc])(;W[dd]BM[1];B[ee]))');
+	click(x, 'aa');
+	x.goto(x.cur.parent!.children[0]); // (the board answered with the main line: take the other reply)
+	x.sibling(1);
+	assert.equal(moveOf(x.cur), 'Wdd');
+	x.next();
+	assert.equal(moveOf(x.cur), 'Bee');
+	assert.equal(x.status(), 'incorrect');
+	// "problem: no" asks for no judging at all
+	const n = make('problem: no\nmove: 0\n(;SZ[9];B[aa];W[bb]TE[1])');
+	click(n, 'aa');
+	assert.equal(moveOf(n.cur), 'Wbb');
+	assert.equal(n.status(), null);
+	// and playing off the saved lines judges nothing
+	const o = make('move: 0\n(;SZ[9];B[aa];W[bb]TE[1])');
+	click(o, 'cc');
+	assert.equal(o.status(), null);
+});
+
 test('a problem with a chosen start is solved from there', () => {
 	const s = make(PROBLEM);
 	s.setEdit(true);

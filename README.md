@@ -93,7 +93,7 @@ So the quickest way to write a problem is: enter the answer first, then the fail
 
 SGF files from elsewhere work too. `TE` and `BM` are read as ✓ and ✗ (that is also what the plugin writes). So is a comment on a move that opens with "Correct", "Right", "Solved", "Success", "Wrong", "Incorrect" or "Fail…" as a word of its own, or that begins or ends with `RIGHT` in capitals, the way files from goproblems.com do.
 
-A board is treated as a problem when its position was **set up with stones of both colours** and there are **moves saved** from it. Marks alone do not make one: a reviewed game has its good and bad moves marked too, and stays a game record. Say `problem: yes` or `problem: no` to decide yourself. A board that is not a problem still follows saved moves and answers them; it just does not judge.
+A board is treated as a problem when its position was **set up with stones of both colours** and there are **moves saved** from it. Marks alone do not make one: a reviewed game has its good and bad moves marked too, and stays a game record. Say `problem: yes` or `problem: no` to decide yourself. A board that is not a problem still follows saved moves and answers them, but it does not judge by itself: only a line you marked ✓ or ✗ shows its verdict, once it has been played out to the end. With `problem: no`, nothing is judged at all.
 
 ## Figures and numbers
 

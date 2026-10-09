@@ -580,7 +580,7 @@ export class Session {
 
 	/** Verdict on the line being played, once it has ended or left the saved lines. */
 	status(): Status {
-		if (!this.problem) return null;
+		if (!this.problem) return this.markedEnd();
 		let n = this.cur;
 		let off = false;
 		while (n.temp && n.parent) {
@@ -589,6 +589,22 @@ export class Session {
 		}
 		if (this.continues(n)) return off && (n === this.home || this.belowHome(n)) ? 'incorrect' : null;
 		return this.verdict(n);
+	}
+
+	/**
+	 * A board that is not a problem judges nothing by itself, but a line someone
+	 * marked ✓ or ✗ says so when it has been played out to its end. ("problem: no"
+	 * asks for no judging at all.)
+	 */
+	private markedEnd(): Status {
+		if (parseBool(this.opts.problem) === false) return null;
+		const n = this.cur;
+		if (n.temp || this.continues(n) || !this.belowHome(n)) return null;
+		for (let a: SgfNode | null = n; a && a !== this.home; a = a.parent) {
+			const mk = nodeMark(a);
+			if (mk) return mk;
+		}
+		return null;
 	}
 
 	/** The verdict a saved line carries at its last move (null anywhere else). */

@@ -678,6 +678,24 @@ await scenario('a ✓ or ✗ is stamped over the board when a line ends, once, a
 	assert.equal(await stamp(), '');
 });
 
+await scenario('a numbered sequence that is not a problem stamps the ✓ its last move carries', {
+	files: {
+		'W.md': '```kifu\nnumbers: on\nmove: 1\n(;GM[1]FF[4]CA[UTF-8]SZ[19];B[pd]C[Black asks for the corner.]\n;W[qf]C[White approaches.]\n;B[nc]C[Black shares the corner.]\n;W[rd]\n;B[qc]\n;W[qi]C[White takes a 2-space base for safety.]TE[1])\n```\n',
+	},
+	panes: [{ path: 'W.md', mode: 'preview' }],
+}, async (page) => {
+	const stamp = () => page.evaluate(() => [...document.querySelectorAll('.kifu-stamp')].map((e) => e.className).join());
+	await clickPoint(page, 0, 'qf');
+	await sleep(700); // (the saved reply)
+	assert.equal(await stamp(), '');
+	await clickPoint(page, 0, 'rd');
+	await sleep(700);
+	await clickPoint(page, 0, 'qi');
+	await sleep(100);
+	assert.equal(await stamp(), 'kifu-stamp is-correct');
+	assert.match(await cap(page), /^Correct/);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],
