@@ -21,8 +21,20 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 		for (const mode of ['preview', 'live']) {
 			const panes = mode === 'live' ? { live: ['P.md'] } : { panes: [{ path: 'P.md', mode: 'preview' }] };
 			await scenario(`${engine}, ${dev}, ${mode}: solve, unlock, edit and reset the crop by touch`, { device: devices[dev], files: { 'P.md': note }, autosave: 100, ...panes }, async (page) => {
-				// as on a phone or tablet: no sidebar beside the note
-				await page.addStyleTag({ content: '#right { display: none !important; }' });
+				// as on a phone or tablet: no sidebar beside the note; and the button rules of
+				// Obsidian's own stylesheet that bear on ours (on a tablet every button is padded
+				// 20px a side, which once squeezed the icons to nothing)
+				await page.addStyleTag({ content: `
+					#right { display: none !important; }
+					button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 12px; }
+					button:not(.clickable-icon) { background-color: #eee; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+					.is-tablet button:not(.clickable-icon) { padding: 4px 20px; }
+				` });
+				await page.evaluate((tablet) => document.body.classList.add('is-mobile', 'is-ios', tablet ? 'is-tablet' : 'is-phone'), dev.startsWith('iPad'));
+				const iconsShown = () => page.evaluate(() => [...document.querySelectorAll('.kifu-btn')]
+					.filter((b) => b.offsetParent !== null)
+					.map((b) => { const r = b.querySelector('svg').getBoundingClientRect(); return Math.round(Math.min(r.width, r.height)); }));
+				const hiddenShown = () => page.evaluate(() => [...document.querySelectorAll('.kifu-btn[hidden]')].filter((b) => getComputedStyle(b).display !== 'none').length);
 				await sleep(100);
 				const cursor = () => page.evaluate(() => window.harness.views[0].cm?.state.selection.main.head ?? null);
 				const before = await cursor();
@@ -31,6 +43,10 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 				assert.ok(Number(await page.evaluate(() => getComputedStyle(document.querySelector('.kifu-ctl')).opacity)) > 0);
 				const lb = await lockBtn(page).boundingBox();
 				assert.ok(lb.x >= 0 && lb.x + lb.width <= page.viewportSize().width, `lock at ${lb.x}..${lb.x + lb.width}`);
+
+				// every icon is drawn at its size, and buttons that are hidden stay hidden
+				assert.ok((await iconsShown()).every((w) => w >= 18), `icons: ${await iconsShown()}`);
+				assert.equal(await hiddenShown(), 0);
 
 				// solving: each tap plays, the saved reply follows
 				await tap(page, 'ra');
@@ -45,6 +61,8 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 				// unlock, and edit with the tools
 				await lockBtn(page).tap();
 				assert.deepEqual(await isEditing(page), [true]);
+				assert.ok((await iconsShown()).every((w) => w >= 18), `icons while editing: ${await iconsShown()}`);
+				assert.equal(await hiddenShown(), 0);
 				await tool(page, 'Black stone').tap();
 				await tap(page, 'ss');
 				assert.equal((await stones(page)).black, 10);

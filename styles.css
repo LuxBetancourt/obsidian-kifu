@@ -45,9 +45,12 @@
 	--kifu-on-white: #000;
 }
 
-/* (body: one step more specific than any rule here that sets display) */
+/* (body: one step more specific than any rule here that sets display; buttons need
+   one more, their own rule being made stronger than Obsidian's) */
 body .kifu [hidden],
-body .kifu-panel [hidden] {
+body .kifu-panel [hidden],
+body .kifu button.kifu-btn[hidden],
+body .kifu-panel button.kifu-btn[hidden] {
 	display: none;
 }
 
@@ -232,8 +235,10 @@ body .kifu-panel [hidden] {
 	}
 }
 
-.kifu .kifu-btn,
-.kifu-panel .kifu-btn {
+/* (body and button: more specific than Obsidian's own button rules, which on a
+   tablet pad every button 20px on each side and leave no room for the icon) */
+body .kifu button.kifu-btn,
+body .kifu-panel button.kifu-btn {
 	appearance: none;
 	box-sizing: border-box;
 	display: inline-flex;
@@ -275,6 +280,8 @@ body .kifu-panel [hidden] {
 }
 
 .kifu-ic {
+	/* never squeezed by a button's padding */
+	flex: none;
 	width: 18px;
 	height: 18px;
 	fill: none;
@@ -508,8 +515,8 @@ body .kifu-panel [hidden] {
 }
 
 @media (pointer: coarse) {
-	.kifu .kifu-btn,
-	.kifu-panel .kifu-btn {
+	body .kifu button.kifu-btn,
+	body .kifu-panel button.kifu-btn {
 		width: 34px;
 		height: 34px;
 	}
