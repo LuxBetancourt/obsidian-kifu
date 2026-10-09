@@ -463,6 +463,63 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 	assert.deepEqual(res[3], [['Insert Kifu board', 'insert', null], ['Display SGF file with Kifu…', 'insert', null]]);
 });
 
+await scenario('the problem switch: in the menu for the block under the cursor or the board right-clicked, and under the lock while editing', { files: { 'N.md': 'intro\n\n```kifu\n(;SZ[9];B[cc];W[dd])\n```\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	// opens the editor menu (after a right-click, if one was given) and finds the switch in the Kifu submenu
+	const menu = (right) => page.evaluate(() => {
+		const h = window.harness;
+		const m = new window.__obsidian.Menu();
+		h.app.workspace.trigger('editor-menu', m, h.views[0].editor, h.views[0]);
+		const item = m.items[0].submenu.items.find((i) => i.title === 'Problem board');
+		window.__problemItem = item;
+		return item ? { checked: item.checked, disabled: !!item.disabled } : null;
+	});
+	const pick = () => page.evaluate(() => window.__problemItem.click());
+	const setCursor = (line) => page.evaluate((line) => window.harness.views[0].editor.setCursor({ line, ch: 0 }), line);
+	const problemBtn = page.locator('.kifu-ctl .kifu-btn[aria-label^="Problem"]');
+
+	// the cursor in no block, no board right-clicked: the menu is about no board
+	await setCursor(0);
+	await sleep(100);
+	assert.equal(await menu(), null);
+
+	// the cursor in the block: its text is changed right there
+	await setCursor(3);
+	await sleep(100);
+	assert.deepEqual(await menu(), { checked: false, disabled: false });
+	await pick();
+	assert.equal(await doc(page), 'intro\n\n```kifu\nproblem: yes\n(;SZ[9];B[cc];W[dd])\n```\n\nend');
+	assert.deepEqual(await menu(), { checked: true, disabled: false });
+	await pick();
+	assert.equal(await doc(page), 'intro\n\n```kifu\n(;SZ[9];B[cc];W[dd])\n```\n\nend');
+
+	// a right-click on the board: the switch is about that board, locked as it is
+	await setCursor(0);
+	await sleep(150);
+	assert.equal(await boardCount(page), 1);
+	assert.equal(await problemBtn.isVisible(), false); // (locked: no switch under the lock)
+	const p = await pointXY(page, 0, 'ee');
+	await page.mouse.click(p.x, p.y, { button: 'right' });
+	assert.deepEqual(await menu(), { checked: false, disabled: false });
+	await pick();
+	await sleep(700);
+	assert.match(await doc(page), /```kifu\nproblem: yes\n\(;SZ\[9\]/);
+	assert.deepEqual(await isEditing(page), [false]);
+	// the right-click is forgotten once its menu has been shown
+	assert.equal(await menu(), null);
+
+	// unlocked: the switch is under the lock, lit while the board is a problem
+	await toggleLock(page);
+	assert.equal(await problemBtn.isVisible(), true);
+	assert.equal(await problemBtn.evaluate((b) => b.classList.contains('is-active')), true);
+	await problemBtn.click();
+	assert.equal(await problemBtn.evaluate((b) => b.classList.contains('is-active')), false);
+	await toggleLock(page);
+	await sleep(500);
+	assert.equal(await problemBtn.isVisible(), false);
+	assert.equal(await doc(page), 'intro\n\n```kifu\n(;SZ[9];B[cc];W[dd])\n```\n\nend');
+	assert.deepEqual(await notices(page), []);
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

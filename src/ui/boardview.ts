@@ -49,6 +49,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#board: BoardSvg;
 	#lockBtn: HTMLButtonElement;
 	#resetBtn: HTMLButtonElement;
+	#problemBtn: HTMLButtonElement;
 	#cap: HTMLElement;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
@@ -81,6 +82,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const ctl = el(this.#frame, 'div', 'kifu-ctl');
 		this.#lockBtn = iconButton(ctl, 'lock', 'Unlock to edit', () => this.#toggleLock());
 		this.#resetBtn = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
+		this.#problemBtn = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
+			const s = this.session;
+			if (s) s.setProblem(!s.problem);
+		});
+		this.#problemBtn.hidden = true;
 		this.#cap = el(root, 'div', 'kifu-cap');
 
 		const svgEl = this.#board.el;
@@ -106,6 +112,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// element, so none of it may travel on to the editor.
 		for (const type of CONTAINED) root.addEventListener(type, (ev) => ev.stopPropagation());
 		root.addEventListener('pointerdown', () => this.#activate());
+		root.addEventListener('contextmenu', () => {
+			if (this.session) this.#plugin.menuOn(this.session);
+		});
 		root.addEventListener('focusin', () => this.#activate());
 		root.addEventListener('focusout', () => this.#setKeyFocus(false));
 		root.addEventListener('keyup', (ev) => {
@@ -216,6 +225,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#tools = null;
 		this.#lockBtn.hidden = true;
 		this.#resetBtn.hidden = true;
+		this.#problemBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
 	}
@@ -275,6 +285,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#lockBtn.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
 		this.#lockBtn.classList.toggle('is-active', s.edit);
 		this.#resetBtn.hidden = s.edit || !s.moved;
+		// (while editing, under the lock: is this board a problem?)
+		this.#problemBtn.hidden = !s.edit;
+		this.#problemBtn.classList.toggle('is-active', s.problem);
+		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
 
 		this.#renderStamp(!s.edit ? m.status : null, s.cur);
 		this.#renderCaption(m);

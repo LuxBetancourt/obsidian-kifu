@@ -740,6 +740,38 @@ test('a board that is not a problem shows the verdict of a marked line played ou
 	assert.equal(o.status(), null);
 });
 
+test('the problem switch writes a problem line only where the board would decide otherwise', () => {
+	// set up with stones of both colours and moves saved: a problem by itself
+	const p = make(PROBLEM);
+	assert.equal(p.problem, true);
+	p.setEdit(true);
+	p.setProblem(false);
+	assert.deepEqual(p.header, ['problem: no']);
+	assert.equal(p.problem, false);
+	assert.equal(p.dirtyHeader, true);
+	p.setProblem(true); // back to what it would be anyway: the line goes
+	assert.deepEqual(p.header, []);
+	assert.equal(p.problem, true);
+	p.undo();
+	assert.deepEqual(p.header, ['problem: no']);
+	// a sequence from an empty board is not
+	const g = make('scale: 0.8\n(;SZ[9];B[aa];W[bb])');
+	g.setProblem(true);
+	assert.deepEqual(g.header, ['scale: 0.8', 'problem: yes']);
+	assert.equal(g.problem, true);
+	g.setProblem(false);
+	assert.deepEqual(g.header, ['scale: 0.8']);
+	// nor is a numbered figure, set up or not
+	const f = make('numbers: on\n' + PROBLEM);
+	assert.equal(f.problem, false);
+	assert.equal(f.problemValue(true), 'yes');
+	assert.equal(f.problemValue(false), null);
+	// asking for what it already is changes nothing
+	const before = g.header.slice();
+	g.setProblem(false);
+	assert.deepEqual(g.header, before);
+});
+
 test('a problem with a chosen start is solved from there', () => {
 	const s = make(PROBLEM);
 	s.setEdit(true);

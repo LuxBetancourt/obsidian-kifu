@@ -1171,6 +1171,21 @@ export class Session {
 		this.changed(false, true);
 	}
 
+	/**
+	 * The "problem:" line that makes this board judge its moves (or not): none at all
+	 * when the board would decide the same by itself.
+	 */
+	problemValue(on: boolean): string | null {
+		const auto = this.figure ? false : this.info().problem;
+		return on === auto ? null : on ? 'yes' : 'no';
+	}
+
+	/** Judge the moves played on this board, or stop judging them. */
+	setProblem(on: boolean): void {
+		if (on === this.problem) return;
+		this.setHeader('problem', this.problemValue(on));
+	}
+
 	/** Is the locked board a numbered figure rather than the starting position? */
 	get figure(): boolean {
 		const n = this.numbers;

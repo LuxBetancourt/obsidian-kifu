@@ -15,6 +15,7 @@ import {
 import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from './config';
 import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
 import { Host, Session } from './session';
+import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
 import { BoardView } from './ui/boardview';
@@ -102,25 +103,83 @@ export default class KifuPlugin extends Plugin implements Host {
 		}).open();
 	}
 
-	/** The editor's right-click menu gets a Kifu submenu with the insert commands. */
+	/** The board that was right-clicked last, and when: the editor menu that follows is about it. */
+	#menuBoard: { session: Session; at: number } | null = null;
+
+	menuOn(session: Session): void {
+		this.#menuBoard = { session, at: Date.now() };
+	}
+
+	/**
+	 * The editor's right-click menu gets a Kifu submenu: the insert commands and, for
+	 * the board that was right-clicked (or the block the cursor is in), whether it is
+	 * a problem.
+	 */
 	#editorMenu(menu: Menu, editor: Editor, from: string): void {
-		const entries: [string, string, () => void][] = [
-			['Insert board', 'Insert Kifu board', () => insertBlock(editor, '')],
-			['Display SGF file…', 'Display SGF file with Kifu…', () => this.#insertSgf(editor, from)],
+		type Entry = { title: string; flat: string; run: () => void; checked?: boolean; disabled?: boolean };
+		const entries: Entry[] = [
+			{ title: 'Insert board', flat: 'Insert Kifu board', run: () => insertBlock(editor, '') },
+			{ title: 'Display SGF file…', flat: 'Display SGF file with Kifu…', run: () => this.#insertSgf(editor, from) },
 		];
+		const problem = this.#problemEntry(editor, from);
+		if (problem) entries.push({ title: 'Problem board', flat: 'Kifu problem board', ...problem });
+		const fill = (i: MenuItem, e: Entry, title: string): void => {
+			i.setTitle(title).onClick(e.run);
+			if (e.checked !== undefined) i.setChecked(e.checked);
+			if (e.disabled) i.setDisabled(true);
+		};
 		menu.addItem((item) => {
 			// Submenus work in Obsidian but are not in its published API, so check first
 			// and fall back to plain items, named so they still read as Kifu's.
 			const sub = (item as MenuItem & { setSubmenu?: () => Menu }).setSubmenu?.();
 			if (sub) {
 				item.setTitle('Kifu').setIcon('kifu-tree').setSection('insert');
-				for (const [title, , run] of entries) sub.addItem((i) => i.setTitle(title).onClick(run));
+				for (const e of entries) sub.addItem((i) => fill(i, e, e.title));
 				return;
 			}
-			const [[, title, run], ...others] = entries;
-			item.setTitle(title).setIcon('kifu-tree').setSection('insert').onClick(run);
-			for (const [, t, r] of others) menu.addItem((i) => i.setTitle(t).setIcon('kifu-tree').setSection('insert').onClick(r));
+			const [first, ...others] = entries;
+			fill(item.setIcon('kifu-tree').setSection('insert'), first, first.flat);
+			for (const e of others) menu.addItem((i) => fill(i.setIcon('kifu-tree').setSection('insert'), e, e.flat));
 		});
+	}
+
+	/** The "Problem board" switch for the menu, or null when the menu is about no board. */
+	#problemEntry(editor: Editor, from: string): { run: () => void; checked: boolean; disabled: boolean } | null {
+		// A board that was just right-clicked: through its session, like its own button.
+		const pressed = this.#menuBoard;
+		this.#menuBoard = null;
+		if (pressed && Date.now() - pressed.at < 1000 && pressed.session.notePath === from && !pressed.session.gone && pressed.session.ready) {
+			const s = pressed.session;
+			return {
+				checked: s.problem,
+				disabled: !!s.cantEdit,
+				run: () => {
+					s.setProblem(!s.problem);
+					// what the solver sees changes: start again from the resting position
+					if (!s.edit) s.reset();
+				},
+			};
+		}
+		// Otherwise the block the cursor is in: its text is changed in the editor itself,
+		// exactly there, and the board is drawn again from it.
+		const line = editor.getCursor().line;
+		const block = read(editor.getValue()).blocks.find((b) => b.open <= line && b.close >= line);
+		if (!block) return null;
+		const probe = new Session(this, from, block.body);
+		if (probe.error) return null;
+		const on = probe.problem;
+		return {
+			checked: on,
+			disabled: false,
+			run: () => {
+				const now = read(editor.getValue()).blocks.find((b) => b.open === block.open && b.close === block.close && b.body === block.body);
+				if (!now) return; // (the note changed meanwhile)
+				const parsed = parseBlock(now.body);
+				const body = composeBlock(setOption(parsed.header, 'problem', probe.problemValue(!on)), parsed.rest, null, null);
+				const text = body === '' ? '' : body.split('\n').map((l) => now.prefix + l).join('\n') + '\n';
+				editor.replaceRange(text, { line: now.open + 1, ch: 0 }, { line: now.close, ch: 0 });
+			},
+		};
 	}
 
 	/** First time the plugin is switched on: put the panel in the right sidebar, quietly. */

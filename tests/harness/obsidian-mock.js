@@ -432,6 +432,8 @@
 		setIcon(i) { this.icon = i; return this; }
 		setSection(s) { this.section = s; return this; }
 		onClick(fn) { this.click = fn; return this; }
+		setChecked(c) { this.checked = c; return this; }
+		setDisabled(d) { this.disabled = d; return this; }
 	}
 	MenuItem.prototype.setSubmenu = function () { return (this.submenu = new Menu()); };
 	class Menu {
