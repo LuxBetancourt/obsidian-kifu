@@ -73,13 +73,15 @@ input[type='text'] { height: 30px; }
 			this.PluginClass = module.exports.default ?? module.exports;
 		},
 		/** Start "Obsidian": a vault, the plugin, and some open panes. */
-		async boot({ files = {}, panes = [], data = null, asyncRender = false, lagReading = false, reuse = 'pool', autosave = 2000, editorChange = true } = {}) {
+		async boot({ files = {}, panes = [], data = null, asyncRender = false, lagReading = false, reuse = 'pool', autosave = 2000, editorChange = true, saveDelay = 400 } = {}) {
 			const app = new O.App({ main: document.getElementById('main'), right: document.getElementById('right') });
 			app._asyncRender = asyncRender; app._lagReading = lagReading; app._reuse = reuse; app._autosave = autosave; app._editorChange = editorChange;
 			for (const [path, text] of Object.entries(files)) app.vault._add(path, text);
 			const plugin = new this.PluginClass(app, { id: 'kifu', name: 'Kifu', version: '0.0.0' });
 			// (the checks expect the first saved reply unless they say otherwise)
 			plugin._data = JSON.stringify({ reply: 'first', ...(data ?? {}) });
+			// (the scenarios were written for a short pause before a board writes; the plugin waits 3 s)
+			plugin.saveDelay = saveDelay;
 			const t0 = performance.now();
 			plugin.load();
 			this.loadMs = performance.now() - t0;

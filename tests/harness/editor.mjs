@@ -533,6 +533,64 @@ await scenario("Obsidian's edit button stays clear of the lock, even beside a bo
 	assert.ok(edit.y > box.y + box.height / 2);
 });
 
+/* Writing redraws the block: an unlocked board writes only after a pause, so quick input is never swapped out from under the pointer. */
+{
+	const note = 'top\n\n```kifu\nsize: 9\n```\n\nend\n';
+	const moves = ['aa', 'cc', 'ee', 'gg', 'ii', 'ac', 'ce', 'eg', 'gi', 'ca', 'ec', 'ge'];
+	const human = async (page, pt) => {
+		const p = await pointXY(page, 0, pt);
+		await page.mouse.move(p.x, p.y);
+		await page.mouse.down();
+		await sleep(110); // (a person's click is held for a moment)
+		await page.mouse.up();
+	};
+	const written = async (page) => ((await doc(page)).match(/;[BW]\[/g) ?? []).length;
+
+	await scenario('quick moves on an unlocked board all land, and are written after a pause', { files: { 'N.md': note }, live: ['N.md'], autosave: 150, saveDelay: 3000 }, async (page) => {
+		await toggleLock(page);
+		const board = await page.evaluateHandle(() => document.querySelector('.kifu-svg'));
+		for (const pt of moves) {
+			await human(page, pt);
+			await sleep(330);
+		}
+		assert.equal(await written(page), 0); // nothing written while at work...
+		assert.equal(await page.evaluate((b) => b.isConnected, board), true); // ...so the board was never swapped
+		await sleep(3300);
+		assert.equal(await written(page), moves.length); // ...and all of it after the pause
+		assert.deepEqual(await notices(page), []);
+	});
+
+	await scenario('locking, or the board going away, writes at once', { files: { 'N.md': note }, live: ['N.md'], autosave: 150, saveDelay: 3000 }, async (page) => {
+		await toggleLock(page);
+		await human(page, 'cc');
+		await human(page, 'ee');
+		await toggleLock(page); // lock
+		await sleep(300);
+		assert.equal(await written(page), 2);
+		await toggleLock(page);
+		await human(page, 'gg');
+		await page.evaluate(() => window.harness.views[0].renderer?.set?.('') ?? window.harness.views[0].cm?.dom.remove());
+		await page.evaluate(() => { const v = window.harness.views[0]; v.leaf?.detach?.(); });
+		await sleep(400);
+		assert.equal(((await page.evaluate(() => window.harness.text('N.md'))).match(/;[BW]\[/g) ?? []).length, 3);
+	});
+
+	await scenario('a write that falls due while a press is held waits for it', { files: { 'N.md': note }, live: ['N.md'], autosave: 150, saveDelay: 3000 }, async (page) => {
+		await toggleLock(page);
+		await human(page, 'cc');
+		await sleep(500);
+		// pressed beside the board (so letting go plays nothing), and held past the pause
+		const box = await page.locator('.kifu').boundingBox();
+		await page.mouse.move(box.x + 6, box.y + box.height / 2);
+		await page.mouse.down();
+		await sleep(3600);
+		assert.equal(await written(page), 0); // the write fell due during the press, and waited
+		await page.mouse.up();
+		await sleep(600);
+		assert.equal(await written(page), 1); // let go: written straight after
+	});
+}
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

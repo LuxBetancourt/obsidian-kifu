@@ -65,6 +65,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#lastTap = 0;
 	#tapReset = 0;
 	#hover = '';
+	#pressed = false;
+
+	/** Is a press on this board being held? (Writing now would swap the board out from under it.) */
+	get pressed(): boolean {
+		return this.#pressed;
+	}
 	/** The ✓ or ✗ shown over the board when a line ends, and the move it was shown for. */
 	#stamp: HTMLElement | null = null;
 	#stampAt: object | null = null;
@@ -127,7 +133,22 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// meant for the board. In Live Preview the board sits inside the editor's own
 		// element, so none of it may travel on to the editor.
 		for (const type of CONTAINED) root.addEventListener(type, (ev) => ev.stopPropagation());
-		root.addEventListener('pointerdown', () => this.#activate());
+		root.addEventListener('pointerdown', () => {
+			this.#activate();
+			this.#pressed = true;
+			// (a press is work going on: the write waits for a pause after it)
+			if (this.session) this.#plugin.stillBusy(this.session);
+		});
+		// let go anywhere, even off the board
+		const release = (): void => {
+			this.#pressed = false;
+		};
+		root.ownerDocument.addEventListener('pointerup', release, true);
+		root.ownerDocument.addEventListener('pointercancel', release, true);
+		this.register(() => {
+			root.ownerDocument.removeEventListener('pointerup', release, true);
+			root.ownerDocument.removeEventListener('pointercancel', release, true);
+		});
 		root.addEventListener('contextmenu', () => {
 			if (this.session) this.#plugin.menuOn(this.session);
 		});

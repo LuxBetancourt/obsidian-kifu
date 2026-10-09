@@ -22,10 +22,16 @@ import { BoardView } from './ui/boardview';
 import { TREE_ICON } from './ui/dom';
 import { TreePanel } from './ui/panel';
 
-/** How long an edit waits before it is written, so a burst of clicks is one write... */
-const SAVE_DELAY = 400;
-/** ...and the longest a steady stream of edits (typing a comment) can put the write off. */
-const SAVE_MAX_WAIT = 3000;
+/**
+ * How long an unlocked board waits after the last edit before writing it. Writing
+ * redraws the block, which swaps the board for a new one under the pointer: a click
+ * that is pressed on the old board and let go on the new one is lost. So nothing is
+ * written while someone is still at work, only after a pause, or when the board is
+ * locked or goes away (scrolled off, note closed) and when the plugin stops.
+ */
+const SAVE_DELAY = 3000;
+/** While a press on the board is held, a write that is due waits this long and looks again. */
+const PRESS_WAIT = 250;
 /** How many boards that are off the page but were left unlocked or played out are remembered. */
 const KEEP = 24;
 /** How many frames a board is given to arrive on the page before it is asked where it stands. */
@@ -42,7 +48,7 @@ export default class KifuPlugin extends Plugin implements Host {
 	#dormant: Session | null = null;
 	#settingsLoad: Promise<void> | null = null;
 	#settingsReady = false;
-	#timers = new Map<Session, { id: number; since: number }>();
+	#timers = new Map<Session, { id: number }>();
 	#loads = new Map<Session, Promise<void>>();
 	#watching = false;
 	#retry = 0;
@@ -841,17 +847,28 @@ export default class KifuPlugin extends Plugin implements Host {
 	 * middle of an editor update (a board being taken off the page), and the editor
 	 * may not be changed from in there.
 	 */
-	requestSave(s: Session, now = false, delay = SAVE_DELAY): void {
+	/** See SAVE_DELAY. (The checks set it shorter, to get through their scenarios.) */
+	saveDelay = SAVE_DELAY;
+
+	requestSave(s: Session, now = false, delay = this.saveDelay): void {
 		if (s.gone) return;
 		const pending = this.#timers.get(s);
 		if (pending) window.clearTimeout(pending.id);
-		const since = pending?.since ?? Date.now();
-		const wait = now || Date.now() - since > SAVE_MAX_WAIT ? 0 : delay;
-		const id = window.setTimeout(() => {
+		const fire = (): void => {
+			// (not while a press on one of its boards is held: let it end first)
+			if (!now && Array.from(s.views).some((v) => v instanceof BoardView && v.pressed)) {
+				this.#timers.set(s, { id: window.setTimeout(fire, PRESS_WAIT) });
+				return;
+			}
 			this.#timers.delete(s);
 			void saveSession(this.app, s, this.#hooks).then((outcome) => this.#saved(s, outcome));
-		}, wait);
-		this.#timers.set(s, { id, since });
+		};
+		this.#timers.set(s, { id: window.setTimeout(fire, now ? 0 : delay) });
+	}
+
+	/** Someone is at work on this board: a write that is waiting waits a full pause again. */
+	stillBusy(s: Session): void {
+		if (this.#timers.has(s) && (s.dirtyTree || s.dirtyHeader)) this.requestSave(s);
 	}
 
 	/**
