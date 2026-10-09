@@ -23,7 +23,7 @@ To see everything at once, copy the two files in `demo/` into your vault and ope
 
 ## A first board
 
-Run the command **Kifu: Insert board**, or type the block yourself:
+Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu → Insert board**), or type the block yourself:
 
 ````markdown
 ```kifu
@@ -149,7 +149,7 @@ game: 12
 ```
 ````
 
-- `sgf:` takes a wikilink, a file name, or a path from the vault root or the note's folder. The command **Kifu: Insert board from an SGF file** lets you pick one. Only `.sgf` files are ever used: a note that happens to have the same name is left alone.
+- `sgf:` takes a wikilink, a file name, or a path from the vault root or the note's folder. The command **Kifu: Insert board from an SGF file**, or **Kifu → Display SGF file…** in the editor's right-click menu, lets you pick one. Only `.sgf` files are ever used: a note that happens to have the same name is left alone.
 - `game:` picks a game from a file that holds several (problem collections usually do). The first is 1.
 - Every other option works as usual, so several boards can show different moves or corners of one file.
 - Unlocking and editing such a board changes **the file**; the note keeps pointing at it. Other boards on the same file follow. If the file changes on disk (sync, another program) open boards reload.

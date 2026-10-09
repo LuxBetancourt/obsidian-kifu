@@ -424,11 +424,33 @@
 	class SuggestModal extends Modal { setPlaceholder(p) { this.placeholder = p; } }
 	class FuzzySuggestModal extends SuggestModal {}
 
+	// Menus as plugins see them. setSubmenu is not in the published API; Menu.noSubmenu
+	// takes it away, to check the fallback.
+	class MenuItem {
+		constructor() { this.title = ''; this.icon = null; this.section = null; this.submenu = null; this.click = null; }
+		setTitle(t) { this.title = String(t); return this; }
+		setIcon(i) { this.icon = i; return this; }
+		setSection(s) { this.section = s; return this; }
+		onClick(fn) { this.click = fn; return this; }
+	}
+	MenuItem.prototype.setSubmenu = function () { return (this.submenu = new Menu()); };
+	class Menu {
+		constructor() { this.items = []; }
+		addItem(cb) {
+			const item = new MenuItem();
+			if (Menu.noSubmenu) item.setSubmenu = undefined;
+			this.items.push(item);
+			cb(item);
+			return this;
+		}
+	}
+	Menu.noSubmenu = false;
+
 	const icons = new Map();
 
 	window.__obsidian = {
 		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, View, WorkspaceLeaf, Editor,
-		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal,
+		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem,
 		normalizePath,
 		addIcon: (id, content) => icons.set(id, content),
 		setIcon: () => {}, setTooltip: () => {},

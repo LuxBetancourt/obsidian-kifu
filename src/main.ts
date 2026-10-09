@@ -3,6 +3,8 @@ import {
 	FuzzySuggestModal,
 	MarkdownPostProcessorContext,
 	MarkdownView,
+	Menu,
+	MenuItem,
 	Notice,
 	Platform,
 	Plugin,
@@ -84,17 +86,40 @@ export default class KifuPlugin extends Plugin implements Host {
 		this.addCommand({
 			id: 'insert-sgf',
 			name: 'Insert board from an SGF file',
-			editorCallback: (editor, ctx) => {
-				const from = ctx.file?.path ?? '';
-				new SgfPicker(this, (file) => {
-					insertBlock(editor, `sgf: [[${this.app.metadataCache.fileToLinktext(file, from, false)}]]`);
-				}).open();
-			},
+			editorCallback: (editor, ctx) => this.#insertSgf(editor, ctx.file?.path ?? ''),
 		});
 		this.addCommand({
 			id: 'show-tree',
 			name: 'Show move tree',
 			callback: () => void this.showPanel(true),
+		});
+		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+	}
+
+	#insertSgf(editor: Editor, from: string): void {
+		new SgfPicker(this, (file) => {
+			insertBlock(editor, `sgf: [[${this.app.metadataCache.fileToLinktext(file, from, false)}]]`);
+		}).open();
+	}
+
+	/** The editor's right-click menu gets a Kifu submenu with the insert commands. */
+	#editorMenu(menu: Menu, editor: Editor, from: string): void {
+		const entries: [string, string, () => void][] = [
+			['Insert board', 'Insert Kifu board', () => insertBlock(editor, '')],
+			['Display SGF file…', 'Display SGF file with Kifu…', () => this.#insertSgf(editor, from)],
+		];
+		menu.addItem((item) => {
+			// Submenus work in Obsidian but are not in its published API, so check first
+			// and fall back to plain items, named so they still read as Kifu's.
+			const sub = (item as MenuItem & { setSubmenu?: () => Menu }).setSubmenu?.();
+			if (sub) {
+				item.setTitle('Kifu').setIcon('kifu-tree').setSection('insert');
+				for (const [title, , run] of entries) sub.addItem((i) => i.setTitle(title).onClick(run));
+				return;
+			}
+			const [[, title, run], ...others] = entries;
+			item.setTitle(title).setIcon('kifu-tree').setSection('insert').onClick(run);
+			for (const [, t, r] of others) menu.addItem((i) => i.setTitle(t).setIcon('kifu-tree').setSection('insert').onClick(r));
 		});
 	}
 

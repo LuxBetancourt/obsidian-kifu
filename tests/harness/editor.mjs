@@ -434,6 +434,35 @@ await scenario('the insert command, in the middle of a line and at the very end 
 	assert.equal(await boardCount(page), 2); // the cursor is outside both blocks, so both are drawn
 });
 
+await scenario('the editor menu: a Kifu submenu, or plain items where submenus are missing', { files: { 'N.md': 'first line\n\nlast' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	const res = await page.evaluate(() => {
+		const h = window.harness;
+		const { Menu } = window.__obsidian;
+		const v = h.views[0];
+		const ed = v.editor;
+		const show = (m) => m.items.map((i) => [i.title, i.section, i.submenu ? i.submenu.items.map((s) => s.title) : null]);
+		const out = [];
+		const menu = new Menu();
+		h.app.workspace.trigger('editor-menu', menu, ed, v);
+		out.push(show(menu));
+		ed.setCursor({ line: 1, ch: 0 });
+		menu.items[0].submenu.items[0].click();
+		out.push(ed.getValue());
+		menu.items[0].submenu.items[1].click(); // opens the file picker
+		out.push(window.__obsidian.Modal.last?.isOpen ?? false);
+		Menu.noSubmenu = true;
+		const flat = new Menu();
+		h.app.workspace.trigger('editor-menu', flat, ed, v);
+		Menu.noSubmenu = false;
+		out.push(show(flat));
+		return out;
+	});
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert board', 'Display SGF file…']]]);
+	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
+	assert.equal(res[2], true);
+	assert.deepEqual(res[3], [['Insert Kifu board', 'insert', null], ['Display SGF file with Kifu…', 'insert', null]]);
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {
