@@ -182,20 +182,6 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	/* -------------------------------------------------------------- lifecycle */
 
-	/**
-	 * In Live Preview the block's own "edit" button sits in the corner the lock uses.
-	 * A class on the block's container lets the stylesheet move it out of the way.
-	 */
-	#markHost(on = true): void {
-		const host = this.containerEl.parentElement;
-		if (host?.classList.contains('cm-preview-code-block')) host.classList.toggle('kifu-block-host', on);
-	}
-
-	onload(): void {
-		// (the container may only be put around the block after it was handed to us)
-		window.requestAnimationFrame(() => this.#markHost());
-	}
-
 	attach(s: Session): void {
 		if (this.session === s) return;
 		this.#detach();
@@ -244,7 +230,6 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	onunload(): void {
 		const s = this.session;
-		this.#markHost(false);
 		this.#detach();
 		if (s) this.#plugin.sessionReleased(s);
 	}
@@ -291,7 +276,6 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#render(): void {
 		const s = this.session;
 		if (!s) return;
-		this.#markHost();
 		if (this.#drag && !this.#cropping()) this.#endDrag();
 		const root = this.#root;
 		if (s.error || !s.ready) {

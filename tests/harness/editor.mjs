@@ -520,6 +520,19 @@ await scenario('the problem switch: in the menu for the block under the cursor o
 	assert.deepEqual(await notices(page), []);
 });
 
+await scenario("Obsidian's edit button stays clear of the lock, even beside a board as wide as the note", { files: { 'W.md': 'top\n\n```kifu\nscale: 125%\nview: full\n(;SZ[19]AB[pd])\n```\n\nend' }, live: ['W.md'] }, async (page) => {
+	const box = await page.locator('.kifu-svg').boundingBox();
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await sleep(200);
+	const edit = await page.locator('.edit-block-button').boundingBox();
+	const lock = await lockBtn(page).boundingBox();
+	assert.ok(edit && lock);
+	const apart = edit.x >= lock.x + lock.width || edit.x + edit.width <= lock.x || edit.y >= lock.y + lock.height || edit.y + edit.height <= lock.y;
+	assert.ok(apart, `edit button ${JSON.stringify(edit)} covers the lock ${JSON.stringify(lock)}`);
+	// (it moved to the bottom of the block)
+	assert.ok(edit.y > box.y + box.height / 2);
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

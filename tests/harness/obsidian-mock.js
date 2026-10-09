@@ -210,11 +210,12 @@
 			block.className = 'block-language-' + sec.lang;
 			if (this.live) {
 				r.el = doc.createElement('div');
-				r.el.className = 'cm-preview-code-block cm-embed-block markdown-rendered';
+				r.el.className = 'cm-preview-code-block cm-embed-block markdown-rendered cm-lang-' + sec.lang;
 				r.el.contentEditable = 'false';
 				r.el.appendChild(block);
+				const actions = doc.createElement('div'); actions.className = 'embed-actions';
 				const edit = doc.createElement('div'); edit.className = 'edit-block-button'; edit.textContent = '</>';
-				r.el.appendChild(edit);
+				actions.appendChild(edit); r.el.appendChild(actions);
 			} else {
 				r.el = doc.createElement('div'); r.el.className = 'el-pre';
 				r.el.appendChild(block);

@@ -42,8 +42,10 @@ input[type='text'], textarea { background: var(--background-modifier-form-field)
 input[type='text'] { height: 30px; }
 .cm-preview-code-block { position: relative; }
 .cm-embed-block:hover { box-shadow: 0 0 0 1px var(--background-modifier-border); border-radius: 4px; }
-.edit-block-button { position: absolute; top: 4px; right: 4px; padding: 2px 6px; font-size: 11px; border-radius: 4px; background: var(--background-secondary); color: var(--text-muted); opacity: 0; cursor: pointer; }
-.cm-preview-code-block:hover .edit-block-button { opacity: 1; }
+/* as in Obsidian's app.css: the block's actions sit in its top right corner */
+.markdown-source-view.mod-cm6 .embed-actions { position: absolute; top: 4px; inset-inline-end: 4px; display: flex; opacity: 0; }
+.markdown-source-view.mod-cm6 .cm-embed-block:hover .embed-actions { opacity: 1; }
+.edit-block-button { padding: 2px 6px; font-size: 11px; border-radius: 4px; background: var(--background-secondary); color: var(--text-muted); cursor: pointer; }
 .vertical-tab-content { max-width: 720px; margin: 0 auto; padding: 24px 32px; }
 .setting-item { display: flex; align-items: center; padding: 10px 0; border-top: 1px solid var(--background-modifier-border); gap: 16px; }
 .setting-item-info { flex: 1; } .setting-item-name { font-size: 14px; } .setting-item-description { font-size: 12px; color: var(--text-muted); }

@@ -94,7 +94,8 @@ class BlockWidget extends WidgetType {
 
 	toDOM(view: EditorView): HTMLElement {
 		const dom = document.createElement('div');
-		dom.className = 'cm-preview-code-block cm-embed-block markdown-rendered';
+		// (as Obsidian 1.14 builds it: the container names the language, the edit button sits in .embed-actions)
+		dom.className = 'cm-preview-code-block cm-embed-block markdown-rendered cm-lang-' + this.b.lang;
 		dom.contentEditable = 'false';
 		const block = document.createElement('div');
 		block.className = 'block-language-' + this.b.lang;
@@ -108,8 +109,11 @@ class BlockWidget extends WidgetType {
 			view.focus();
 		};
 		edit.addEventListener('click', select);
-		if (LP.buttonFirst) dom.insertBefore(edit, block);
-		else dom.appendChild(edit);
+		const actions = document.createElement('div');
+		actions.className = 'embed-actions';
+		actions.appendChild(edit);
+		if (LP.buttonFirst) dom.insertBefore(actions, block);
+		else dom.appendChild(actions);
 		if (LP.clickSelects !== 'none') {
 			dom.addEventListener(LP.clickSelects, (ev: Event) => {
 				if (ev.defaultPrevented || ev.target === edit) return;

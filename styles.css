@@ -522,7 +522,7 @@ body .kifu-panel [hidden] {
 
 /* In Live Preview, Obsidian's own "edit this block" button sits in the same
    top-right corner; for our blocks it moves to the bottom instead. */
-.cm-preview-code-block.kifu-block-host > .edit-block-button {
+.markdown-source-view.mod-cm6 .cm-lang-kifu > .embed-actions {
 	top: auto;
 	bottom: var(--size-2-2, 4px);
 }
