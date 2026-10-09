@@ -81,6 +81,8 @@ A problem is a starting position plus the lines you saved from it.
 
 On the locked board the solver's move is looked up in the tree. If it is there, the saved reply is played after a short pause; if it is not, the move is simply *incorrect*. When a line ends a large ✓ or ✗ appears over the board for a moment, and the verdict and the line's comment stay underneath.
 
+Stuck? The eye button under the lock shows the solution: the board starts over and plays out the first saved line judged correct, with the moves numbered, and the move tree panel shows all the saved lines. Step back through it with ‹ ›, or start over with ↺. (No ✓ appears for an answer that was shown rather than found.)
+
 ![A wrong answer: the saved reply, the verdict and the comment](docs/playing.png)
 
 How a line is judged:

@@ -820,6 +820,43 @@ test('stepping back and forth on a locked board stays within the moves played on
 	assert.equal(s.cur, s.home);
 });
 
+test('showing the solution plays out the first line judged correct', () => {
+	const s = make(PROBLEM);
+	assert.equal(moveOf(s.solution()!), 'Bra'); // nothing is marked ✓: the main line is the answer
+	click(s, 'qa'); // a wrong try first
+	s.showSolution();
+	assert.equal(s.cur, s.solution()); // started over, then played the answer out
+	assert.equal(s.cur.temp, undefined);
+	assert.equal(s.reveal, true); // the panel shows the saved lines too
+	assert.equal(s.status(), 'correct');
+	assert.equal(label(s, 'sb'), '1'); // numbered from the resting position, like moves one plays
+	// it can be stepped back through, but not past where the board rests
+	s.stepBack();
+	s.stepBack();
+	s.stepBack();
+	assert.equal(s.cur, s.home);
+	assert.equal(s.canStepBack, false);
+	s.stepForth();
+	assert.equal(moveOf(s.cur), 'Bsb');
+	s.reset();
+	assert.equal(s.solutionShown, null);
+	assert.equal(s.reveal, false);
+	// a line marked ✓ is the answer, wherever it is
+	const t = make('(;SZ[9]AB[cc]AW[dd](;B[ee];W[ff])(;B[gg];W[hh]TE[1]))');
+	assert.equal(moveOf(t.solution()!), 'Whh');
+	// from a chosen start
+	const m = make('move: 2\n' + PROBLEM);
+	assert.equal(moveOf(m.solution()!), 'Bra');
+	// no answer saved, or no problem: nothing to show
+	assert.equal(make('(;SZ[9]AB[cc]AW[dd](;B[ee]BM[1])(;B[gg]BM[1]))').solution(), null);
+	assert.equal(make('(;SZ[9];B[ee];W[ff]TE[1])').solution(), null);
+	// and never while editing
+	const e = make(PROBLEM);
+	e.setEdit(true);
+	e.showSolution();
+	assert.equal(e.cur, e.home);
+});
+
 test('a problem with a chosen start is solved from there', () => {
 	const s = make(PROBLEM);
 	s.setEdit(true);

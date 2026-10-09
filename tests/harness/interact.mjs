@@ -730,6 +730,33 @@ await scenario('back and forward under the lock step through the moves played, n
 	assert.equal(await forward.isVisible(), false);
 });
 
+await scenario('a locked problem shows its solution on request, without a stamp', {
+	files: { 'P.md': problemNote, 'G.md': '```kifu\n(;SZ[9];B[cc];W[ee]TE[1])\n```\n' },
+	panes: [{ path: 'P.md', mode: 'preview' }, { path: 'G.md', mode: 'preview' }],
+}, async (page) => {
+	const show = page.locator('.kifu-ctl .kifu-btn[aria-label="Show the solution"]');
+	assert.equal(await show.count(), 2); // (one per board, shown only where there is an answer)
+	assert.equal(await show.nth(0).isVisible(), true);
+	assert.equal(await show.nth(1).isVisible(), false); // not a problem
+	// a wrong try, then the answer
+	await clickPoint(page, 0, 'qa');
+	await sleep(700);
+	assert.match(await cap(page), /^Incorrect/);
+	await show.nth(0).click();
+	assert.deepEqual(await stones(page), { black: 9, white: 0 }); // B ra, W qa, B sa: the white group is taken
+	assert.equal(await labels(page), '1,3'); // (White's 2 was taken with the group)
+	assert.match(await cap(page), /^Correct/);
+	await sleep(100);
+	assert.equal(await page.locator('.kifu-stamp').count(), 0); // shown, not found: no stamp
+	assert.equal(await show.nth(0).isDisabled(), true);
+	// step back through it with the buttons under the lock
+	await page.locator('.kifu-ctl .kifu-btn[aria-label^="Take back"]').nth(0).click();
+	assert.equal(await show.nth(0).isDisabled(), false);
+	// and never while editing
+	await toggleLock(page);
+	assert.equal(await show.nth(0).isVisible(), false);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

@@ -194,6 +194,9 @@ export class Session {
 	nextLabel = 'a';
 	/** The solver asked to see the saved lines of this problem. */
 	reveal = false;
+	/** The end of the answer, when the solver asked to be shown it (rather than finding it). */
+	solutionShown: SgfNode | null = null;
+	private solutionCache: { rev: number; home: SgfNode; leaf: SgfNode | null } | null = null;
 
 	/** Unsaved changes to the game / to the option lines. */
 	dirtyTree = false;
@@ -607,6 +610,41 @@ export class Session {
 		return null;
 	}
 
+	/**
+	 * The answer to this problem: the end of the first saved line from the resting
+	 * position that is judged correct (main line first), or null when there is none.
+	 */
+	solution(): SgfNode | null {
+		if (!this.problem) return null;
+		const c = this.solutionCache;
+		if (c && c.rev === this.treeRev && c.home === this.home) return c.leaf;
+		let leaf: SgfNode | null = null;
+		// (depth first, in saved order, without recursion: a game record can be long)
+		const stack: SgfNode[] = [this.home];
+		while (stack.length && !leaf) {
+			const n = stack.pop() as SgfNode;
+			const kids = n.children.filter((k) => !k.temp);
+			if (!kids.length) {
+				if (n !== this.home && this.verdict(n) === 'correct') leaf = n;
+			} else {
+				for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
+			}
+		}
+		this.solutionCache = { rev: this.treeRev, home: this.home, leaf };
+		return leaf;
+	}
+
+	/** Start again and play the answer out on the board (the saved lines show in the panel too). */
+	showSolution(): void {
+		const leaf = this.solution();
+		if (!leaf || this.edit) return;
+		this.reset();
+		this.solutionShown = leaf;
+		this.reveal = true;
+		this.cur = leaf;
+		this.emit();
+	}
+
 	/** The verdict a saved line carries at its last move (null anywhere else). */
 	verdict(leaf: SgfNode): Status {
 		if (!this.problem || leaf.temp || this.continues(leaf) || !this.belowHome(leaf)) return null;
@@ -813,6 +851,7 @@ export class Session {
 		this.cur = this.home;
 		this.burst = null;
 		this.reveal = false; // a fresh try
+		this.solutionShown = null;
 		this.lastChild = new WeakMap(); // (nothing to make again on a fresh try)
 		this.emit();
 	}

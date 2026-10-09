@@ -52,6 +52,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#problemBtn: HTMLButtonElement;
 	#backBtn: HTMLButtonElement;
 	#forwardBtn: HTMLButtonElement;
+	#solutionBtn: HTMLButtonElement;
 	#cap: HTMLElement;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
@@ -88,6 +89,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// would give a problem's answer away). Unlocked, the toolbar has its own buttons.
 		this.#backBtn = iconButton(ctl, 'prev', 'Take back your last move', () => this.session?.stepBack());
 		this.#forwardBtn = iconButton(ctl, 'next', 'Play it again', () => this.session?.stepForth());
+		this.#solutionBtn = iconButton(ctl, 'eye', 'Show the solution', () => this.session?.showSolution());
 		this.#resetBtn = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
 		this.#problemBtn = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
 			const s = this.session;
@@ -234,6 +236,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#resetBtn.hidden = true;
 		this.#problemBtn.hidden = true;
 		this.#backBtn.hidden = this.#forwardBtn.hidden = true;
+		this.#solutionBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
 	}
@@ -297,12 +300,17 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#backBtn.hidden = this.#forwardBtn.hidden = s.edit || !(s.canStepBack || s.canStepForth);
 		this.#backBtn.disabled = !s.canStepBack;
 		this.#forwardBtn.disabled = !s.canStepForth;
+		// a locked problem that has an answer saved can show it
+		const answer = s.edit ? null : s.solution();
+		this.#solutionBtn.hidden = !answer;
+		this.#solutionBtn.disabled = !!answer && s.cur === answer;
 		// (while editing, under the lock: is this board a problem?)
 		this.#problemBtn.hidden = !s.edit;
 		this.#problemBtn.classList.toggle('is-active', s.problem);
 		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
 
-		this.#renderStamp(!s.edit ? m.status : null, s.cur);
+		// (an answer that was shown rather than found gets no stamp: the caption says enough)
+		this.#renderStamp(!s.edit && s.cur !== s.solutionShown ? m.status : null, s.cur);
 		this.#renderCaption(m);
 		if (s.edit) this.#renderTools(s, m);
 		else if (this.#tools) {
