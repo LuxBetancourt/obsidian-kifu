@@ -7,6 +7,7 @@ import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
 import { BoardSvg } from './boardsvg';
 import { clear, el, icon, iconButton, setIcon } from './dom';
+import { fromShown, orientModel, shownColor } from '../orient';
 
 const TOOLS: [Tool, string, string][] = [
 	['play', 'playB', 'Play moves (click again to change who plays)'],
@@ -50,6 +51,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#lockBtn: HTMLButtonElement;
 	#resetBtn: HTMLButtonElement;
 	#problemBtn: HTMLButtonElement;
+	#randomBtn: HTMLButtonElement;
 	#backBtn: HTMLButtonElement;
 	#forwardBtn: HTMLButtonElement;
 	#solutionBtn: HTMLButtonElement;
@@ -96,6 +98,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (s) s.setProblem(!s.problem);
 		});
 		this.#problemBtn.hidden = true;
+		this.#randomBtn = iconButton(ctl, 'shuffle', 'Shuffle: each time the note is opened, show this board turned or mirrored, and perhaps with the colors swapped', () => {
+			const s = this.session;
+			if (s) s.setRandomize(!s.randomized);
+		});
+		this.#randomBtn.hidden = true;
 		this.#cap = el(root, 'div', 'kifu-cap');
 
 		const svgEl = this.#board.el;
@@ -250,6 +257,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#lockBtn.hidden = true;
 		this.#resetBtn.hidden = true;
 		this.#problemBtn.hidden = true;
+		this.#randomBtn.hidden = true;
 		this.#backBtn.hidden = this.#forwardBtn.hidden = true;
 		this.#solutionBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
@@ -304,7 +312,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			(s.edit && s.tool === 'crop' ? ' is-crop' : '') +
 			(this.#keyFocus ? ' is-keyfocus' : '');
 
-		const m = s.model();
+		// (a randomized board is drawn turned and recoloured; the session itself knows nothing of it)
+		const o = s.orientation;
+		const m = o ? orientModel(s.model(), o) : s.model();
 		this.#board.draw(m, { cell, coords });
 		this.#hover = '';
 
@@ -324,6 +334,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#problemBtn.hidden = !s.edit;
 		this.#problemBtn.classList.toggle('is-active', s.problem);
 		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
+		this.#randomBtn.hidden = !s.edit;
+		this.#randomBtn.classList.toggle('is-active', s.randomized);
+		this.#randomBtn.setAttribute('aria-pressed', String(s.randomized));
 
 		// (an answer that was shown rather than found gets no stamp: the caption says enough)
 		this.#renderStamp(!s.edit && s.cur !== s.solutionShown ? m.status : null, s.cur);
@@ -523,7 +536,13 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const s = this.session;
 		if (!s || !s.ready || ev.button !== 0 || this.#cropping()) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY);
-		if (p) s.click(p[0], p[1]);
+		if (p) s.click(...this.#toGame(s, p));
+	}
+
+	/** The point of the game under a point of the picture (they differ on a randomized board). */
+	#toGame(s: Session, p: [number, number]): [number, number] {
+		const o = s.orientation;
+		return o ? fromShown(o, p[0], p[1], s.w, s.h) : p;
 	}
 
 	#rectTo(p: [number, number]): Rect {
@@ -555,7 +574,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#hover = key;
 		let color = 0;
 		if (p) {
-			if (!s.edit || s.tool === 'play') color = s.canPlay(p[0], p[1]) ? s.toPlay() : 0;
+			const [x, y] = this.#toGame(s, p);
+			if (!s.edit || s.tool === 'play') color = s.canPlay(x, y) ? shownColor(s.orientation, s.toPlay()) : 0;
 			else if (s.tool === 'black' || s.tool === 'white') {
 				color = s.position().board.g[p[1] * s.w + p[0]] ? 0 : s.tool === 'black' ? 1 : 2;
 			}

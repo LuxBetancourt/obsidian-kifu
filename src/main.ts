@@ -234,7 +234,13 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	async saveSettings(): Promise<void> {
 		this.#refreshAll();
-		await this.saveData(this.settings);
+		// Only what differs from the defaults is written, so a default that changes in a
+		// later version reaches everyone who never chose otherwise.
+		const changed: Partial<KifuSettings> = {};
+		for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof KifuSettings)[]) {
+			if (this.settings[k] !== DEFAULT_SETTINGS[k]) Object.assign(changed, { [k]: this.settings[k] });
+		}
+		await this.saveData(changed);
 	}
 
 	#refreshAll(): void {

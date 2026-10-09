@@ -4,6 +4,7 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type KifuPlugin from '../main';
 import { VIEW_TYPE } from '../config';
 import { pointName } from '../options';
+import { shownColor, shownSize, swapWords, toShown } from '../orient';
 import type { Session } from '../session';
 import { nodeMark } from '../session';
 import { SgfNode, getMove, getText, pathTo } from '../sgf';
@@ -212,7 +213,9 @@ export class TreePanel extends ItemView {
 	#drawTree(s: Session): void {
 		// While a problem is being solved only the line that is on the board is drawn.
 		const concealed = s.concealed;
-		const key = concealed ? `line ${s.rev}` : `${s.treeRev}`;
+		// (a randomized board shows its stones recoloured while locked, as recorded while editing)
+		const o = s.orientation;
+		const key = (concealed ? `line ${s.rev}` : `${s.treeRev}`) + (o?.swap ? ' swapped' : '');
 		const x = (col: number) => PAD + col * CELL + CELL / 2;
 		const y = (row: number) => PAD + row * CELL + CELL / 2;
 		if (key !== this.#layoutKey || !this.#layout || !this.#layout.at.has(s.root)) {
@@ -258,7 +261,8 @@ export class TreePanel extends ItemView {
 					const mn = parseInt(n.props.MN?.[0] ?? '');
 					no = mn > 0 ? mn : before + 1;
 					const d = dot(cx, cy, RAD);
-					if (m.color === 1) {
+					const shown = shownColor(o, m.color);
+					if (shown === 1) {
 						if (n.temp) tblack += d;
 						else black += d;
 					} else if (n.temp) twhite += d;
@@ -267,7 +271,7 @@ export class TreePanel extends ItemView {
 						const t = svg(texts, 'text', {
 							x: cx,
 							y: cy + (no > 99 ? 3 : 3.6),
-							class: `kifu-t-num ${m.color === 1 ? 'kifu-t-on-b' : 'kifu-t-on-w'}${no > 99 ? ' is-small' : ''}`,
+							class: `kifu-t-num ${shown === 1 ? 'kifu-t-on-b' : 'kifu-t-on-w'}${no > 99 ? ' is-small' : ''}`,
 						});
 						t.textContent = m.pass ? '–' : String(no);
 					}
@@ -324,10 +328,17 @@ export class TreePanel extends ItemView {
 		clear(info);
 		const n = s.cur;
 		const m = getMove(n, s.w, s.h);
+		// (on a randomized board: the colour and the point as the board shows them)
+		const o = s.orientation;
 		if (m) {
-			el(info, 'span', `kifu-st ${m.color === 1 ? 'kifu-st-b' : 'kifu-st-w'}`);
-			const where = m.pass ? 'pass' : pointName(m.x, m.y, s.h);
-			el(info, 'span', 'kifu-p-move', `${m.color === 1 ? 'Black' : 'White'} ${s.position().moveNo} · ${where}`);
+			const color = shownColor(o, m.color);
+			el(info, 'span', `kifu-st ${color === 1 ? 'kifu-st-b' : 'kifu-st-w'}`);
+			let where = 'pass';
+			if (!m.pass) {
+				const [x, y] = o ? toShown(o, m.x, m.y, s.w, s.h) : [m.x, m.y];
+				where = pointName(x, y, o ? shownSize(o, s.w, s.h)[1] : s.h);
+			}
+			el(info, 'span', 'kifu-p-move', `${color === 1 ? 'Black' : 'White'} ${s.position().moveNo} · ${where}`);
 		} else {
 			el(info, 'span', 'kifu-p-move', n.parent ? 'Position' : 'Start');
 		}
@@ -348,7 +359,7 @@ export class TreePanel extends ItemView {
 			if (this.#commentNode !== n || (!active && this.#comment.value !== text)) this.#comment.value = text;
 			this.#commentNode = n;
 		} else {
-			this.#text.textContent = text;
+			this.#text.textContent = swapWords(o, text);
 			this.#commentNode = null;
 		}
 	}

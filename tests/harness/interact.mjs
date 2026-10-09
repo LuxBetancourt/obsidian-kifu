@@ -785,6 +785,42 @@ await scenario('a locked problem shows its solution on request, without a stamp'
 	assert.equal(await show.nth(0).isVisible(), false);
 });
 
+await scenario('a shuffled problem is shown turned and recoloured, solved as shown, and edited as recorded', {
+	files: { 'P.md': problemNote },
+	panes: [{ path: 'P.md', mode: 'preview' }],
+}, async (page) => {
+	// the roll is fixed: turned over the diagonal and mirrored both ways (t = 7), colours swapped
+	await page.evaluate(async (note) => {
+		const q = [0.99, 0.2];
+		Math.random = () => (q.length ? q.shift() : 0.5);
+		const v = window.harness.app.vault;
+		await v.modify(v.getAbstractFileByPath('P.md'), note.replace('```kifu\n', '```kifu\nrandomize: on\n'));
+	}, problemNote);
+	await sleep(200);
+	// recorded: 7 black stones, 5 white, Black to play; shown: the other way round
+	assert.deepEqual(await stones(page), { black: 5, white: 7 });
+	assert.equal(await cap(page), 'White to play and kill.');
+	// unlocked it is shown as recorded, with the shuffle switch lit; locked again, as before
+	await toggleLock(page);
+	assert.deepEqual(await stones(page), { black: 7, white: 5 });
+	const shuffle = page.locator('.kifu-ctl .kifu-btn[aria-label^="Shuffle"]');
+	assert.equal(await shuffle.isVisible(), true);
+	assert.equal(await shuffle.evaluate((b) => b.classList.contains('is-active')), true);
+	await toggleLock(page);
+	assert.equal(await shuffle.isVisible(), false);
+	assert.deepEqual(await stones(page), { black: 5, white: 7 });
+	// the vital point (R19 as recorded) is shown at T18: played there, it is the answer
+	await clickPoint(page, 0, 'sb');
+	await sleep(700);
+	await clickPoint(page, 0, 'sa');
+	await sleep(100);
+	assert.match(await cap(page), /^Correct/);
+	assert.match(await cap(page), /Black has no eyes\./); // ("White has no eyes.", in the colours shown)
+	assert.equal(await page.locator('.kifu-stamp.is-correct').count(), 1);
+	// the note itself was never touched by playing
+	assert.match(await text(page, 'P.md'), /randomize: on\n\(;GM\[1\]FF\[4\]SZ\[19\]AB\[oa\]/);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

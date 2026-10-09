@@ -6,7 +6,7 @@ import { getMove, getText, parseSgf, serializeSgf, xy2pt, SgfNode } from '../src
 
 function host(over: Partial<KifuSettings> = {}): Host & { saves: number } {
 	const h = {
-		settings: { ...DEFAULT_SETTINGS, replyDelay: 0, ...over },
+		settings: { ...DEFAULT_SETTINGS, reply: 'first' as const, replyDelay: 0, ...over },
 		saves: 0,
 		requestSave() {
 			h.saves++;
@@ -855,6 +855,51 @@ test('showing the solution plays out the first line judged correct', () => {
 	e.setEdit(true);
 	e.showSolution();
 	assert.equal(e.cur, e.home);
+});
+
+test('the shuffle switch: decided once, shown only while locked', () => {
+	const s = make('scale: 0.8\n' + PROBLEM);
+	assert.equal(s.randomized, false);
+	assert.equal(s.orientation, null);
+	s.setEdit(true);
+	s.setRandomize(true);
+	assert.deepEqual(s.header, ['scale: 0.8', 'randomize: on']);
+	assert.equal(s.orientation, null); // while editing, the board is shown as recorded
+	s.setEdit(false);
+	// (the asserts above taught TypeScript that it is null: it is not, any more)
+	const o = s.orientation as { t: number; swap: boolean } | null;
+	assert.ok(o && o.t >= 0 && o.t < 8);
+	assert.equal(s.orientation, o); // the same for as long as the board lives
+	s.reset();
+	assert.equal(s.orientation, o);
+	s.setEdit(true);
+	s.setRandomize(false);
+	assert.deepEqual(s.header, ['scale: 0.8']);
+	s.setEdit(false);
+	assert.equal(s.orientation, null);
+	// a board that is not square is never turned on its side
+	for (let i = 0; i < 30; i++) assert.ok(make('randomize: on\n(;SZ[13:9]AB[aa]AW[bb];B[cc])').orientation!.t < 4);
+	// a board that is still waiting for its file has nothing to turn yet
+	assert.equal(make('randomize: on\nsgf: [[x.sgf]]').orientation, null);
+});
+
+test('replies chosen at random come from the saved ones, all of them in time', () => {
+	// three saved answers to the same move
+	const body = 'move: 0\n(;SZ[9]AB[cc]AW[dd];B[ee](;W[ff])(;W[gg])(;W[hh]))';
+	const seen = new Set<string>();
+	for (let i = 0; i < 200 && seen.size < 3; i++) {
+		const s = make(body, { reply: 'random' });
+		click(s, 'ee');
+		seen.add(moveOf(s.cur));
+	}
+	assert.deepEqual([...seen].sort(), ['Wff', 'Wgg', 'Whh']);
+	// "first" always plays the first saved one
+	for (let i = 0; i < 20; i++) {
+		const s = make(body, { reply: 'first' });
+		click(s, 'ee');
+		assert.equal(moveOf(s.cur), 'Wff');
+	}
+	assert.equal(DEFAULT_SETTINGS.reply, 'random');
 });
 
 test('a problem with a chosen start is solved from there', () => {

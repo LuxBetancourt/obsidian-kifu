@@ -36,7 +36,7 @@ export const DEFAULT_SETTINGS: KifuSettings = {
 	align: 'center',
 	boardSize: 19,
 	showComments: true,
-	reply: 'first',
+	reply: 'random',
 	replyDelay: 350,
 	revealPanel: true,
 	hideAnswers: true,

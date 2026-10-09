@@ -80,7 +80,7 @@ A problem is a starting position plus the lines you saved from it.
 2. Switch to **Play** and play the answer; the plugin alternates colours. Go back (‹) and play other tries to add them as variations.
 3. Mark lines with ✓ and ✗ if you like, add comments in the panel, lock.
 
-On the locked board the solver's move is looked up in the tree. If it is there, the saved reply is played after a short pause; if it is not, the move is simply *incorrect*. When a line ends a large ✓ or ✗ appears over the board for a moment, and the verdict and the line's comment stay underneath.
+On the locked board the solver's move is looked up in the tree. If it is there, a saved reply is played after a short pause (where you saved several, one of them at random, so the problem does not always answer the same way; the settings can make it always the first); if it is not, the move is simply *incorrect*. When a line ends a large ✓ or ✗ appears over the board for a moment, and the verdict and the line's comment stay underneath.
 
 Stuck? The eye button under the lock shows the solution: the board starts over and plays out the first saved line judged correct, with the moves numbered, and the move tree panel shows all the saved lines. Step back through it with ‹ ›, or start over with ↺. (No ✓ appears for an answer that was shown rather than found.)
 
@@ -97,6 +97,8 @@ So the quickest way to write a problem is: enter the answer first, then the fail
 SGF files from elsewhere work too. `TE` and `BM` are read as ✓ and ✗ (that is also what the plugin writes). So is a comment on a move that opens with "Correct", "Right", "Solved", "Success", "Wrong", "Incorrect" or "Fail…" as a word of its own, or that begins or ends with `RIGHT` in capitals, the way files from goproblems.com do.
 
 A board is treated as a problem when its position was **set up with stones of both colours** and there are **moves saved** from it. Marks alone do not make one: a reviewed game has its good and bad moves marked too, and stays a game record. Say `problem: yes` or `problem: no` to decide yourself, or use the switch: the **?** button under the lock while a board is unlocked, or **Kifu → Problem board** in the editor's right-click menu (for the board you right-clicked, or the block the cursor is in). The switch writes a `problem:` line only when the board would not decide the same by itself. A board that is not a problem still follows saved moves and answers them, but it does not judge by itself: only a line you marked ✓ or ✗ shows its verdict, once it has been played out to the end. With `problem: no`, nothing is judged at all.
+
+To keep a problem from looking familiar, press the **shuffle** button under the lock while the board is unlocked (or write `randomize: on`). Each time the note is opened, the locked board is then shown turned or mirrored (any of the eight ways for a square board; a board that is not square is only mirrored), and half the time with the colours swapped, so a "Black to play" problem becomes "White to play". Captions and comments follow: "Black" and "White" in them change places. Only the picture changes: what you play is looked up as recorded, and unlocking shows the board the way it is written.
 
 ## Figures and numbers
 
@@ -208,10 +210,11 @@ Option lines come first in the block, one per line, before any SGF.
 | `problem` | `yes` / `no` | judge moves or not |
 | `style` | `paper` / `theme` | white paper, or the theme's colours |
 | `align` | `left` / `center` / `right` | |
+| `randomize` | `on` / `off` | show the board turned, mirrored and maybe recoloured, a new way each time the note opens |
 
 ## Settings
 
-**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how replies are chosen (first saved answer or a random one) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
+**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
 
 ## Changing the look
 

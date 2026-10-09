@@ -3,6 +3,7 @@
  * changing either. No DOM and no Obsidian in here, so it can be tested on its own.
  */
 
+import { Orient, rollOrient } from './orient';
 import {
 	BLACK,
 	WHITE,
@@ -196,6 +197,8 @@ export class Session {
 	reveal = false;
 	/** The end of the answer, when the solver asked to be shown it (rather than finding it). */
 	solutionShown: SgfNode | null = null;
+	/** How this board is turned and coloured while locked, once that has been decided ("randomize: on"). */
+	private orientRoll: Orient | null = null;
 	private solutionCache: { rev: number; home: SgfNode; leaf: SgfNode | null } | null = null;
 
 	/** Unsaved changes to the game / to the option lines. */
@@ -341,7 +344,10 @@ export class Session {
 			});
 		}
 		this.root = root;
-		[this.w, this.h] = boardSize(root);
+		const [w, h] = boardSize(root);
+		// (a board that changed shape can not keep a turn that would not fit it)
+		if (w !== this.w || h !== this.h) this.orientRoll = null;
+		[this.w, this.h] = [w, h];
 		this.error = '';
 		this.ready = true;
 		this.scratch = false;
@@ -955,7 +961,9 @@ export class Session {
 			const root = parseSgf(s.sgf)[0];
 			if (root) {
 				this.root = root;
-				[this.w, this.h] = boardSize(root);
+				const [w, h] = boardSize(root);
+				if (w !== this.w || h !== this.h) this.orientRoll = null;
+				[this.w, this.h] = [w, h];
 				this.cur = followIndexes(root, s.at);
 				this.scratch = false;
 			}
@@ -1236,6 +1244,27 @@ export class Session {
 	setProblem(on: boolean): void {
 		if (on === this.problem) return;
 		this.setHeader('problem', this.problemValue(on));
+	}
+
+	/** Does the block ask for the board to be shown turned, mirrored or recoloured at random? */
+	get randomized(): boolean {
+		return parseBool(this.opts.randomize) === true;
+	}
+
+	/**
+	 * How the locked board is shown, when it is randomized: decided the first time it is
+	 * asked for (the board being shown), then kept for as long as this board lives.
+	 * While editing the board is always shown as recorded.
+	 */
+	get orientation(): Orient | null {
+		if (this.edit || !this.randomized || !this.ready) return null;
+		return (this.orientRoll ??= rollOrient(this.w, this.h));
+	}
+
+	/** Show the locked board turned, mirrored and recoloured at random, or as recorded. */
+	setRandomize(on: boolean): void {
+		if (on === this.randomized) return;
+		this.setHeader('randomize', on ? 'on' : null);
 	}
 
 	/** Is the locked board a numbered figure rather than the starting position? */

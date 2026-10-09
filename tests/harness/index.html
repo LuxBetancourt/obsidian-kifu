@@ -76,7 +76,8 @@ input[type='text'] { height: 30px; }
 			app._asyncRender = asyncRender; app._lagReading = lagReading; app._reuse = reuse; app._autosave = autosave; app._editorChange = editorChange;
 			for (const [path, text] of Object.entries(files)) app.vault._add(path, text);
 			const plugin = new this.PluginClass(app, { id: 'kifu', name: 'Kifu', version: '0.0.0' });
-			if (data) plugin._data = JSON.stringify(data);
+			// (the checks expect the first saved reply unless they say otherwise)
+			plugin._data = JSON.stringify({ reply: 'first', ...(data ?? {}) });
 			const t0 = performance.now();
 			plugin.load();
 			this.loadMs = performance.now() - t0;
