@@ -638,6 +638,80 @@ test('figure switch: the locked board shows the numbered main line instead of th
 	assert.deepEqual(r.header, ['numbers: 2-3 from 1']);
 });
 
+test('the start switch chooses the position the board opens at', () => {
+	const s = make('scale: 0.8\n(;SZ[9];B[dd];W[ee](;B[ff];W[gg])(;B[cc]))');
+	assert.equal(moveOf(s.home), 'Wgg'); // a game record opens at its last move
+	s.setEdit(true);
+	assert.equal(s.hasStart, false);
+	s.first();
+	s.next();
+	s.next();
+	assert.equal(s.canSetStart, true);
+	s.toggleStart();
+	assert.deepEqual(s.header, ['scale: 0.8', 'move: 2']);
+	assert.equal(s.dirtyHeader, true);
+	assert.equal(s.home, s.cur);
+	assert.equal(s.hasStart, true);
+	assert.equal(s.blockBody(), 'scale: 0.8\nmove: 2\n(;SZ[9];B[dd];W[ee](;B[ff];W[gg])(;B[cc]))'); // the game itself is left alone
+	s.last();
+	s.setEdit(false); // locking goes to the chosen position
+	assert.equal(moveOf(s.cur), 'Wee');
+	assert.equal(s.model().grid[5 * 9 + 5], 0); // move 3 is not on the board
+	// the opening position itself is "move: 0"
+	s.setEdit(true);
+	s.first();
+	s.toggleStart();
+	assert.deepEqual(s.header, ['scale: 0.8', 'move: 0']);
+	assert.equal(s.home, s.root);
+	// pressed again on the chosen position, the choice is taken back
+	s.toggleStart();
+	assert.deepEqual(s.header, ['scale: 0.8']);
+	assert.equal(s.hasStart, false);
+	assert.equal(moveOf(s.home), 'Wgg');
+	// undo puts the line back
+	s.undo();
+	assert.deepEqual(s.header, ['scale: 0.8', 'move: 0']);
+	// a variation cannot be reached by a move number
+	s.first();
+	s.next();
+	s.next();
+	s.next();
+	s.sibling(1);
+	assert.equal(moveOf(s.cur), 'Bcc');
+	assert.equal(s.canSetStart, false);
+	s.toggleStart();
+	assert.deepEqual(s.header, ['scale: 0.8', 'move: 0']);
+	// nor can a setup step after a move: "move: 1" leads to the move itself
+	const t = make('(;SZ[9];B[dd];AW[ee];W[ff])');
+	t.setEdit(true);
+	t.first();
+	t.next();
+	assert.equal(t.canSetStart, true);
+	t.next();
+	assert.equal(t.canSetStart, false);
+	// a root that only carries game info counts as the start
+	const g = make('(;GM[1]SZ[9]PB[x];AB[cc]AW[dd];B[ee])');
+	g.setEdit(true);
+	g.first();
+	g.toggleStart();
+	assert.deepEqual(g.header, ['move: 0']);
+});
+
+test('a problem with a chosen start is solved from there', () => {
+	const s = make(PROBLEM);
+	s.setEdit(true);
+	s.first();
+	s.next(); // B[sb], main line
+	s.next(); // W[sc]
+	s.toggleStart();
+	assert.deepEqual(s.header, ['move: 2']);
+	s.setEdit(false);
+	assert.equal(moveOf(s.cur), 'Wsc');
+	assert.equal(s.model().hint, 'Black to play');
+	click(s, 'ra');
+	assert.equal(s.status(), 'correct');
+});
+
 test('boards that live in a file load later and never inline their SGF', () => {
 	const s = make('sgf: [[games/x.sgf]]\nmove: 2');
 	assert.equal(s.ready, false);

@@ -644,6 +644,27 @@ await scenario('figure switch, try-again button, and edits that are still pendin
 	assert.match(await text(page, 'X.md'), /;B\[ff\]TR\[cc\]\)/);
 });
 
+await scenario('the start switch writes a move line, and the locked board opens there', {
+	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
+	panes: [{ path: 'S.md', mode: 'preview' }],
+}, async (page) => {
+	assert.deepEqual(await stones(page), { black: 2, white: 1 }); // a game record rests at its end
+	const p = await pointXY(page, 0, 'ee');
+	await page.mouse.move(p.x, p.y);
+	await lockBtn(page).click();
+	const start = '.kifu-tools .kifu-btn[aria-label^="Open the board at this position"]';
+	assert.equal(await page.locator(start + '.is-active').count(), 0);
+	await tool(page, 'Previous move').click();
+	await tool(page, 'Open the board at this position').click();
+	assert.equal(await page.locator(start + '.is-active').count(), 1);
+	await tool(page, 'Next move').click();
+	assert.equal(await page.locator(start + '.is-active').count(), 0);
+	await lockBtn(page).click();
+	await sleep(300);
+	assert.match(await text(page, 'S.md'), /```kifu\nmove: 2\n\(;SZ\[9\];B\[dd\];W\[ee\];B\[ff\]\)\n```/);
+	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+});
+
 await scenario('an SGF file that changes while an edit is pending wins', {
 	files: { 'games/g.sgf': '(;GM[1]SZ[9]AB[cc])', 'Y.md': '```kifu\nsgf: [[g.sgf]]\n```\n' },
 	panes: [{ path: 'Y.md', mode: 'preview' }],

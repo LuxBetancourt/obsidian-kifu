@@ -40,7 +40,7 @@ What a locked board shows:
 
 - a **problem** shows its starting position;
 - any other board shows the **last position of its main line** — so a sequence you drew with the play tool looks the way you left it;
-- a `numbers:` line turns that into a numbered figure, and a `move:` line picks another position (`move: 0` is the start).
+- a `numbers:` line turns that into a numbered figure, and a `move:` line picks another position (`move: 0` is the start). The ⚑ tool writes that line for you.
 
 ## Editing
 
@@ -56,6 +56,7 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. |
 | Eraser | Removes a mark or label; a second click removes the stone under it. |
 | Crop | Drag to choose the part of the board the locked board shows. Double-click to go back to the automatic crop. |
+| ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. |
 | # | Makes the locked board a *numbered figure* of the main line, or takes the numbers off again. Whatever a `numbers:` line said before is put back, so a range like `51-100`, or an `off`, is not lost by trying the switch. |
 | ↶ | Undo (`Ctrl/Cmd+Z` while the board has the keyboard; `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redoes). |
 | ‹ › | Previous / next move. |

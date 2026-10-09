@@ -4,3 +4,4 @@ release/
 tests/out/
 *.log
 .DS_Store
+.test-build/

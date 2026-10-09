@@ -334,6 +334,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		}
 		const more: [string, string, string, () => void][] = [
 			['figure', 'figure', 'When locked, show the moves as a numbered figure', () => s.setFigure(!s.figure)],
+			['start', 'flag', 'Open the board at this position when the note is shown', () => s.toggleStart()],
 			['undo', 'undo', 'Undo (redo with Ctrl/Cmd+Shift+Z)', () => s.undo()],
 			['prev', 'prev', 'Previous move', () => s.prev()],
 			['next', 'next', 'Next move', () => s.next()],
@@ -344,7 +345,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		];
 		for (const [id, ic, title, fn] of more) {
 			if (id === 'undo' || id === 'prev' || id === 'correct' || id === 'promote') group = el(bar, 'div', 'kifu-group');
-			// (the figure switch sits with the crop tool: both decide what the locked board shows)
+			// (the figure and start switches sit with the crop tool: they all decide what the locked board shows)
 			this.#toolBtns.set(id, iconButton(group, ic, title, fn));
 		}
 	}
@@ -360,6 +361,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (input.ownerDocument.activeElement !== input && input.value !== s.nextLabel) input.value = s.nextLabel;
 		}
 		btn('figure').classList.toggle('is-active', s.figure);
+		const isStart = s.hasStart && s.cur === s.home;
+		btn('start').classList.toggle('is-active', isStart);
+		btn('start').disabled = !isStart && !s.canSetStart;
 		const mark = s.ownMark();
 		btn('correct').classList.toggle('is-active', mark === 'correct');
 		btn('incorrect').classList.toggle('is-active', mark === 'incorrect');

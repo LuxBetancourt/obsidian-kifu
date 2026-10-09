@@ -400,24 +400,64 @@ export class Session {
 				}
 			}
 		}
-		let home = start;
-		if (target !== null && target > 0) {
-			let no = replay(pathTo(start), w, h).moveNo;
-			let n: SgfNode = start;
-			while (no < target) {
-				const next = firstSaved(n);
-				if (!next) break;
-				n = next;
-				if (getMove(n, w, h)) {
-					const mn = parseInt(n.props.MN?.[0] ?? '');
-					no = mn > 0 ? mn : no + 1;
-				}
-			}
-			home = n;
-		}
+		const home = target !== null && target > 0 ? this.walkMain(target) : start;
 		this.home = home;
 		this.startNo = replay(pathTo(start), w, h).moveNo;
 		this.homeNo = home === start ? this.startNo : replay(pathTo(home), w, h).moveNo;
+	}
+
+	/** The node a "move: N" line leads to: along the main line from `start` until move N. */
+	private walkMain(target: number): SgfNode {
+		const { w, h } = this;
+		let no = replay(pathTo(this.start), w, h).moveNo;
+		let n: SgfNode = this.start;
+		while (no < target) {
+			const next = firstSaved(n);
+			if (!next) break;
+			n = next;
+			if (getMove(n, w, h)) {
+				const mn = parseInt(n.props.MN?.[0] ?? '');
+				no = mn > 0 ? mn : no + 1;
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * The "move:" value that makes the current node the resting position, or null when
+	 * none can: a variation, or a setup step after a move, is not on the way a move
+	 * number leads.
+	 */
+	private startValue(): string | null {
+		const cur = this.cur;
+		if (cur.temp) return null;
+		// (a root that only carries game info shows the same board as the start)
+		for (let n: SgfNode | null = this.start; n; n = n.parent) if (n === cur) return '0';
+		const no = replay(pathTo(cur), this.w, this.h).moveNo;
+		return no > 0 && this.walkMain(no) === cur ? String(no) : null;
+	}
+
+	/** Can the current position be made the one the board opens at? */
+	get canSetStart(): boolean {
+		return this.startValue() !== null;
+	}
+
+	/** Does a "move:" line choose where the board opens? */
+	get hasStart(): boolean {
+		return !!this.opts.move;
+	}
+
+	/**
+	 * Make the current position the one the locked board opens at. Pressed again on
+	 * that position, it takes the choice back, so the board opens where it would anyway.
+	 */
+	toggleStart(): void {
+		if (this.hasStart && this.cur === this.home) {
+			this.setHeader('move', null);
+			return;
+		}
+		const value = this.startValue();
+		if (value !== null) this.setHeader('move', value);
 	}
 
 	/* ----------------------------------------------------------------- events */
