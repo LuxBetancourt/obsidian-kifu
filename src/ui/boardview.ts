@@ -59,6 +59,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#lastTap = 0;
 	#tapReset = 0;
 	#hover = '';
+	/** The ✓ or ✗ shown over the board when a line ends, and the move it was shown for. */
+	#stamp: HTMLElement | null = null;
+	#stampAt: object | null = null;
 	/** Reached with the Tab key (then, and only then, a focus ring is shown). */
 	#keyFocus = false;
 	#onChange = (): void => this.#render();
@@ -273,12 +276,32 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#lockBtn.classList.toggle('is-active', s.edit);
 		this.#resetBtn.hidden = s.edit || !s.moved;
 
+		this.#renderStamp(!s.edit ? m.status : null, s.cur);
 		this.#renderCaption(m);
 		if (s.edit) this.#renderTools(s, m);
 		else if (this.#tools) {
 			this.#tools.remove();
 			this.#tools = null;
 		}
+	}
+
+	/**
+	 * A line that has just ended says so over the board as well as in the caption.
+	 * It is shown once per ending (redrawing the same position does not show it again)
+	 * and fades by itself, so the final position can be read.
+	 */
+	#renderStamp(status: Model['status'], at: object): void {
+		if (!status) {
+			this.#stamp?.remove();
+			this.#stamp = this.#stampAt = null;
+			return;
+		}
+		if (this.#stamp && this.#stampAt === at && this.#stamp.classList.contains(`is-${status}`)) return;
+		this.#stamp?.remove();
+		this.#stamp = el(this.#frame, 'div', `kifu-stamp is-${status}`);
+		this.#stamp.setAttribute('aria-hidden', 'true');
+		icon(this.#stamp, status === 'correct' ? 'check' : 'cross');
+		this.#stampAt = at;
 	}
 
 	#renderCaption(m: Model): void {

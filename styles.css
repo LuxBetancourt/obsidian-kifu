@@ -374,6 +374,53 @@
 	stroke: var(--text-error, #c62f3b);
 }
 
+/* the ✓ or ✗ over the board when a line ends: it pops up, then fades away */
+.kifu-stamp {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	animation: kifu-stamp 1.8s ease-out forwards;
+}
+
+.kifu-stamp .kifu-ic {
+	width: min(40%, 160px);
+	height: auto;
+	aspect-ratio: 1;
+	padding: 4%;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--kifu-paper) 80%, transparent);
+	stroke-width: 2.6;
+}
+
+.kifu-stamp.is-correct .kifu-ic {
+	stroke: var(--text-success, #2a8a3e);
+}
+
+.kifu-stamp.is-incorrect .kifu-ic {
+	stroke: var(--text-error, #c62f3b);
+}
+
+@keyframes kifu-stamp {
+	0% { opacity: 0; transform: scale(0.6); }
+	12% { opacity: 1; transform: scale(1); }
+	65% { opacity: 1; }
+	100% { opacity: 0; visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.kifu-stamp {
+		animation-name: kifu-stamp-still;
+	}
+
+	@keyframes kifu-stamp-still {
+		0%, 65% { opacity: 1; }
+		100% { opacity: 0; visibility: hidden; }
+	}
+}
+
 .kifu-hint,
 .kifu-note {
 	white-space: nowrap;

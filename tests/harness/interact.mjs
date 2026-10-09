@@ -644,6 +644,40 @@ await scenario('figure switch, try-again button, and edits that are still pendin
 	assert.match(await text(page, 'X.md'), /;B\[ff\]TR\[cc\]\)/);
 });
 
+await scenario('a ✓ or ✗ is stamped over the board when a line ends, once, and never while editing', {
+	files: { 'P.md': problemNote },
+	panes: [{ path: 'P.md', mode: 'preview' }],
+}, async (page) => {
+	const stamp = () => page.evaluate(() => [...document.querySelectorAll('.kifu-stamp')].map((e) => e.className).join());
+	assert.equal(await stamp(), '');
+	await clickPoint(page, 0, 'ra');
+	await sleep(700);
+	assert.equal(await stamp(), ''); // the line goes on
+	await clickPoint(page, 0, 'sa');
+	await sleep(100);
+	assert.equal(await stamp(), 'kifu-stamp is-correct');
+	// it does not block the board, and fades by itself
+	assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.kifu-stamp')).pointerEvents), 'none');
+	await sleep(2000);
+	assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.kifu-stamp')).opacity), '0');
+	// stepping back and forth to the end again is a new ending: shown afresh
+	await page.evaluate(() => { window.__stamp = document.querySelector('.kifu-stamp'); });
+	await page.keyboard.press('ArrowLeft');
+	assert.equal(await stamp(), '');
+	await page.keyboard.press('ArrowRight');
+	assert.equal(await stamp(), 'kifu-stamp is-correct');
+	assert.equal(await page.evaluate(() => document.querySelector('.kifu-stamp') === window.__stamp), false);
+	// back to the start: gone; a wrong first move: the ✗
+	await page.keyboard.press('Escape');
+	assert.equal(await stamp(), '');
+	await clickPoint(page, 0, 'qa');
+	await sleep(700);
+	assert.equal(await stamp(), 'kifu-stamp is-incorrect');
+	// editing never shows it
+	await toggleLock(page);
+	assert.equal(await stamp(), '');
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],
