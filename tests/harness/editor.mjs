@@ -435,9 +435,10 @@ await scenario('the insert command, in the middle of a line and at the very end 
 });
 
 await scenario('the editor menu: a Kifu submenu, or plain items where submenus are missing', { files: { 'N.md': 'first line\n\nlast' }, live: ['N.md'], autosave: 150 }, async (page) => {
-	const res = await page.evaluate(() => {
+	const res = await page.evaluate(async () => {
 		const h = window.harness;
 		const { Menu } = window.__obsidian;
+		const tick = () => new Promise((r) => setTimeout(r, 50));
 		const v = h.views[0];
 		const ed = v.editor;
 		const show = (m) => m.items.map((i) => [i.title, i.section, i.submenu ? i.submenu.items.map((s) => s.title) : null]);
@@ -446,10 +447,16 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		h.app.workspace.trigger('editor-menu', menu, ed, v);
 		out.push(show(menu));
 		ed.setCursor({ line: 1, ch: 0 });
-		menu.items[0].submenu.items[0].click();
+		menu.items[0].submenu.items[0].click(); // 19 x 19: the default size, so no size line
+		await tick();
 		out.push(ed.getValue());
-		menu.items[0].submenu.items[1].click(); // opens the file picker
+		ed.setCursor({ line: 0, ch: 0 });
+		menu.items[0].submenu.items[1].click(); // 13 x 13
+		await tick();
+		out.push(ed.getValue());
+		menu.items[0].submenu.items[3].click(); // opens the file picker
 		out.push(window.__obsidian.Modal.last?.isOpen ?? false);
+		ed.setCursor({ line: 0, ch: 0 }); // (out of the new blocks, or the menu offers the problem switch for one)
 		Menu.noSubmenu = true;
 		const flat = new Menu();
 		h.app.workspace.trigger('editor-menu', flat, ed, v);
@@ -457,10 +464,37 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(show(flat));
 		return out;
 	});
-	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert board', 'Display SGF file…']]]);
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…']]]);
 	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
-	assert.equal(res[2], true);
-	assert.deepEqual(res[3], [['Insert Kifu board', 'insert', null], ['Display SGF file with Kifu…', 'insert', null]]);
+	assert.equal(res[2], 'first line\n```kifu\nsize: 13\n```\n```kifu\n```\n\nlast');
+	assert.equal(res[3], true);
+	assert.deepEqual(res[4], [
+		['Insert 19 × 19 Kifu board', 'insert', null],
+		['Insert 13 × 13 Kifu board', 'insert', null],
+		['Insert 9 × 9 Kifu board', 'insert', null],
+		['Display SGF file with Kifu…', 'insert', null],
+	]);
+});
+
+await scenario('the sizes in the menu follow the default size, even before the settings were read', { files: { 'N.md': 'no boards here\n' }, live: ['N.md'], data: { boardSize: 13 } }, async (page) => {
+	const res = await page.evaluate(async () => {
+		const h = window.harness;
+		const v = h.views[0];
+		const ed = v.editor;
+		const ready = h.plugin.settingsReady;
+		const pick = async (title) => {
+			const m = new window.__obsidian.Menu();
+			h.app.workspace.trigger('editor-menu', m, ed, v);
+			ed.setCursor({ line: 0, ch: 0 });
+			m.items[0].submenu.items.find((i) => i.title === title).click();
+			await new Promise((r) => setTimeout(r, 50));
+		};
+		await pick('Insert 13 × 13 board'); // the default here: no size line
+		await pick('Insert 19 × 19 board');
+		return { ready, text: ed.getValue() };
+	});
+	assert.equal(res.ready, false); // (nothing had read the settings yet)
+	assert.equal(res.text, 'no boards here\n```kifu\nsize: 19\n```\n```kifu\n```\n');
 });
 
 await scenario('the problem switch: in the menu for the block under the cursor or the board right-clicked, and under the lock while editing', { files: { 'N.md': 'intro\n\n```kifu\n(;SZ[9];B[cc];W[dd])\n```\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {

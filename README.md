@@ -24,7 +24,7 @@ To see everything at once, copy the two files in `demo/` into your vault and ope
 
 ## A first board
 
-Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu → Insert board**), or type the block yourself:
+Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu → Insert 19 × 19 board**, **13 × 13** or **9 × 9**), or type the block yourself:
 
 ````markdown
 ```kifu

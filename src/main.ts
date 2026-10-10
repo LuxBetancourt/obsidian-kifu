@@ -36,6 +36,8 @@ import { TreePanel } from './ui/panel';
 const SAVE_DELAY = 3000;
 /** While a press on the board is held, a write that is due waits this long and looks again. */
 const PRESS_WAIT = 250;
+/** The board sizes the editor menu offers to insert. */
+const MENU_SIZES = [19, 13, 9];
 /** How many boards that are off the page but were left unlocked or played out are remembered. */
 const KEEP = 24;
 /** How many frames a board is given to arrive on the page before it is asked where it stands. */
@@ -135,6 +137,15 @@ export default class KifuPlugin extends Plugin implements Host {
 		}
 	}
 
+	/**
+	 * A new board of size `n`. The default size needs no line: that board keeps following
+	 * the setting. (The settings are read first: they may not have been yet.)
+	 */
+	async #insertSized(editor: Editor, n: number): Promise<void> {
+		await this.settingsLoaded();
+		insertBlock(editor, n === this.settings.boardSize ? '' : `size: ${n}`);
+	}
+
 	#insertSgf(editor: Editor, from: string): void {
 		new SgfPicker(this, (file) => {
 			insertBlock(editor, `sgf: [[${this.app.metadataCache.fileToLinktext(file, from, false)}]]`);
@@ -156,7 +167,11 @@ export default class KifuPlugin extends Plugin implements Host {
 	#editorMenu(menu: Menu, editor: Editor, from: string): void {
 		type Entry = { title: string; flat: string; run: () => void; checked?: boolean; disabled?: boolean };
 		const entries: Entry[] = [
-			{ title: 'Insert board', flat: 'Insert Kifu board', run: () => insertBlock(editor, '') },
+			...MENU_SIZES.map((n) => ({
+				title: `Insert ${n} × ${n} board`,
+				flat: `Insert ${n} × ${n} Kifu board`,
+				run: () => void this.#insertSized(editor, n),
+			})),
 			{ title: 'Display SGF file…', flat: 'Display SGF file with Kifu…', run: () => this.#insertSgf(editor, from) },
 		];
 		const problem = this.#problemEntry(editor, from);
