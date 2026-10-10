@@ -12,6 +12,9 @@
 
 	// Obsidian adds createEl to every node: make an element in the node's document, give it
 	// classes, text and attributes, and append it.
+	Node.prototype.createDiv = function (o) { return this.createEl('div', o); };
+	HTMLElement.prototype.setText = function (t) { this.textContent = t; };
+	HTMLElement.prototype.empty = function () { this.replaceChildren(); };
 	Node.prototype.createEl = function (tag, o) {
 		const e = (this.ownerDocument ?? this).createElement(tag);
 		if (typeof o === 'string') o = { cls: o };
@@ -369,6 +372,8 @@
 			this._dom = dom;
 			this._processors = new Map(); this._views = new Map(); this._commands = []; this._settingTabs = []; this._icons = new Map(); this._notices = [];
 			this.vault = new Vault();
+			const secrets = new Map();
+			this.secretStorage = { setSecret: (id, v) => secrets.set(id, v), getSecret: (id) => secrets.get(id) ?? null, listSecrets: () => [...secrets.keys()] };
 			this.metadataCache = new MetadataCache(this.vault);
 			this.workspace = new Workspace(this);
 			this.vault.on('modify', (f) => {
@@ -454,7 +459,7 @@
 				setLimits(min, max, step) { input.min = min; input.max = max; input.step = step; return api; },
 				setValue(v) { if (type === 'checkbox') input.checked = !!v; else input.value = v; return api; },
 				getValue() { return type === 'checkbox' ? input.checked : type === 'range' ? Number(input.value) : input.value; },
-				setDynamicTooltip() { return api; }, setPlaceholder(p) { input.placeholder = p; return api; }, setTooltip() { return api; }, setIcon() { return api; }, setButtonText(t) { input.textContent = t; return api; },
+				setDynamicTooltip() { return api; }, setPlaceholder(p) { input.placeholder = p; return api; }, setTooltip() { return api; }, setIcon() { return api; }, setButtonText(t) { input.textContent = t; return api; }, setCta() { input.classList.add('mod-cta'); return api; },
 				addOption(value, label) { const o = input.ownerDocument.createElement('option'); o.value = value; o.textContent = label; input.appendChild(o); return api; },
 				onChange(fn) { handler = fn; return api; }, onClick(fn) { input.addEventListener('click', fn); return api; },
 			};
@@ -468,12 +473,48 @@
 		addDropdown(cb) { return this._control('select', null, cb); }
 		addButton(cb) { return this._control('button', null, cb); }
 		addExtraButton(cb) { return this._control('button', null, cb); }
+		addComponent(cb) { cb(this.controlEl); return this; }
 	}
+
+	// The secret picker: shows the name of the secret chosen (the value stays in the store)
+	class SecretComponent {
+		constructor(app, el) {
+			this.app = app;
+			this.inputEl = el.ownerDocument.createElement('input');
+			this.inputEl.className = 'secret-component';
+			el.appendChild(this.inputEl);
+			this.inputEl.addEventListener('change', () => this._cb?.(this.inputEl.value));
+		}
+		setValue(v) { this.inputEl.value = v; return this; }
+		onChange(cb) { this._cb = cb; return this; }
+	}
+
+	// Requests to the network never leave the page: a check says what each URL answers
+	// (requestUrl.answers: url -> { status, json } or 'offline'); every request is logged.
+	async function requestUrl(param) {
+		const p = typeof param === 'string' ? { url: param } : param;
+		requestUrl.log.push({ url: p.url, headers: { ...(p.headers ?? {}) } });
+		await 0;
+		const a = requestUrl.answers[p.url];
+		if (a === 'offline') throw new Error('net::ERR_INTERNET_DISCONNECTED');
+		const status = a?.status ?? 404;
+		const res = { status, headers: {}, text: a?.json !== undefined ? JSON.stringify(a.json) : '', arrayBuffer: new ArrayBuffer(0) };
+		Object.defineProperty(res, 'json', { get() { return JSON.parse(res.text); } });
+		if (p.throw !== false && status >= 400) throw Object.assign(new Error('Request failed, status ' + status), { status });
+		return res;
+	}
+	requestUrl.answers = {};
+	requestUrl.log = [];
 
 	class Notice { constructor(message) { Notice.log.push(String(message)); console.log('[notice]', message); } }
 	Notice.log = [];
 
-	class Modal { constructor(app) { this.app = app; Modal.last = this; } open() { this.isOpen = true; } close() { this.isOpen = false; } }
+	class Modal {
+		constructor(app) { this.app = app; Modal.last = this; this.contentEl = document.createElement('div'); this.contentEl.className = 'modal-content'; }
+		setTitle(t) { this.title = String(t); return this; }
+		open() { this.isOpen = true; document.body.appendChild(this.contentEl); this.onOpen?.(); }
+		close() { if (!this.isOpen) return; this.isOpen = false; this.onClose?.(); this.contentEl.remove(); }
+	}
 	class SuggestModal extends Modal { setPlaceholder(p) { this.placeholder = p; } }
 	class FuzzySuggestModal extends SuggestModal {}
 
@@ -505,7 +546,7 @@
 
 	window.__obsidian = {
 		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, View, WorkspaceLeaf, Editor,
-		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem,
+		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem, SecretComponent, requestUrl,
 		normalizePath,
 		addIcon: (id, content) => icons.set(id, content),
 		setIcon: () => {}, setTooltip: () => {},

@@ -25,6 +25,8 @@ export interface KifuSettings {
 	revealPanel: boolean;
 	/** While a problem is locked, the panel shows only the moves played, not the saved answers. */
 	hideAnswers: boolean;
+	/** The name of the secret (in Obsidian's secret storage) holding a goproblems.com API token; '' for none. */
+	goproblemsKey: string;
 }
 
 export const DEFAULT_SETTINGS: KifuSettings = {
@@ -40,6 +42,7 @@ export const DEFAULT_SETTINGS: KifuSettings = {
 	replyDelay: 350,
 	revealPanel: true,
 	hideAnswers: true,
+	goproblemsKey: '',
 };
 
 /** Pixels between two lines at 100 % scale. */

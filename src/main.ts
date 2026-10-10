@@ -5,16 +5,20 @@ import {
 	MarkdownView,
 	Menu,
 	MenuItem,
+	Modal,
 	Notice,
 	Platform,
 	Plugin,
+	Setting,
 	TAbstractFile,
 	TFile,
 	addIcon,
+	requestUrl,
 } from 'obsidian';
 import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from './config';
 import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
 import { Host, Session } from './session';
+import { ImportError, problemApi, problemId, problemUrl, readProblem } from './goproblems';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
@@ -96,11 +100,39 @@ export default class KifuPlugin extends Plugin implements Host {
 			editorCallback: (editor, ctx) => this.#insertSgf(editor, ctx.file?.path ?? ''),
 		});
 		this.addCommand({
+			id: 'import-goproblems',
+			name: 'Import a problem from goproblems.com',
+			editorCallback: (editor) => new ProblemPrompt(this, (id) => void this.#importProblem(editor, id)).open(),
+		});
+		this.addCommand({
 			id: 'show-tree',
 			name: 'Show move tree',
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+	}
+
+	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
+	async #importProblem(editor: Editor, id: number): Promise<void> {
+		await this.settingsLoaded();
+		const name = this.settings.goproblemsKey;
+		const key = name ? this.app.secretStorage.getSecret(name) : null;
+		try {
+			let res;
+			try {
+				const headers: Record<string, string> = { accept: 'application/json' };
+				if (key) headers['X-Api-Key'] = key;
+				res = await requestUrl({ url: problemApi(id), headers, throw: false });
+			} catch {
+				throw new ImportError('could not reach goproblems.com. Are you online?');
+			}
+			const answer = res;
+			const { sgf, about } = readProblem(id, answer.status, () => answer.json, !!key);
+			insertBlock(editor, 'problem: yes\n' + sgf, `[goproblems.com #${id}](${problemUrl(id)})` + (about ? ` · ${about}` : ''));
+		} catch (e) {
+			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing problem ${id} failed.`}`);
+			if (!(e instanceof ImportError)) console.error('Kifu: import from goproblems.com', e);
+		}
 	}
 
 	#insertSgf(editor: Editor, from: string): void {
@@ -981,10 +1013,11 @@ export default class KifuPlugin extends Plugin implements Host {
 }
 
 /** Put a board block at the cursor, on lines of its own, and leave the cursor below it. */
-function insertBlock(editor: Editor, body: string): void {
+/** Put a new board block where the cursor is (with `before`, a line of text above it). */
+function insertBlock(editor: Editor, body: string, before = ''): void {
 	const cur = editor.getCursor();
 	const line = editor.getLine(cur.line);
-	const block = '```' + BLOCK_LANG + '\n' + (body ? body + '\n' : '') + '```';
+	const block = (before ? before + '\n\n' : '') + '```' + BLOCK_LANG + '\n' + (body ? body + '\n' : '') + '```';
 	const rows = block.split('\n').length;
 	let below: number;
 	if (line.trim() === '') {
@@ -998,6 +1031,53 @@ function insertBlock(editor: Editor, body: string): void {
 	}
 	// (with the cursor outside the block, Live Preview shows the board straight away)
 	editor.setCursor({ line: below, ch: 0 });
+}
+
+/** Asks for the problem to import: its number, or a link to it. */
+class ProblemPrompt extends Modal {
+	#done: (id: number) => void;
+
+	constructor(plugin: KifuPlugin, done: (id: number) => void) {
+		super(plugin.app);
+		this.#done = done;
+	}
+
+	onOpen(): void {
+		this.setTitle('Import a problem from goproblems.com');
+		let value = '';
+		let hint: HTMLElement | null = null;
+		const go = (): void => {
+			const id = problemId(value);
+			if (id === null) {
+				hint?.setText('That is not a problem number, or a link to a problem.');
+				return;
+			}
+			this.close();
+			this.#done(id);
+		};
+		new Setting(this.contentEl)
+			.setName('Problem')
+			.setDesc('Its number, or a link to it.')
+			.addText((t) => {
+				t.setPlaceholder('Number or link').onChange((v) => {
+					value = v;
+					hint?.setText('');
+				});
+				t.inputEl.addEventListener('keydown', (ev) => {
+					if (ev.key === 'Enter') {
+						ev.preventDefault();
+						go();
+					}
+				});
+				window.setTimeout(() => t.inputEl.focus(), 0);
+			})
+			.addButton((b) => b.setButtonText('Import').setCta().onClick(go));
+		hint = this.contentEl.createDiv({ cls: 'kifu-import-hint' });
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }
 
 class SgfPicker extends FuzzySuggestModal<TFile> {

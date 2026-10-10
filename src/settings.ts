@@ -1,6 +1,6 @@
 /** The settings page. Everything here is a default that a single board can override. */
 
-import { App, PluginSettingTab, SettingDefinitionItem } from 'obsidian';
+import { App, PluginSettingTab, SecretComponent, SettingDefinitionItem } from 'obsidian';
 import type KifuPlugin from './main';
 import { BASE_CELL, DEFAULT_SETTINGS, KifuSettings } from './config';
 import { Session } from './session';
@@ -33,6 +33,7 @@ export function sanitize(data: unknown): KifuSettings {
 	pick('replyDelay', (v) => typeof v === 'number' && v >= 0 && v <= 5000);
 	pick('revealPanel', bool);
 	pick('hideAnswers', bool);
+	pick('goproblemsKey', (v) => typeof v === 'string');
 	return out;
 }
 
@@ -118,6 +119,25 @@ export class KifuSettingTab extends PluginSettingTab {
 						name: 'Keep answers out of the move tree',
 						desc: 'While a problem is locked, the panel shows only the moves played so far. Its eye button shows the saved lines.',
 						control: { type: 'toggle', key: 'hideAnswers' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Importing from goproblems.com',
+				items: [
+					{
+						name: 'API token',
+						desc: "Not needed for public problems. With a token from your goproblems.com account, problems that are not public can be imported too. It is kept in Obsidian's secret storage, not with these settings.",
+						render: (setting) => {
+							setting.addComponent((el) =>
+								new SecretComponent(this.app, el).setValue(this.#plugin.settings.goproblemsKey).onChange(async (name) => {
+									await this.#plugin.settingsLoaded();
+									this.#plugin.settings.goproblemsKey = name;
+									await this.#plugin.saveSettings();
+								}),
+							);
+						},
 					},
 				],
 			},

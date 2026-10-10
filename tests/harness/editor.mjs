@@ -591,6 +591,85 @@ await scenario("Obsidian's edit button stays clear of the lock, even beside a bo
 	});
 }
 
+await scenario('importing a problem from goproblems.com: prompt, note, solving, token and failures', { files: { 'N.md': 'intro\n\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	// what the site answers (the requests never leave the page)
+	await page.evaluate(() => {
+		const sgf = '(;AB[aa]AB[ba]AW[ca]AW[cb]C[Black to live]SZ[9]PB[Black]PW[White](;B[ab];W[bb];B[ac]C[RIGHT])(;B[bb];W[ab]C[too slow]))';
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://goproblems.com/api/v2/problems/5'] = { status: 200, json: { sgf, genre: 'life and death', rank: { value: 20, unit: 'kyu' }, author: { name: 'someone' } } };
+		requestUrl.answers['https://goproblems.com/api/v2/problems/7'] = { status: 200, json: { sgf } };
+		requestUrl.answers['https://goproblems.com/api/v2/problems/11'] = 'offline';
+	});
+	// runs the command and types into its prompt
+	const importAs = (typed) => page.evaluate(async (typed) => {
+		const h = window.harness;
+		const v = h.views[0];
+		v.editor.setCursor({ line: 2, ch: 0 });
+		h.app._commands.find((c) => c.id === 'import-goproblems').editorCallback(v.editor, v);
+		const modal = window.__obsidian.Modal.last;
+		const input = modal.contentEl.querySelector('input');
+		input.value = typed;
+		input.dispatchEvent(new Event('input'));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		await new Promise((r) => setTimeout(r, 100));
+		return { open: modal.isOpen, hint: modal.contentEl.querySelector('.kifu-import-hint')?.textContent ?? '' };
+	}, typed);
+	const requests = () => page.evaluate(() => window.__obsidian.requestUrl.log.splice(0));
+
+	// not a number: the prompt stays, and says why
+	let r = await importAs('a problem please');
+	assert.equal(r.open, true);
+	assert.match(r.hint, /not a problem number/);
+	assert.deepEqual(await requests(), []);
+	await page.evaluate(() => window.__obsidian.Modal.last.close());
+
+	// a link to problem 5
+	r = await importAs('https://www.goproblems.com/problems/5');
+	assert.equal(r.open, false);
+	const log = await requests();
+	assert.deepEqual(log.map((q) => q.url), ['https://goproblems.com/api/v2/problems/5']);
+	assert.equal(log[0].headers['X-Api-Key'], undefined); // no token chosen: none sent
+	const text = await doc(page);
+	assert.match(text, /\[goproblems\.com #5\]\(https:\/\/www\.goproblems\.com\/problems\/5\) · Life and death, 20 kyu, by someone\n\n```kifu\nproblem: yes\n\(;/);
+	assert.match(text, /GN\[goproblems\.com #5\]/);
+	assert.match(text, /SO\[https:\/\/www\.goproblems\.com\/problems\/5\]/);
+	assert.match(text, /B\[ac\]TE\[1\]/); // "RIGHT" became a check mark
+	assert.doesNotMatch(text, /RIGHT|PB\[|PW\[/);
+	assert.match(text, /^intro\n/);
+	assert.match(text, /\nend$/);
+
+	// the board is there, and the problem plays: the right line ends correct
+	await sleep(200);
+	assert.equal(await boardCount(page), 1);
+	assert.equal(await cap(page), 'Black to live');
+	await clickPoint(page, 0, 'ab');
+	await sleep(700);
+	await clickPoint(page, 0, 'ac');
+	await sleep(100);
+	assert.match(await cap(page), /^Correct/);
+
+	// with a token chosen, it is sent along (it lives in the secret storage, not in the settings)
+	await page.evaluate(async () => {
+		const h = window.harness;
+		await h.plugin.settingsLoaded();
+		h.app.secretStorage.setSecret('gp-token', 's3cret');
+		h.plugin.settings.goproblemsKey = 'gp-token';
+	});
+	await importAs('#7');
+	const withKey = await requests();
+	assert.equal(withKey[0].headers['X-Api-Key'], 's3cret');
+
+	// failures: said in a notice, and the note is left alone
+	const before = await doc(page);
+	await importAs('9');
+	await importAs('11');
+	await sleep(100);
+	const said = await notices(page);
+	assert.ok(said.some((n) => /goproblems\.com has no problem 9\./.test(n)), said.join(' | '));
+	assert.ok(said.some((n) => /could not reach goproblems\.com/.test(n)), said.join(' | '));
+	assert.equal(await doc(page), before);
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

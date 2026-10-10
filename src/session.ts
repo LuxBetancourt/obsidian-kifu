@@ -120,7 +120,7 @@ export function nodeMark(n: SgfNode): Status {
 	if (p.BM) return 'incorrect';
 	const c = (p.B || p.W) && p.C ? (p.C[0] ?? '') : '';
 	if (!c) return null;
-	if (/^\s*(correct|right|solved|success)\s*([.!:;,)\n]|$)/i.test(c) || /^\s*RIGHT\b|\bRIGHT[\s.!]*$/.test(c)) return 'correct';
+	if (/^\s*(correct|right|solved|success)\s*([.!:;,)\n]|$)/i.test(c) || /^\s*RIGHT\b|RIGHT[\s.!]*$/.test(c)) return 'correct';
 	if (/^\s*(wrong|incorrect|fail(ure|ed|s)?)\s*([.!:;,)\n]|$)/i.test(c)) return 'incorrect';
 	return null;
 }

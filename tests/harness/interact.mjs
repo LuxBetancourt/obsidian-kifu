@@ -545,7 +545,17 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	});
 	assert.ok(tab);
 	await sleep(50);
-	assert.equal(await page.locator('.setting-item').count(), 15); // the preview, and 12 settings under 2 headings
+	assert.equal(await page.locator('.setting-item').count(), 17); // the preview, and 13 settings under 3 headings
+	// the goproblems.com token: only the name of the secret is kept with the settings, never the token
+	await page.evaluate(() => {
+		window.harness.app.secretStorage.setSecret('gp-token', 's3cret');
+		const input = document.querySelector('.secret-component');
+		input.value = 'gp-token';
+		input.dispatchEvent(new Event('change'));
+	});
+	await sleep(50);
+	assert.equal(await page.evaluate(() => JSON.parse(window.harness.plugin._data).goproblemsKey), 'gp-token');
+	assert.doesNotMatch(await page.evaluate(() => window.harness.plugin._data), /s3cret/);
 	assert.equal(await page.locator('.kifu-sample .kifu-svg').count(), 1);
 	const before = await page.evaluate(() => document.querySelector('.cm-content .kifu-svg').getAttribute('width'));
 	assert.equal(before, String(9 * 24));
