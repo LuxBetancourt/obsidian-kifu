@@ -166,7 +166,7 @@ Obsidian only lists `.sgf` files in its file explorer when **Settings → Files 
 
 ## Problems from goproblems.com
 
-Run **Kifu: Import a problem from goproblems.com** and give the problem's number, or paste a link to it. The problem arrives where the cursor is, variations and comments included, as a board of its own with a link back to its page above it:
+Run **Kifu: Import a problem from goproblems.com** (or right-click in the editor: **Kifu → Import from goproblems.com…**) and give the problem's number, or paste a link to it. The problem arrives where the cursor is, variations and comments included, as a board of its own with a link back to its page above it:
 
 ````markdown
 [goproblems.com #5](https://www.goproblems.com/problems/5) · Tesuji, 14 kyu, by adum

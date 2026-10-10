@@ -104,7 +104,7 @@ export default class KifuPlugin extends Plugin implements Host {
 		this.addCommand({
 			id: 'import-goproblems',
 			name: 'Import a problem from goproblems.com',
-			editorCallback: (editor) => new ProblemPrompt(this, (id) => void this.#importProblem(editor, id)).open(),
+			editorCallback: (editor) => this.#promptImport(editor),
 		});
 		this.addCommand({
 			id: 'show-tree',
@@ -112,6 +112,11 @@ export default class KifuPlugin extends Plugin implements Host {
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+	}
+
+	/** Ask which problem to import from goproblems.com, then import it. */
+	#promptImport(editor: Editor): void {
+		new ProblemPrompt(this, (id) => void this.#importProblem(editor, id)).open();
 	}
 
 	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
@@ -173,6 +178,7 @@ export default class KifuPlugin extends Plugin implements Host {
 				run: () => void this.#insertSized(editor, n),
 			})),
 			{ title: 'Display SGF file…', flat: 'Display SGF file with Kifu…', run: () => this.#insertSgf(editor, from) },
+			{ title: 'Import from goproblems.com…', flat: 'Import a problem from goproblems.com…', run: () => this.#promptImport(editor) },
 		];
 		const problem = this.#problemEntry(editor, from);
 		if (problem) entries.push({ title: 'Problem board', flat: 'Kifu problem board', ...problem });

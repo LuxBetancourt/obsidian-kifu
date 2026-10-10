@@ -456,6 +456,11 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(ed.getValue());
 		menu.items[0].submenu.items[3].click(); // opens the file picker
 		out.push(window.__obsidian.Modal.last?.isOpen ?? false);
+		window.__obsidian.Modal.last.close();
+		menu.items[0].submenu.items[4].click(); // opens the goproblems.com prompt
+		const prompt = window.__obsidian.Modal.last;
+		out.push([prompt.isOpen, prompt.title]);
+		prompt.close();
 		ed.setCursor({ line: 0, ch: 0 }); // (out of the new blocks, or the menu offers the problem switch for one)
 		Menu.noSubmenu = true;
 		const flat = new Menu();
@@ -464,15 +469,17 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(show(flat));
 		return out;
 	});
-	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…']]]);
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from goproblems.com…']]]);
 	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
 	assert.equal(res[2], 'first line\n```kifu\nsize: 13\n```\n```kifu\n```\n\nlast');
 	assert.equal(res[3], true);
-	assert.deepEqual(res[4], [
+	assert.deepEqual(res[4], [true, 'Import a problem from goproblems.com']);
+	assert.deepEqual(res[5], [
 		['Insert 19 × 19 Kifu board', 'insert', null],
 		['Insert 13 × 13 Kifu board', 'insert', null],
 		['Insert 9 × 9 Kifu board', 'insert', null],
 		['Display SGF file with Kifu…', 'insert', null],
+		['Import a problem from goproblems.com…', 'insert', null],
 	]);
 });
 
