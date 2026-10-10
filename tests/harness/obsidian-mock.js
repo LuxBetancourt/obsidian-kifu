@@ -498,7 +498,7 @@
 		const a = requestUrl.answers[p.url];
 		if (a === 'offline') throw new Error('net::ERR_INTERNET_DISCONNECTED');
 		const status = a?.status ?? 404;
-		const res = { status, headers: {}, text: a?.json !== undefined ? JSON.stringify(a.json) : '', arrayBuffer: new ArrayBuffer(0) };
+		const res = { status, headers: {}, text: a?.text ?? (a?.json !== undefined ? JSON.stringify(a.json) : ''), arrayBuffer: new ArrayBuffer(0) };
 		Object.defineProperty(res, 'json', { get() { return JSON.parse(res.text); } });
 		if (p.throw !== false && status >= 400) throw Object.assign(new Error('Request failed, status ' + status), { status });
 		return res;

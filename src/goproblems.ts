@@ -4,7 +4,10 @@
  * the import command is used; everything here is plain work on what came back.)
  */
 
+import { Fetched, ImportError } from './importing';
 import { eachNode, getText, parseSgf, serializeSgf, setText } from './sgf';
+
+export { ImportError };
 
 const API = 'https://goproblems.com/api/v2/problems/';
 const SITE = 'https://www.goproblems.com/problems/';
@@ -46,14 +49,6 @@ export function tidyProblem(sgf: string, id: number): string {
 	return serializeSgf(root);
 }
 
-export interface Fetched {
-	sgf: string;
-	/** "Life and death, 14 kyu, by adum": what is said about it, for the link above the board. */
-	about: string;
-}
-
-/** Why an import did not work, in words for a notice. */
-export class ImportError extends Error {}
 
 const label = (s: unknown): string => (typeof s === 'string' && s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 

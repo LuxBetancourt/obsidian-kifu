@@ -18,7 +18,9 @@ import {
 import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from './config';
 import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
 import { Host, Session } from './session';
-import { ImportError, problemApi, problemId, problemUrl, readProblem } from './goproblems';
+import { problemApi, problemId, problemUrl, readProblem } from './goproblems';
+import { ImportError } from './importing';
+import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
@@ -107,6 +109,11 @@ export default class KifuPlugin extends Plugin implements Host {
 			editorCallback: (editor) => this.#promptImport(editor),
 		});
 		this.addCommand({
+			id: 'import-ogs',
+			name: 'Import a game or puzzle from online-go.com',
+			editorCallback: (editor) => this.#promptOgs(editor),
+		});
+		this.addCommand({
 			id: 'show-tree',
 			name: 'Show move tree',
 			callback: () => void this.showPanel(true),
@@ -116,7 +123,51 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	/** Ask which problem to import from goproblems.com, then import it. */
 	#promptImport(editor: Editor): void {
-		new ProblemPrompt(this, (id) => void this.#importProblem(editor, id)).open();
+		new ImportPrompt(
+			this,
+			{
+				title: 'Import a problem from goproblems.com',
+				desc: 'Its number, or a link to it.',
+				wrong: 'That is not a problem number, or a link to a problem.',
+				parse: (text) => problemId(text),
+			},
+			(id) => void this.#importProblem(editor, id),
+		).open();
+	}
+
+	/** Ask which game, review or puzzle to import from OGS, then import it. */
+	#promptOgs(editor: Editor): void {
+		new ImportPrompt(
+			this,
+			{
+				title: 'Import from online-go.com',
+				desc: 'Its number, or a link to it.',
+				wrong: 'That is not a number, or a link to a game, review or puzzle on online-go.com.',
+				kinds: { game: 'Game', review: 'Review or demo board', puzzle: 'Puzzle' },
+				kindOf: (text) => (/^#?\d+$/.test(text.trim()) ? null : (ogsTarget(text, 'game')?.kind ?? null)),
+				parse: (text, kind) => ogsTarget(text, kind as OgsKind),
+			},
+			(t) => void this.#importOgs(editor, t),
+		).open();
+	}
+
+	/** Fetch a game, review or puzzle from OGS and put it where the cursor is, with a link back to it. */
+	async #importOgs(editor: Editor, t: OgsTarget): Promise<void> {
+		const name = `${t.kind === 'game' ? 'game' : t.kind === 'review' ? 'review' : 'puzzle'} ${t.id}`;
+		try {
+			let res;
+			try {
+				res = await requestUrl({ url: ogsApi(t), headers: { accept: t.kind === 'puzzle' ? 'application/json' : 'application/x-go-sgf' }, throw: false });
+			} catch {
+				throw new ImportError('could not reach OGS (online-go.com). Are you online?');
+			}
+			const answer = res;
+			const { sgf, about } = t.kind === 'puzzle' ? readOgsPuzzle(t, answer.status, () => answer.json) : readOgsGame(t, answer.status, answer.status === 200 ? answer.text : '');
+			insertBlock(editor, (t.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf, `[OGS ${name}](${ogsPage(t)})` + (about ? ` · ${about}` : ''));
+		} catch (e) {
+			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing OGS ${name} failed.`}`);
+			if (!(e instanceof ImportError)) console.error('Kifu: import from OGS', e);
+		}
 	}
 
 	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
@@ -178,6 +229,8 @@ export default class KifuPlugin extends Plugin implements Host {
 				run: () => void this.#insertSized(editor, n),
 			})),
 			{ title: 'Display SGF file…', flat: 'Display SGF file with Kifu…', run: () => this.#insertSgf(editor, from) },
+			// (OGS first: it is the more widely used)
+			{ title: 'Import from online-go.com…', flat: 'Import a game or puzzle from online-go.com…', run: () => this.#promptOgs(editor) },
 			{ title: 'Import from goproblems.com…', flat: 'Import a problem from goproblems.com…', run: () => this.#promptImport(editor) },
 		];
 		const problem = this.#problemEntry(editor, from);
@@ -1054,35 +1107,57 @@ function insertBlock(editor: Editor, body: string, before = ''): void {
 	editor.setCursor({ line: below, ch: 0 });
 }
 
-/** Asks for the problem to import: its number, or a link to it. */
-class ProblemPrompt extends Modal {
-	#done: (id: number) => void;
+interface PromptOptions<T> {
+	title: string;
+	/** What the text field asks for. */
+	desc: string;
+	/** What is said when the text is no good. */
+	wrong: string;
+	/** Kinds of thing a bare number can mean (a link says for itself); none: no choice. */
+	kinds?: Record<string, string>;
+	/** The kind a link says it is, if it says. */
+	kindOf?: (text: string) => string | null;
+	/** What to import, or null when the text is no good. */
+	parse: (text: string, kind: string) => T | null;
+}
 
-	constructor(plugin: KifuPlugin, done: (id: number) => void) {
+/** Asks what to import: its number, or a link to it (and, where it matters, what kind of thing a number is). */
+class ImportPrompt<T> extends Modal {
+	#opts: PromptOptions<T>;
+	#done: (what: T) => void;
+
+	constructor(plugin: KifuPlugin, opts: PromptOptions<T>, done: (what: T) => void) {
 		super(plugin.app);
+		this.#opts = opts;
 		this.#done = done;
 	}
 
 	onOpen(): void {
-		this.setTitle('Import a problem from goproblems.com');
+		const o = this.#opts;
+		this.setTitle(o.title);
 		let value = '';
+		let kind = o.kinds ? Object.keys(o.kinds)[0] : '';
 		let hint: HTMLElement | null = null;
+		let pickKind: ((k: string) => void) | null = null;
 		const go = (): void => {
-			const id = problemId(value);
-			if (id === null) {
-				hint?.setText('That is not a problem number, or a link to a problem.');
+			const what = o.parse(value, kind);
+			if (what === null) {
+				hint?.setText(o.wrong);
 				return;
 			}
 			this.close();
-			this.#done(id);
+			this.#done(what);
 		};
 		new Setting(this.contentEl)
-			.setName('Problem')
-			.setDesc('Its number, or a link to it.')
+			.setName('What')
+			.setDesc(o.desc)
 			.addText((t) => {
 				t.setPlaceholder('Number or link').onChange((v) => {
 					value = v;
 					hint?.setText('');
+					// a link says what it is
+					const k = o.kindOf?.(v);
+					if (k) pickKind?.(k);
 				});
 				t.inputEl.addEventListener('keydown', (ev) => {
 					if (ev.key === 'Enter') {
@@ -1093,6 +1168,22 @@ class ProblemPrompt extends Modal {
 				window.setTimeout(() => t.inputEl.focus(), 0);
 			})
 			.addButton((b) => b.setButtonText('Import').setCta().onClick(go));
+		const kinds = o.kinds;
+		if (kinds) {
+			new Setting(this.contentEl)
+				.setName('Kind')
+				.setDesc('What a number is. A link says for itself.')
+				.addDropdown((d) => {
+					for (const [k, label] of Object.entries(kinds)) d.addOption(k, label);
+					d.setValue(kind).onChange((v) => {
+						kind = v;
+					});
+					pickKind = (k: string): void => {
+						kind = k;
+						d.setValue(k);
+					};
+				});
+		}
 		hint = this.contentEl.createDiv({ cls: 'kifu-import-hint' });
 	}
 

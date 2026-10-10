@@ -457,7 +457,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		menu.items[0].submenu.items[3].click(); // opens the file picker
 		out.push(window.__obsidian.Modal.last?.isOpen ?? false);
 		window.__obsidian.Modal.last.close();
-		menu.items[0].submenu.items[4].click(); // opens the goproblems.com prompt
+		menu.items[0].submenu.items[5].click(); // opens the goproblems.com prompt
 		const prompt = window.__obsidian.Modal.last;
 		out.push([prompt.isOpen, prompt.title]);
 		prompt.close();
@@ -469,7 +469,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(show(flat));
 		return out;
 	});
-	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from goproblems.com…']]]);
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from online-go.com…', 'Import from goproblems.com…']]]);
 	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
 	assert.equal(res[2], 'first line\n```kifu\nsize: 13\n```\n```kifu\n```\n\nlast');
 	assert.equal(res[3], true);
@@ -479,6 +479,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		['Insert 13 × 13 Kifu board', 'insert', null],
 		['Insert 9 × 9 Kifu board', 'insert', null],
 		['Display SGF file with Kifu…', 'insert', null],
+		['Import a game or puzzle from online-go.com…', 'insert', null],
 		['Import a problem from goproblems.com…', 'insert', null],
 	]);
 });
@@ -708,6 +709,74 @@ await scenario('importing a problem from goproblems.com: prompt, note, solving, 
 	const said = await notices(page);
 	assert.ok(said.some((n) => /goproblems\.com has no problem 9\./.test(n)), said.join(' | '));
 	assert.ok(said.some((n) => /could not reach goproblems\.com/.test(n)), said.join(' | '));
+	assert.equal(await doc(page), before);
+});
+
+await scenario('importing from OGS: a puzzle by number, a game by link, and one that is not there', { files: { 'N.md': 'intro\n\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://online-go.com/api/v1/puzzles/2'] = { status: 200, json: {
+			name: 'Corner life', owner: { username: 'someone' },
+			puzzle: {
+				width: 9, height: 9, initial_player: 'black', puzzle_type: 'life_and_death', puzzle_description: 'Black to live',
+				initial_state: { black: 'aaba', white: 'cacb' },
+				move_tree: { x: -1, y: -1, branches: [
+					{ x: 0, y: 1, branches: [{ x: 1, y: 1, branches: [{ x: 0, y: 2, correct_answer: true, text: 'alive' }] }] },
+					{ x: 1, y: 1, branches: [{ x: 0, y: 1, wrong_answer: true }] },
+				] },
+			},
+		} };
+		requestUrl.answers['https://online-go.com/api/v1/games/9/sgf'] = { status: 200, text: '(;FF[4]GM[1]PB[alice]PW[bob]BR[7k]RE[W+R]SZ[9]C[alice: [object Object\\]] ;B[ee] (;W[cc] (;B[gg])))' };
+	});
+	const importAs = (typed, kind) => page.evaluate(async ([typed, kind]) => {
+		const h = window.harness;
+		const v = h.views[0];
+		v.editor.setCursor({ line: 2, ch: 0 });
+		h.app._commands.find((c) => c.id === 'import-ogs').editorCallback(v.editor, v);
+		const modal = window.__obsidian.Modal.last;
+		const input = modal.contentEl.querySelector('input');
+		const select = modal.contentEl.querySelector('select');
+		input.value = typed;
+		input.dispatchEvent(new Event('input'));
+		if (kind) {
+			select.value = kind;
+			select.dispatchEvent(new Event('change'));
+		}
+		const shown = select.value;
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		await new Promise((r) => setTimeout(r, 100));
+		return { open: modal.isOpen, kind: shown };
+	}, [typed, kind]);
+	const requests = () => page.evaluate(() => window.__obsidian.requestUrl.log.splice(0).map((q) => q.url));
+
+	// a bare number, with "Puzzle" chosen
+	await importAs('2', 'puzzle');
+	assert.deepEqual(await requests(), ['https://online-go.com/api/v1/puzzles/2']);
+	let text = await doc(page);
+	assert.match(text, /\[OGS puzzle 2\]\(https:\/\/online-go\.com\/puzzle\/2\) · Corner life, Life and death, by someone\n\n```kifu\nproblem: yes\n\(;/);
+	assert.match(text, /AB\[aa\]\[ba\]/);
+	// and it plays: the right line ends correct
+	await sleep(200);
+	assert.equal(await cap(page), 'Black to live');
+	await clickPoint(page, 0, 'ab');
+	await sleep(700);
+	await clickPoint(page, 0, 'ac');
+	await sleep(100);
+	assert.match(await cap(page), /^Correct/);
+
+	// a link says it is a game, whatever the dropdown said
+	const r = await importAs('https://online-go.com/game/9');
+	assert.equal(r.kind, 'game');
+	assert.deepEqual(await requests(), ['https://online-go.com/api/v1/games/9/sgf']);
+	text = await doc(page);
+	assert.match(text, /\[OGS game 9\]\(https:\/\/online-go\.com\/game\/9\) · alice \(7k\) vs bob, W\+R\n\n```kifu\n\(;/);
+	assert.doesNotMatch(text, /object Object/);
+
+	// one that is not there: a notice, and the note stays as it was
+	const before = await doc(page);
+	await importAs('https://online-go.com/review/404');
+	await sleep(100);
+	assert.ok((await notices(page)).some((n) => /OGS has no review 404, or it is not public\./.test(n)));
 	assert.equal(await doc(page), before);
 });
 

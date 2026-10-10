@@ -18,7 +18,7 @@ In Obsidian open **Settings → Community plugins → Browse**, search for **Kif
 
 To install it by hand instead, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/LuxBetancourt/obsidian-kifu/releases/latest), put them in a folder `<your vault>/.obsidian/plugins/kifu/`, and switch **Kifu** on under **Settings → Community plugins** (press the refresh button next to *Installed plugins* if it is not listed).
 
-Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only when you import a problem from goproblems.com (see below): it then asks goproblems.com for that one problem, and nothing else is ever sent anywhere. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
+Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only when you import from goproblems.com or OGS (see below): it then asks that site for the one game or problem you named, and nothing else is ever sent anywhere. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
 
 To see everything at once, copy the two files in `demo/` into your vault and open *Kifu demo*.
 
@@ -164,6 +164,15 @@ game: 12
 
 Obsidian only lists `.sgf` files in its file explorer when **Settings → Files and links → Detect all file extensions** is on. If a board cannot find a file that is there, turn that setting on.
 
+## Games and puzzles from OGS
+
+Run **Kifu: Import a game or puzzle from online-go.com** (or right-click in the editor: **Kifu → Import from online-go.com…**) and paste a link to a game, a review (demo board) or a puzzle on OGS. A bare number works too: choose what it is under *Kind*.
+
+- A **game** or **review** arrives as a game record, with its variations and comments; above it, a link back to it with the players, their ranks and the result. Chat that OGS could not write into its files ("someone: [object Object]") is left out.
+- A **puzzle** arrives as a problem: its stones, the player to move, every line from the puzzle, and a ✓ or ✗ on the lines OGS calls correct or wrong, with their comments.
+
+Only public games, reviews and puzzles can be imported (OGS needs no account for them).
+
 ## Problems from goproblems.com
 
 Run **Kifu: Import a problem from goproblems.com** (or right-click in the editor: **Kifu → Import from goproblems.com…**) and give the problem's number, or paste a link to it. The problem arrives where the cursor is, variations and comments included, as a board of its own with a link back to its page above it:
@@ -181,7 +190,7 @@ goproblems.com marks a correct line by ending its comment with RIGHT. On import 
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 
-**Network use:** this command is the only part of the plugin that goes online. It asks `goproblems.com` for the one problem you named, sending its number (and your token, if you chose one), and nothing else.
+**Network use:** the two import commands are the only parts of the plugin that go online. Each asks one site (`goproblems.com` or `online-go.com`) for the one game or problem you named, sending its number (and, for goproblems.com, your token if you chose one), and nothing else.
 
 ## The move tree panel
 
