@@ -13,8 +13,13 @@
 	// Obsidian adds createEl to every node: make an element in the node's document, give it
 	// classes, text and attributes, and append it.
 	Node.prototype.createDiv = function (o) { return this.createEl('div', o); };
+	// (the global one makes an element on its own)
+	window.createDiv = (o) => document.createDocumentFragment().createDiv(o);
 	HTMLElement.prototype.setText = function (t) { this.textContent = t; };
 	HTMLElement.prototype.empty = function () { this.replaceChildren(); };
+	Element.prototype.addClass = function (...c) { this.classList.add(...c); };
+	Element.prototype.removeClass = function (...c) { this.classList.remove(...c); };
+	Element.prototype.toggleClass = function (c, on) { this.classList.toggle(c, on); };
 	Node.prototype.createEl = function (tag, o) {
 		const e = (this.ownerDocument ?? this).createElement(tag);
 		if (typeof o === 'string') o = { cls: o };
@@ -199,8 +204,29 @@
 				r.el = doc.createElement('div');
 				r.el.className = h ? 'el-h' + h[1].length : 'el-p';
 				const inner = doc.createElement(h ? 'h' + h[1].length : 'p');
-				inner.textContent = h ? h[2] : sec.raw;
+				// ![alt](link) is an image, as Obsidian draws it; the rest is text
+				const text = h ? h[2] : sec.raw;
+				const embed = /!\[([^\]\n]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?\s*\)/g;
+				let at = 0;
+				for (let m; (m = embed.exec(text)); ) {
+					inner.append(text.slice(at, m.index));
+					const img = doc.createElement('img');
+					img.setAttribute('src', m[2]);
+					img.setAttribute('alt', m[1]);
+					inner.append(img);
+					at = m.index + m[0].length;
+				}
+				inner.append(text.slice(at));
 				r.el.appendChild(inner);
+				// the plugins' post processors, in the reading view
+				if (!this.live) {
+					const ctx = {
+						docId: this.docId, sourcePath: this.sourcePath, frontmatter: null,
+						addChild: (c) => { r.children.push(c); this.addChild(c); },
+						getSectionInfo: () => null,
+					};
+					for (const fn of this.app._postProcessors ?? []) { try { fn(r.el, ctx); } catch (e) { console.error('post processor failed', e); } }
+				}
 				return r;
 			}
 			const handler = this.app._processors.get(sec.lang);
@@ -390,6 +416,11 @@
 			this.register(() => this.app._processors.delete(lang));
 		}
 		registerView(type, factory) { this.app._views.set(type, factory); }
+		registerEditorExtension(ext) { (this.app._editorExtensions ??= []).push(ext); }
+		registerMarkdownPostProcessor(fn) {
+			(this.app._postProcessors ??= []).push(fn);
+			this.register(() => { this.app._postProcessors = this.app._postProcessors.filter((f) => f !== fn); });
+		}
 		addSettingTab(tab) { this.app._settingTabs.push(tab); }
 		addCommand(cmd) { this.app._commands.push(cmd); return cmd; }
 		async loadData() { await 0; return this._data ? JSON.parse(this._data) : null; }

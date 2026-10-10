@@ -254,6 +254,8 @@ export class Session {
 	readOnly = '';
 	/** ...or something about the block itself or where it is shown, which no file changes. */
 	fixed = '';
+	/** The page a board drawn from a link came from ('' for a board of a block). */
+	link = '';
 	/** A save is running / another one is wanted after it. */
 	saving = false;
 	saveAgain = false;

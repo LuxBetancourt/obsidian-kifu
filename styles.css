@@ -475,6 +475,17 @@ body .kifu-panel button.kifu-btn {
 	border-color: var(--text-muted);
 }
 
+/* a board drawn from a link: what is said while it is fetched, or why it is not there */
+.kifu-linked-msg {
+	margin: 0.5em 0;
+	color: var(--text-muted);
+	font-size: var(--font-smaller, 0.875em);
+}
+
+.kifu-linked-msg.is-error {
+	color: var(--text-error);
+}
+
 .kifu-msg {
 	padding: 6px 12px;
 	border: 1px dashed var(--background-modifier-border);

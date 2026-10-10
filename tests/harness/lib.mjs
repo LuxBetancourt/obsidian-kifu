@@ -42,8 +42,9 @@ export async function open(browser, { width = 1280, height = 900, scale = 1, dar
 	if (device) await page.evaluate(() => document.head.insertAdjacentHTML('afterbegin', '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">'));
 	if (dark) await page.evaluate(() => { document.body.className = 'theme-dark'; });
 	if (font) await page.evaluate((f) => document.body.style.setProperty('--test-font', f), font);
+	// (the stand-in brings the CodeMirror the plugin is given: it goes in first)
+	await page.addScriptTag({ content: await cmLivePreview() });
 	await page.evaluate((code) => window.harness.loadPlugin(code), mainJs());
-	if (live.length) await page.addScriptTag({ content: await cmLivePreview() });
 	await page.evaluate((b) => window.harness.boot(b), boot);
 	if (live.length) {
 		await page.evaluate(([lp, live]) => { Object.assign(window.LP, lp); for (const p of live) window.openLivePreview(p); }, [lp, live]);

@@ -66,7 +66,12 @@ input[type='text'] { height: 30px; }
 		/** Load the plugin's main.js the way Obsidian does: as the body of a function. */
 		loadPlugin(code) {
 			const module = { exports: {} };
-			const require = (name) => { if (name === 'obsidian') return O; throw new Error('unexpected require: ' + name); };
+			const require = (name) => {
+				if (name === 'obsidian') return O;
+				// (the same CodeMirror as the Live Preview stand-in's: cm-lp.ts puts it here)
+				if (window.__cm && window.__cm[name]) return window.__cm[name];
+				throw new Error('unexpected require: ' + name);
+			};
 			const t0 = performance.now();
 			new Function('require', 'module', 'exports', code)(require, module, module.exports);
 			this.evalMs = performance.now() - t0;

@@ -780,6 +780,46 @@ await scenario('importing from OGS: a puzzle by number, a game by link, and one 
 	assert.equal(await doc(page), before);
 });
 
+await scenario('embedded links in Live Preview: a board, the link again under the cursor, never in code', { files: { 'L.md': 'top\n\n![](https://online-go.com/puzzle/2)\n\n`![](https://online-go.com/game/9)`\n\n```\n![](https://online-go.com/game/9)\n```\n\nend\n' } }, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		const puzzle = {
+			name: 'Corner life', owner: { username: 'someone' },
+			puzzle: {
+				width: 9, height: 9, initial_player: 'black', puzzle_type: 'life_and_death', puzzle_description: 'Black to live',
+				initial_state: { black: 'aaba', white: 'cacb' },
+				move_tree: { x: -1, y: -1, branches: [
+					{ x: 0, y: 1, branches: [{ x: 1, y: 1, branches: [{ x: 0, y: 2, correct_answer: true }] }] },
+					{ x: 1, y: 1, branches: [{ x: 0, y: 1, wrong_answer: true }] },
+				] },
+			},
+		};
+		requestUrl.answers['https://online-go.com/api/v1/puzzles/2'] = { status: 200, json: puzzle };
+		requestUrl.answers['https://online-go.com/api/v1/games/9/sgf'] = { status: 200, text: '(;FF[4]GM[1]PB[alice]PW[bob]SZ[9];B[ee];W[cc];B[gg])' };
+		requestUrl.answers['https://goproblems.com/api/v2/problems/5'] = { status: 200, json: { sgf: '(;AB[aa][ba]AW[ca][cb]C[Black to live]SZ[9](;B[ab];W[bb];B[ac]C[RIGHT]))' } };
+
+		window.openLivePreview('L.md');
+	});
+	await sleep(300);
+	const boards = () => page.locator('.kifu-linked-embed .kifu-svg').count();
+	assert.equal(await boards(), 1); // the one embed; the two in code are left alone
+	// the cursor on the link: it is text again
+	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 8 } }); });
+	await sleep(100);
+	assert.equal(await boards(), 0);
+	// away from it: the board again
+	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 0 } }); });
+	await sleep(200);
+	assert.equal(await boards(), 1);
+	// typing elsewhere keeps the board as it is, without asking the site again
+	const before = await page.evaluate(() => window.__obsidian.requestUrl.log.length);
+	const kept = await page.evaluateHandle(() => document.querySelector('.kifu-linked-embed'));
+	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ changes: { from: 0, insert: 'more ' } }); });
+	await sleep(200);
+	assert.equal(await page.evaluate((el) => el.isConnected, kept), true);
+	assert.equal(await page.evaluate(() => window.__obsidian.requestUrl.log.length), before);
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

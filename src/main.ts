@@ -19,7 +19,9 @@ import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from 
 import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
 import { Host, Session } from './session';
 import { problemApi, problemId, problemUrl, readProblem } from './goproblems';
-import { ImportError } from './importing';
+import { Fetched, ImportError } from './importing';
+import { LinkTarget, LinkedBoard, linkTarget } from './linked';
+import { linkedBoards } from './livelinks';
 import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
@@ -38,6 +40,8 @@ import { TreePanel } from './ui/panel';
 const SAVE_DELAY = 3000;
 /** While a press on the board is held, a write that is due waits this long and looks again. */
 const PRESS_WAIT = 250;
+/** How long what a board drawn from a link shows is kept before it is fetched again. */
+const LINK_KEEP = 5 * 60 * 1000;
 /** The board sizes the editor menu offers to insert. */
 const MENU_SIZES = [19, 13, 9];
 /** How many boards that are off the page but were left unlocked or played out are remembered. */
@@ -91,6 +95,9 @@ export default class KifuPlugin extends Plugin implements Host {
 	onload(): void {
 		addIcon('kifu-tree', TREE_ICON);
 		this.registerMarkdownCodeBlockProcessor(BLOCK_LANG, (source, el, ctx) => this.#renderBlock(source, el, ctx));
+		// ![](link) to OGS or goproblems.com: a board, in the reading view and in Live Preview
+		this.registerMarkdownPostProcessor((el, ctx) => this.#linkBoards(el, ctx));
+		this.registerEditorExtension(linkedBoards(this));
 		this.registerView(VIEW_TYPE, (leaf) => new TreePanel(leaf, this));
 		this.addSettingTab(new KifuSettingTab(this.app, this));
 		this.addCommand({
@@ -119,6 +126,17 @@ export default class KifuPlugin extends Plugin implements Host {
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+	}
+
+	/** In the reading view an embedded link is an image: one to OGS or goproblems.com becomes a board. */
+	#linkBoards(el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+		for (const img of Array.from(el.querySelectorAll('img[src]'))) {
+			const t = linkTarget(img.getAttribute('src') ?? '');
+			if (!t) continue;
+			const host = el.createDiv({ cls: 'kifu-linked-embed' });
+			img.replaceWith(host);
+			ctx.addChild(new LinkedBoard(host, this, t, ctx.sourcePath, ctx));
+		}
 	}
 
 	/** Ask which problem to import from goproblems.com, then import it. */
@@ -155,14 +173,7 @@ export default class KifuPlugin extends Plugin implements Host {
 	async #importOgs(editor: Editor, t: OgsTarget): Promise<void> {
 		const name = `${t.kind === 'game' ? 'game' : t.kind === 'review' ? 'review' : 'puzzle'} ${t.id}`;
 		try {
-			let res;
-			try {
-				res = await requestUrl({ url: ogsApi(t), headers: { accept: t.kind === 'puzzle' ? 'application/json' : 'application/x-go-sgf' }, throw: false });
-			} catch {
-				throw new ImportError('could not reach OGS (online-go.com). Are you online?');
-			}
-			const answer = res;
-			const { sgf, about } = t.kind === 'puzzle' ? readOgsPuzzle(t, answer.status, () => answer.json) : readOgsGame(t, answer.status, answer.status === 200 ? answer.text : '');
+			const { sgf, about } = await this.#getOgs(t);
 			insertBlock(editor, (t.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf, `[OGS ${name}](${ogsPage(t)})` + (about ? ` · ${about}` : ''));
 		} catch (e) {
 			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing OGS ${name} failed.`}`);
@@ -171,21 +182,66 @@ export default class KifuPlugin extends Plugin implements Host {
 	}
 
 	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
-	async #importProblem(editor: Editor, id: number): Promise<void> {
+	/** Ask goproblems.com for problem `id`. */
+	async #getProblem(id: number): Promise<Fetched> {
 		await this.settingsLoaded();
 		const name = this.settings.goproblemsKey;
 		const key = name ? this.app.secretStorage.getSecret(name) : null;
+		let res;
 		try {
-			let res;
-			try {
-				const headers: Record<string, string> = { accept: 'application/json' };
-				if (key) headers['X-Api-Key'] = key;
-				res = await requestUrl({ url: problemApi(id), headers, throw: false });
-			} catch {
-				throw new ImportError('could not reach goproblems.com. Are you online?');
-			}
-			const answer = res;
-			const { sgf, about } = readProblem(id, answer.status, () => answer.json, !!key);
+			const headers: Record<string, string> = { accept: 'application/json' };
+			if (key) headers['X-Api-Key'] = key;
+			res = await requestUrl({ url: problemApi(id), headers, throw: false });
+		} catch {
+			throw new ImportError('could not reach goproblems.com. Are you online?');
+		}
+		const answer = res;
+		return readProblem(id, answer.status, () => answer.json, !!key);
+	}
+
+	/** Ask OGS for a game, review or puzzle. */
+	async #getOgs(t: OgsTarget): Promise<Fetched> {
+		let res;
+		try {
+			res = await requestUrl({ url: ogsApi(t), headers: { accept: t.kind === 'puzzle' ? 'application/json' : 'application/x-go-sgf' }, throw: false });
+		} catch {
+			throw new ImportError('could not reach OGS (online-go.com). Are you online?');
+		}
+		const answer = res;
+		return t.kind === 'puzzle' ? readOgsPuzzle(t, answer.status, () => answer.json) : readOgsGame(t, answer.status, answer.status === 200 ? answer.text : '');
+	}
+
+	/** Boards drawn from links, and when what they show was fetched: kept a few minutes, so a note shown again does not ask again. */
+	#linked = new Map<string, { at: number; body: Promise<string> }>();
+	/** The sessions of the boards drawn from links that are on screen (settings that change redraw them too). */
+	#linkedSessions = new Set<Session>();
+
+	/** What a board drawn from a link shows: a block's text, made from what the site sent. */
+	fetchLinked(t: LinkTarget): Promise<string> {
+		const hit = this.#linked.get(t.url);
+		if (hit && Date.now() - hit.at < LINK_KEEP) return hit.body;
+		const body = (async () => {
+			if (t.site === 'goproblems') return 'problem: yes\n' + (await this.#getProblem(t.id)).sgf;
+			const { sgf } = await this.#getOgs(t.ogs);
+			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
+		})();
+		this.#linked.set(t.url, { at: Date.now(), body });
+		// (a failure is not kept: the next time it is asked again)
+		body.catch(() => {
+			if (this.#linked.get(t.url)?.body === body) this.#linked.delete(t.url);
+		});
+		return body;
+	}
+
+	linkedShown(s: Session, on: boolean): void {
+		if (on) this.#linkedSessions.add(s);
+		else this.#linkedSessions.delete(s);
+	}
+
+	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
+	async #importProblem(editor: Editor, id: number): Promise<void> {
+		try {
+			const { sgf, about } = await this.#getProblem(id);
 			insertBlock(editor, 'problem: yes\n' + sgf, `[goproblems.com #${id}](${problemUrl(id)})` + (about ? ` · ${about}` : ''));
 		} catch (e) {
 			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing problem ${id} failed.`}`);
@@ -357,6 +413,7 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	#refreshAll(): void {
 		for (const s of this.#sessions) if (s.ready) s.refresh();
+		for (const s of this.#linkedSessions) if (s.ready) s.refresh();
 	}
 
 	/* ----------------------------------------------------------------- boards */
@@ -680,6 +737,18 @@ export default class KifuPlugin extends Plugin implements Host {
 	/** A board was clicked or focused: the panel follows it from now on. */
 	useSession(view: BoardView): void {
 		if (!view.session || this.#unloaded) return;
+		if (view.session.link) {
+			// (drawn from a link: no block, so nothing to settle about one; it is the panel's board)
+			const s = view.session;
+			s.lastView = view;
+			s.stamp = Date.now();
+			if (this.activeSession !== s) {
+				this.activeSession = s;
+				this.#dormant = null;
+				this.#syncPanels();
+			}
+			return;
+		}
 		// (it is about to be used: whose board it is has to be settled now)
 		this.#confirm(view, true);
 		let s = view.session as Session | null;

@@ -853,6 +853,57 @@ await scenario('coordinates sit beside the board\'s real edges, wherever they ar
 	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 }); // (black stones set up: White plays first)
 });
 
+await scenario('embedded links to OGS and goproblems.com are drawn as boards in the reading view', {
+	files: { 'L.md': '# Links\n\n![](https://online-go.com/puzzle/2)\n\nsome text ![a game](https://online-go.com/game/9) more text\n\n![](https://www.goproblems.com/problems/5)\n\n![again](https://online-go.com/puzzle/2)\n\n![](https://example.com/photo.png)\n\n![](https://online-go.com/game/404)\n' },
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		const puzzle = {
+			name: 'Corner life', owner: { username: 'someone' },
+			puzzle: {
+				width: 9, height: 9, initial_player: 'black', puzzle_type: 'life_and_death', puzzle_description: 'Black to live',
+				initial_state: { black: 'aaba', white: 'cacb' },
+				move_tree: { x: -1, y: -1, branches: [
+					{ x: 0, y: 1, branches: [{ x: 1, y: 1, branches: [{ x: 0, y: 2, correct_answer: true }] }] },
+					{ x: 1, y: 1, branches: [{ x: 0, y: 1, wrong_answer: true }] },
+				] },
+			},
+		};
+		requestUrl.answers['https://online-go.com/api/v1/puzzles/2'] = { status: 200, json: puzzle };
+		requestUrl.answers['https://online-go.com/api/v1/games/9/sgf'] = { status: 200, text: '(;FF[4]GM[1]PB[alice]PW[bob]SZ[9];B[ee];W[cc];B[gg])' };
+		requestUrl.answers['https://goproblems.com/api/v2/problems/5'] = { status: 200, json: { sgf: '(;AB[aa][ba]AW[ca][cb]C[Black to live]SZ[9](;B[ab];W[bb];B[ac]C[RIGHT]))' } };
+
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('L.md', 'preview'));
+	});
+	await sleep(300);
+	// four boards: the puzzle twice, the game, the goproblems.com problem
+	assert.equal(await page.locator('.kifu-svg').count(), 4);
+	// a link that is not to a game or problem stays an image; one that is not there says so
+	assert.equal(await page.locator('img[src="https://example.com/photo.png"]').count(), 1);
+	assert.match(await page.locator('.kifu-linked-msg.is-error').textContent(), /OGS has no game 404, or it is not public\./);
+	assert.equal(await page.locator('.kifu-linked-msg:not(.is-error)').count(), 0); // (no "fetching" left)
+	// the puzzle shown twice was asked for once
+	const urls = await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url));
+	assert.equal(urls.filter((u) => u.endsWith('/puzzles/2')).length, 1);
+	// it plays: the right line ends correct
+	assert.equal(await cap(page, 0), 'Black to live');
+	await clickPoint(page, 0, 'ab');
+	await sleep(700);
+	await clickPoint(page, 0, 'ac');
+	await sleep(100);
+	assert.match(await cap(page, 0), /^Correct/);
+	// it can not be unlocked: there is no block to write to
+	const box = await page.locator('.kifu-svg').nth(0).boundingBox();
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await lockBtn(page, 0).click();
+	assert.deepEqual((await isEditing(page)).slice(0, 1), [false]);
+	assert.ok((await notices(page)).some((n) => /drawn from https:\/\/online-go\.com\/puzzle\/2\. To edit it, import it instead/.test(n)));
+	// and the note was never written
+	assert.match(await text(page, 'L.md'), /^# Links\n\n!\[\]\(https:\/\/online-go\.com\/puzzle\/2\)/);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

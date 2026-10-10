@@ -6,12 +6,22 @@
  * What Obsidian itself does around CodeMirror is not documented. Each such point
  * is a switch in `LP`, and the checks are run with the switch both ways.
  */
+import * as cmState from '@codemirror/state';
+import * as cmView from '@codemirror/view';
 import { Annotation, ChangeSet, EditorState, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType, keymap } from '@codemirror/view';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare const window: any;
 const O = window.__obsidian;
+
+// The plugin's own CodeMirror imports are answered with this same CodeMirror, as
+// Obsidian answers them with its own (see loadPlugin in index.html).
+window.__cm = { '@codemirror/state': cmState, '@codemirror/view': cmView };
+
+// Obsidian's editor fields: is this pane Live Preview, and which file is it.
+O.editorLivePreviewField = StateField.define<boolean>({ create: () => true, update: (v) => v });
+O.editorInfoField = StateField.define<{ file: unknown } | null>({ create: () => null, update: (v) => v });
 
 export const LP = {
 	/** Unload a block's render children inside WidgetType.destroy() (true) or a moment later. */
@@ -328,7 +338,10 @@ export class CMMarkdownView extends O.ItemView {
 
 		this.cm = new EditorView({
 			parent: this.contentEl,
-			state: EditorState.create({ doc: app.vault.files.get(file.path).data, extensions: [blocks, keys, listener, EditorView.lineWrapping] }),
+			state: EditorState.create({
+				doc: app.vault.files.get(file.path).data,
+				extensions: [blocks, keys, listener, EditorView.lineWrapping, O.editorLivePreviewField.init(() => true), O.editorInfoField.init(() => ({ file })), ...(app._editorExtensions ?? [])],
+			}),
 		});
 		this.editor = new CMEditor(this);
 	}
