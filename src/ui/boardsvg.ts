@@ -30,7 +30,15 @@ export interface Look {
 	/** Pixels between two lines. */
 	cell: number;
 	coords: boolean;
+	/**
+	 * The cell that lines, stone outlines and coordinates are sized for, when it is not
+	 * `cell`: a board drawn larger to fill a space keeps the look of one at its usual size.
+	 */
+	lineCell?: number;
 }
+
+/** Width of the coordinates band, in pixels, for a board whose lines are sized for `lineCell`. */
+export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
 
 const circle = (cx: number, cy: number, r: number): string =>
 	`M${+(cx - r).toFixed(1)} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
@@ -72,10 +80,12 @@ export class BoardSvg {
 		const cell = look.cell;
 		const k = U / cell; // units per pixel
 		this.px = k;
-		const line = Math.max(1, Math.round(cell / 30)); // px
+		const lc = look.lineCell ?? cell;
+		const line = Math.max(1, Math.round(lc / 30)); // px
 		const border = line * 2; // px
-		const ring = Math.max(1, cell / 22) * k; // outline of a white stone, units
-		const band = look.coords ? BAND : 0;
+		const ring = Math.max(1, lc / 22) * k; // outline of a white stone, units
+		// (the band and its text keep their size in pixels too)
+		const band = look.coords ? (BAND * lc) / cell : 0;
 		// Nudge everything by half a pixel when that puts the lines exactly on the pixel grid.
 		const shift = (line + cell) % 2 ? 0.5 * k : 0;
 		const X0 = view.x0 * U;
@@ -90,13 +100,13 @@ export class BoardSvg {
 		this.vw = X1 - X0 + band;
 		this.vh = Y1 - Y0 + band;
 
-		const key = `${w} ${h} ${view.x0} ${view.y0} ${view.x1} ${view.y1} ${cell} ${band}`;
+		const key = `${w} ${h} ${view.x0} ${view.y0} ${view.x1} ${view.y1} ${cell} ${band} ${lc}`;
 		if (key !== this.fixedKey) {
 			this.fixedKey = key;
 			this.el.setAttribute('viewBox', `${this.vx} ${this.vy} ${this.vw} ${this.vh}`);
 			this.el.setAttribute('width', String(Math.round(this.vw / k)));
 			this.el.setAttribute('height', String(Math.round(this.vh / k)));
-			this.drawFixed(w, h, view, line, border, k, band, cell);
+			this.drawFixed(w, h, view, line, border, k, band, cell, lc);
 		}
 
 		// stones
@@ -168,7 +178,7 @@ export class BoardSvg {
 	}
 
 	/** Lines, border, star points and coordinates: redrawn only when the geometry changes. */
-	private drawFixed(w: number, h: number, v: Rect, line: number, border: number, k: number, band: number, cell: number): void {
+	private drawFixed(w: number, h: number, v: Rect, line: number, border: number, k: number, band: number, cell: number, lc: number): void {
 		clear(this.fixed);
 		const X0 = v.x0 * U;
 		const Y0 = v.y0 * U;
@@ -217,7 +227,7 @@ export class BoardSvg {
 		if (s) svg(this.fixed, 'path', { d: s, class: 'kifu-star' });
 
 		if (band) {
-			const fs = 38;
+			const fs = (38 * lc) / cell;
 			const sides = coordSides(w, h, v);
 			const nx = sides.right ? X1 + band / 2 : X0 - band / 2;
 			const ly = sides.top ? Y0 - band / 2 : Y1 + band / 2;

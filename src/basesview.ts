@@ -170,9 +170,9 @@ export class KifuBasesView extends BasesView {
 			el.createDiv({ cls: 'kifu-bases-none', text: 'No board in this note.' });
 			return;
 		}
-		// the view's own board size, whatever the block says
+		// as large as the card (the view's board size sets how wide cards are), whatever the block says
 		const parsed = parseBlock(body);
-		const sized = composeBlock(setOption(parsed.header, 'scale', `${scale}%`), parsed.rest, null, null);
+		const sized = composeBlock(setOption(parsed.header, 'scale', 'fit'), parsed.rest, null, null);
 		mountDetached(owner, el, this.#plugin, file.path, sized, `base:${file.path}`, 'this board is shown in a base. Open the note to edit it.');
 	}
 }

@@ -998,9 +998,22 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
 	assert.equal(await page.locator('.kifu-bases-none').textContent(), 'No board in this note.');
 	assert.deepEqual(await page.locator('.kifu-bases-title').allTextContents(), ['P', 'G', 'N', 'one']);
-	// every board fills its card (but for the room kept beside it for its buttons)
-	const fill = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card')].filter((c) => c.querySelector('.kifu-svg')).map((c) => c.querySelector('.kifu-svg').getBoundingClientRect().width / c.clientWidth));
-	assert.ok(fill.every((f) => f > 0.8), fill.join());
+	// every board fills its card: all of it but the card's padding, the paper's edge, the room
+	// beside the board for its buttons, and less than one cell (the cell is whole pixels)
+	const fill = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card')].filter((c) => c.querySelector('.kifu-svg')).map((c) => {
+		const svg = c.querySelector('.kifu-svg');
+		const cols = Number(svg.getAttribute('viewBox').split(' ')[2]) / 100;
+		const cell = svg.getBoundingClientRect().width / cols;
+		return c.clientWidth - 16 - 12 - 24 - svg.getBoundingClientRect().width < cell;
+	}));
+	assert.ok(fill.every(Boolean), fill.join());
+	// drawn to fit, not stretched: lines and stone outlines as thin as on a board of the usual size
+	const looks = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card .kifu-svg')].map((svg) => {
+		const unitsPerPx = Number(svg.getAttribute('viewBox').split(' ')[2]) / svg.getBoundingClientRect().width;
+		const w = svg.querySelector('.kifu-w');
+		return { grid: svg.querySelector('.kifu-grid').getAttribute('stroke-width'), ring: Math.round((Number(w.getAttribute('stroke-width')) / unitsPerPx) * 10) / 10 };
+	}));
+	assert.ok(looks.every((l) => l.grid === '1' && l.ring <= 1.2), JSON.stringify(looks));
 	// the properties chosen for the view, as Obsidian renders them; empty ones left out
 	assert.deepEqual(await page.locator('.kifu-bases-prop').allTextContents(), ['level20k']);
 	// the options the view offers

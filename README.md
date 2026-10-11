@@ -270,7 +270,7 @@ Option lines come first in the block, one per line, before any SGF.
 | `view` | see above | part of the board to show |
 | `move` | number, `last` | position to show |
 | `numbers` | see above | numbered figure |
-| `scale` | `80%`, `1.5` | size of this board |
+| `scale` | `80%`, `1.5`, `fit` | size of this board (`fit`: as wide as the note, with lines as thin as at the usual size) |
 | `coords` | `on` / `off` | coordinates beside the board's edges (the real ones, where the part shown has any) |
 | `caption` | text | text under the board at rest |
 | `comments` | `on` / `off` | show move comments under the board |

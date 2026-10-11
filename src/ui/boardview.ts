@@ -5,7 +5,7 @@ import type KifuPlugin from '../main';
 import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
-import { BoardSvg } from './boardsvg';
+import { BoardSvg, bandPixels } from './boardsvg';
 import { clear, el, icon, iconButton, setIcon } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
 
@@ -307,7 +307,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		}
 		this.#message(null);
 		const set = this.#plugin.settings;
-		const cell = Math.max(6, Math.round(BASE_CELL * (parseScale(s.opts.scale) ?? set.scale)));
+		const usual = Math.max(6, Math.round(BASE_CELL * (parseScale(s.opts.scale) ?? set.scale)));
 		const coords = parseBool(s.opts.coords) ?? set.coords;
 		const style = /^(paper|theme)$/.test(s.opts.style ?? '') ? s.opts.style : set.style;
 		const align = /^(left|center|right)$/.test(s.opts.align ?? '') ? s.opts.align : set.align;
@@ -320,7 +320,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// (a randomized board is drawn turned and recoloured; the session itself knows nothing of it)
 		const o = s.orientation;
 		const m = o ? orientModel(s.model(), o) : s.model();
-		this.#board.draw(m, { cell, coords });
+		// "scale: fit" (a card in a base): as large as the space allows, with lines, outlines
+		// and coordinates as on a board of the usual size
+		const fit = /^fit$/i.test(s.opts.scale ?? '');
+		const lineCell = Math.max(6, Math.round(BASE_CELL * set.scale));
+		const cell = fit ? this.#fitCell(m, coords, lineCell) : usual;
+		this.#board.draw(m, fit ? { cell, coords, lineCell } : { cell, coords });
 		this.#hover = '';
 
 		setIcon(this.#lockBtn.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
@@ -370,6 +375,33 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#stamp.setAttribute('aria-hidden', 'true');
 		icon(this.#stamp, status === 'correct' ? 'check' : 'cross');
 		this.#stampAt = at;
+	}
+
+	#fitObserver: ResizeObserver | null = null;
+	#fitWidth = 0;
+
+	/** The cell that makes the board fill the width it has (and redraw when that changes). */
+	#fitCell(m: Model, coords: boolean, lineCell: number): number {
+		if (!this.#fitObserver) {
+			this.#fitObserver = new ResizeObserver(() => {
+				const width = this.#root.clientWidth;
+				if (width && width !== this.#fitWidth) this.#render();
+			});
+			this.#fitObserver.observe(this.#root);
+			this.register(() => this.#fitObserver?.disconnect());
+		}
+		const root = getComputedStyle(this.#root);
+		const frame = getComputedStyle(this.#frame);
+		this.#fitWidth = this.#root.clientWidth;
+		const room =
+			this.#fitWidth -
+			parseFloat(root.paddingLeft) - parseFloat(root.paddingRight) -
+			parseFloat(frame.paddingLeft) - parseFloat(frame.paddingRight);
+		// (not laid out yet: the usual size, until the observer says how wide it is)
+		if (!(room > 0)) return lineCell;
+		const cols = m.view.x1 - m.view.x0 + 1;
+		const band = coords ? bandPixels(lineCell) : 0;
+		return Math.max(6, Math.min(200, Math.floor((room - band) / cols)));
 	}
 
 	#renderCaption(m: Model): void {
