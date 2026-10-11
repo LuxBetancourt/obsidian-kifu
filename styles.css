@@ -485,12 +485,6 @@ body .kifu-panel button.kifu-btn {
 	display: none;
 }
 
-/* a board drawn from a link with the cursor on it, as a selected embedded image */
-.kifu-linked-embed.is-selected {
-	border-radius: var(--radius-s, 4px);
-	box-shadow: 0 0 0 2px var(--interactive-accent);
-}
-
 /* a board drawn from a link: what is said while it is fetched, or why it is not there */
 .kifu-linked-msg {
 	margin: 0.5em 0;

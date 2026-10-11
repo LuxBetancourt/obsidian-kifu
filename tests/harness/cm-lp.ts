@@ -35,44 +35,22 @@ class ImageEmbed extends WidgetType {
 		return img;
 	}
 }
-const revealImage = cmState.StateEffect.define<number>();
-const imageEmbeds = StateField.define<{ deco: DecorationSet; revealed: number }>({
-	create: (state) => images(state, -1),
-	update: (v, tr) => {
-		let revealed = v.revealed;
-		for (const e of tr.effects) if (e.is(revealImage)) revealed = e.value;
-		return tr.docChanged || tr.selection || revealed !== v.revealed ? images(tr.state, revealed) : v;
-	},
-	provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
+const imageEmbeds = StateField.define<DecorationSet>({
+	create: (state) => images(state),
+	update: (deco, tr) => (tr.docChanged || tr.selection ? images(tr.state) : deco),
+	provide: (f) => EditorView.decorations.from(f),
 });
-function imageLinks(state: EditorState): { from: number; to: number; url: string }[] {
-	return [...state.doc.toString().matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)].map((m) => ({ from: m.index ?? 0, to: (m.index ?? 0) + m[0].length, url: m[1] }));
-}
-function images(state: EditorState, revealed: number): { deco: DecorationSet; revealed: number } {
+function images(state: EditorState): DecorationSet {
+	const text = state.doc.toString();
 	const out = [];
-	let still = -1;
-	for (const { from, to, url } of imageLinks(state)) {
-		const on = state.selection.ranges.some((r) => r.from <= to && r.to >= from);
-		if (on && from === revealed) {
-			still = from;
-			out.push(Decoration.widget({ widget: new ImageEmbed(url), side: 1 }).range(to));
-		} else {
-			out.push(Decoration.replace({ widget: new ImageEmbed(url) }).range(from, to));
-		}
+	for (const m of text.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)) {
+		const from = m.index ?? 0;
+		const to = from + m[0].length;
+		if (state.selection.ranges.some((r) => r.from < to && r.to > from)) out.push(Decoration.widget({ widget: new ImageEmbed(m[1]), side: 1 }).range(to));
+		else out.push(Decoration.replace({ widget: new ImageEmbed(m[1]) }).range(from, to));
 	}
-	return { deco: Decoration.set(out), revealed: still };
+	return Decoration.set(out);
 }
-// Enter with the cursor in an image's link reveals it, as in Obsidian (and types nothing)
-const revealOnEnter = keymap.of([{
-	key: 'Enter',
-	run: (view) => {
-		const head = view.state.selection.main.head;
-		const hit = imageLinks(view.state).find((l) => head > l.from && head < l.to);
-		if (!hit) return false;
-		view.dispatch({ effects: revealImage.of(hit.from) });
-		return true;
-	},
-}]);
 
 // Obsidian's editor fields: is this pane Live Preview, and which file is it.
 O.editorLivePreviewField = StateField.define<boolean>({ create: () => true, update: (v) => v });
@@ -396,7 +374,7 @@ export class CMMarkdownView extends O.ItemView {
 			state: EditorState.create({
 				doc: app.vault.files.get(file.path).data,
 				// (Obsidian's own extensions first, the plugins' after them, as in Obsidian)
-				extensions: [blocks, keys, listener, EditorView.lineWrapping, O.editorLivePreviewField.init(() => true), O.editorInfoField.init(() => ({ file })), imageEmbeds, cmState.Prec.high(revealOnEnter), ...(app._editorExtensions ?? [])],
+				extensions: [blocks, keys, listener, EditorView.lineWrapping, O.editorLivePreviewField.init(() => true), O.editorInfoField.init(() => ({ file })), imageEmbeds, ...(app._editorExtensions ?? [])],
 			}),
 		});
 		this.editor = new CMEditor(this);
