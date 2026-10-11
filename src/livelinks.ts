@@ -72,7 +72,7 @@ function build(state: EditorState, plugin: KifuPlugin): DecorationSet {
 	if (!state.field(editorLivePreviewField, false)) return b.finish();
 	const text = state.doc.toString();
 	// (most notes have none: then nothing more is looked at)
-	if (!/online-go\.com|goproblems\.com|\.sgf/i.test(text)) return b.finish();
+	if (!/online-go\.com|goproblems\.com|\.sgf|dragongoserver\.net|foxwq\.com|questgames\.net|stone\.gs/i.test(text)) return b.finish();
 	const notePath = state.field(editorInfoField, false)?.file?.path ?? '';
 	const sel = state.selection.ranges;
 	const fenced = fencedLines(state);

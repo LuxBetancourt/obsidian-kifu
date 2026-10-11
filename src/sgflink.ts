@@ -19,12 +19,13 @@ export function isSgfLink(href: string): boolean {
 
 /**
  * The text of an SGF file: UTF-8, unless that garbles it and the file names another
- * charset (CA), as older files from Japan, Korea or China often do.
+ * charset (CA), as older files from Japan, Korea or China often do; or, for a file that
+ * names none, `fallback` (the charset a server is known to write in).
  */
-export function decodeSgf(bytes: ArrayBuffer): string {
+export function decodeSgf(bytes: ArrayBuffer, fallback = ''): string {
 	const text = new TextDecoder('utf-8').decode(bytes);
 	if (!text.includes('\ufffd')) return text;
-	const charset = /CA\[([^\]]+)\]/.exec(text)?.[1]?.trim();
+	const charset = /CA\[([^\]]+)\]/.exec(text)?.[1]?.trim() || fallback;
 	if (!charset || /^utf-?8$/i.test(charset)) return text;
 	try {
 		return new TextDecoder(charset).decode(bytes);

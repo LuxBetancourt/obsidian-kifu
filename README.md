@@ -18,7 +18,7 @@ In Obsidian open **Settings → Community plugins → Browse**, search for **Kif
 
 To install it by hand instead, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/LuxBetancourt/obsidian-kifu/releases/latest), put them in a folder `<your vault>/.obsidian/plugins/kifu/`, and switch **Kifu** on under **Settings → Community plugins** (press the refresh button next to *Installed plugins* if it is not listed).
 
-Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only for games and problems you ask for (see below): when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to one of theirs or to an SGF file elsewhere. It then fetches that one game, problem or file, and nothing else is ever sent anywhere. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
+Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only for games and problems you ask for (see below): when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to a game or problem on a Go site or to an SGF file elsewhere. It then fetches that one game, problem or file, and nothing else is ever sent anywhere. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
 
 To see everything at once, copy the two files in `demo/` into your vault and open *Kifu demo*.
 
@@ -166,7 +166,7 @@ Obsidian only lists `.sgf` files in its file explorer when **Settings → Files 
 
 ## Boards from links
 
-Embed a link to a game, review or puzzle on OGS, a problem on goproblems.com, or an SGF file anywhere on the web, the way you would embed an image:
+Embed a link to a game, review or puzzle on OGS, a problem on goproblems.com, a game on another Go server (see the list below), or an SGF file anywhere on the web, the way you would embed an image:
 
 ```markdown
 ![](https://online-go.com/game/12345)
@@ -176,6 +176,19 @@ Embed a link to a game, review or puzzle on OGS, a problem on goproblems.com, or
 ```
 
 Instead of an image you get a board, fetched from the site each time the note is shown, in the reading view and in Live Preview (put the cursor on the link to edit it). A puzzle or problem can be solved on it and a game stepped through, like any other board, but nothing is ever written: to change one, import it instead (see below) and edit the copy in your note. A link that is shown again within a few minutes is not fetched again. A link to anything else stays an ordinary embed.
+
+These links work, besides OGS and goproblems.com:
+
+| Site | Link to embed |
+| --- | --- |
+| KGS | the game's SGF file from the game archive, `https://files.gokgs.com/games/…/….sgf` |
+| Dragon Go Server | the game page, `https://www.dragongoserver.net/game.php?gid=…` |
+| Fox (野狐) | the page its "share" button makes, `https://h5.foxwq.com/yehunewshare/?chessid=…` |
+| GoQuest | the game record page, `https://kifu.questgames.net/go/…` (GoQuest keeps games for a while only) |
+| Pandanet | an SGF file it offers, such as a tournament game (ordinary games are kept in its app) |
+| Stone.gs | an OGS game it shows, `https://stone.gs/games/ogs/…` |
+
+Games on Tygem, WBaduk and PlayGo, and problems on BlackToPlay and 101weiqi, can not be shown: these sites offer no record that can be fetched without signing in, or their terms forbid it.
 
 An SGF file can be on a server of your own: any `http` or `https` link whose path ends in `.sgf` works (a query after it, such as an access key, is fine). It is treated like an SGF file in your vault: a problem is judged as one, a game record opens at its last move, and a file in an older charset (`CA`, such as Shift_JIS) is read in it. A server that asks you to sign in can not be used, since the plugin has no way to sign in.
 
@@ -205,7 +218,7 @@ goproblems.com marks a correct line by ending its comment with RIGHT. On import 
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 
-**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to one of theirs or to an SGF file. Each time it asks one place (`online-go.com`, `goproblems.com`, or the address of the SGF file you linked) for that one game, problem or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one).
+**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to one (on those sites, the other Go servers listed above, or an SGF file anywhere). Each time it asks one place (the site the link is to, or for a Stone.gs link OGS) for that one game, problem or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one).
 
 ## The move tree panel
 

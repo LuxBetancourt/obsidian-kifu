@@ -932,6 +932,39 @@ await scenario('an embedded link to an SGF file anywhere is drawn as a board', {
 	assert.match(await cap(page, 0), /^Correct/);
 });
 
+await scenario('embedded links to games on Dragon Go Server, Fox, GoQuest and Stone.gs', {
+	// (the reading view first makes each link an image, which the browser tries to load)
+	allowErrors: /Failed to load resource/,
+	files: { 'G.md': [
+		'![](https://www.dragongoserver.net/game.php?gid=77)',
+		'![](https://h5.foxwq.com/yehunewshare/?chessid=1791604708010001161&title=x)',
+		'![](https://kifu.questgames.net/go/abcdef123456)',
+		'![](https://stone.gs/games/ogs/9)',
+		'![](https://kifu.questgames.net/go/expired00000)',
+	].join('\n\n') + '\n' },
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://www.dragongoserver.net/sgf.php?gid=77'] = { status: 200, text: '(;FF[4]GM[1]SZ[9]PB[a]PW[b];B[ee];W[cc])' };
+		requestUrl.answers['https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess?chessid=1791604708010001161'] = { status: 200, text: JSON.stringify({ result: 0, chess: '(;GM[1]SZ[9]KM[375]HA[2];AB[cc][gg];W[ee])' }) };
+		requestUrl.answers['https://kifu.questgames.net/game/abcdef123456.json'] = { status: 200, json: { players: [{ name: 'A' }, { name: 'B' }], position: { size: 9, moves: [{ m: 'B[ee]' }, { m: 'W[ce]' }, { s: 'LOSE:RESIGN' }] } } };
+		requestUrl.answers['https://kifu.questgames.net/game/expired00000.json'] = { status: 200, json: { error: 'Game not found' } };
+		requestUrl.answers['https://online-go.com/api/v1/games/9/sgf'] = { status: 200, text: '(;FF[4]GM[1]SZ[9];B[ee];W[cc];B[gg])' };
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('G.md', 'preview'));
+	});
+	await sleep(400);
+	assert.equal(await page.locator('.kifu-svg').count(), 4);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 }); // DGS
+	assert.deepEqual(await stones(page, 1), { black: 2, white: 1 }); // Fox: the handicap stones, then White's move
+	assert.deepEqual(await stones(page, 2), { black: 1, white: 1 }); // GoQuest
+	assert.deepEqual(await stones(page, 3), { black: 2, white: 1 }); // Stone.gs: the OGS game
+	assert.match(await page.locator('.kifu-linked-msg.is-error').textContent(), /GoQuest has no game expired00000 any more/);
+	const urls = await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url));
+	assert.ok(urls.includes('https://online-go.com/api/v1/games/9/sgf')); // (Stone.gs: asked of OGS)
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

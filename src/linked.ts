@@ -11,14 +11,26 @@ import { ImportError } from './importing';
 import { OgsTarget, ogsPage, ogsTarget } from './ogs';
 import { Session } from './session';
 import { isSgfLink } from './sgflink';
+import { ServerTarget, serverTarget } from './servers';
 import { BoardView } from './ui/boardview';
 
-export type LinkTarget = { site: 'ogs'; ogs: OgsTarget; url: string } | { site: 'goproblems'; id: number; url: string } | { site: 'sgf'; url: string };
+export type LinkTarget =
+	| { site: 'ogs'; ogs: OgsTarget; url: string }
+	| { site: 'goproblems'; id: number; url: string }
+	| { site: 'server'; server: ServerTarget; url: string }
+	| { site: 'sgf'; url: string };
 
 /** The game or problem a link is to, when it is one a board can be drawn from. */
 export function linkTarget(href: string): LinkTarget | null {
 	const s = href.trim();
 	if (!/^https?:\/\//i.test(s)) return null;
+	// other Go servers: Dragon Go Server, Fox, GoQuest, and OGS games as Stone.gs shows them
+	const other = serverTarget(s);
+	if (other?.server === 'stonegs-ogs') {
+		const ogs: OgsTarget = { kind: 'game', id: other.ogsId };
+		return { site: 'ogs', ogs, url: ogsPage(ogs) };
+	}
+	if (other) return { site: 'server', server: other, url: other.url };
 	// an SGF file anywhere (a file server of one's own, say)
 	if (isSgfLink(s)) return { site: 'sgf', url: s };
 	if (/^https?:\/\/(www\.)?online-go\.com\//i.test(s)) {

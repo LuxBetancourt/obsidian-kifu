@@ -484,7 +484,12 @@ body .kifu-panel button.kifu-btn {
 .markdown-source-view img[src*="goproblems.com/problems/"],
 .markdown-source-view img[src$=".sgf"],
 .markdown-source-view img[src*=".sgf?"],
-.markdown-source-view img[src*=".sgf#"] {
+.markdown-source-view img[src*=".sgf#"],
+.markdown-source-view img[src*="dragongoserver.net/game.php"],
+.markdown-source-view img[src*="dragongoserver.net/sgf.php"],
+.markdown-source-view img[src*="h5.foxwq.com/"],
+.markdown-source-view img[src*="kifu.questgames.net/go/"],
+.markdown-source-view img[src*="stone.gs/games/ogs/"] {
 	display: none;
 }
 

@@ -23,6 +23,7 @@ import { Fetched, ImportError } from './importing';
 import { LinkTarget, LinkedBoard, linkTarget } from './linked';
 import { linkedBoards } from './livelinks';
 import { readSgfLink } from './sgflink';
+import { ServerTarget, readDgs, readFox, readGoQuest } from './servers';
 import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
@@ -218,6 +219,20 @@ export default class KifuPlugin extends Plugin implements Host {
 		return readSgfLink(url, answer.status, () => answer.arrayBuffer);
 	}
 
+	/** Fetch a game from Dragon Go Server, Fox or GoQuest. */
+	async #getServerGame(t: ServerTarget): Promise<string> {
+		let res;
+		try {
+			res = await requestUrl({ url: t.api, throw: false });
+		} catch {
+			throw new ImportError(`could not reach ${new URL(t.api).host}. Are you online?`);
+		}
+		const answer = res;
+		if (t.server === 'dgs') return readDgs(t, answer.status, () => answer.arrayBuffer);
+		if (t.server === 'fox') return readFox(t, answer.status, () => answer.text);
+		return readGoQuest(t, answer.status, () => answer.text);
+	}
+
 	/** Ask OGS for a game, review or puzzle. */
 	async #getOgs(t: OgsTarget): Promise<Fetched> {
 		let res;
@@ -242,6 +257,7 @@ export default class KifuPlugin extends Plugin implements Host {
 		const body = (async () => {
 			if (t.site === 'goproblems') return 'problem: yes\n' + (await this.#getProblem(t.id)).sgf;
 			if (t.site === 'sgf') return this.#getSgfFile(t.url);
+			if (t.site === 'server') return this.#getServerGame(t.server);
 			const { sgf } = await this.#getOgs(t.ogs);
 			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
 		})();
