@@ -86,8 +86,9 @@ function build(state: EditorState, plugin: KifuPlugin): DecorationSet {
 		if (fenced.has(line.number)) continue;
 		// inside inline code: an odd number of backticks before it on its line
 		if (((line.text.slice(0, start - line.from).match(/`/g) ?? []).length & 1) === 1) continue;
-		// the cursor on it: shown as text, to be edited
-		if (sel.some((r) => r.from <= end && r.to >= start)) continue;
+		// The cursor inside it: shown as text, to be edited. Only inside: at either end
+		// Obsidian keeps drawing it as an image (a broken one), so the board stays.
+		if (sel.some((r) => r.from < end && r.to > start)) continue;
 		b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath) }));
 	}
 	return b.finish();

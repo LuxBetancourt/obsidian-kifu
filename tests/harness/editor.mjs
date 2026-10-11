@@ -805,10 +805,21 @@ await scenario('embedded links in Live Preview: a board, the link again under th
 	assert.equal(await boards(), 1); // the one embed; the two in code are left alone
 	// (the board, not Obsidian's image of the link: the stand-in draws one, as Obsidian does)
 	assert.equal(await page.locator('.lp-image-embed[src="https://online-go.com/puzzle/2"]').count(), 0);
-	// the cursor on the link: it is text again
-	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 8 } }); });
+	const cursorAt = (pos) => page.evaluate((pos) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: pos } }); }, pos);
+	const link = '![](https://online-go.com/puzzle/2)';
+	// the cursor at the end of the link (a click at the end of the line): the board stays,
+	// where Obsidian would draw a broken image
+	await cursorAt(5 + link.length);
+	await sleep(100);
+	assert.equal(await boards(), 1);
+	// the cursor in the link: it is text again, and Obsidian's image of it is not shown
+	await cursorAt(8);
 	await sleep(100);
 	assert.equal(await boards(), 0);
+	assert.ok((await page.evaluate(() => document.querySelectorAll('.cm-line')[2].textContent)).includes(link));
+	const img = page.locator('.lp-image-embed[src="https://online-go.com/puzzle/2"]');
+	assert.equal(await img.count(), 1); // (the stand-in draws it after the text, as Obsidian does)
+	assert.equal(await img.evaluate((e) => getComputedStyle(e).display), 'none');
 	// away from it: the board again
 	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 0 } }); });
 	await sleep(200);

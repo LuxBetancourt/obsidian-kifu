@@ -475,6 +475,16 @@ body .kifu-panel button.kifu-btn {
 	border-color: var(--text-muted);
 }
 
+/* With the cursor in a link to a game or problem, Obsidian shows the link as text and
+   still tries to draw it as an image, which these pages never are: no broken image. */
+.markdown-source-view img[src*="online-go.com/game/"],
+.markdown-source-view img[src*="online-go.com/review/"],
+.markdown-source-view img[src*="online-go.com/demo/"],
+.markdown-source-view img[src*="online-go.com/puzzle/"],
+.markdown-source-view img[src*="goproblems.com/problems/"] {
+	display: none;
+}
+
 /* a board drawn from a link: what is said while it is fetched, or why it is not there */
 .kifu-linked-msg {
 	margin: 0.5em 0;
