@@ -44,8 +44,12 @@ function checkStatus(t: OgsTarget, status: number): void {
 	if (status !== 200) throw new ImportError(`OGS answered ${status} for ${named(t)}.`);
 }
 
-/** **bold** and __bold__ as plain words (puzzle descriptions are written in Markdown). */
-const plain = (s: string): string => s.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').trim();
+/**
+ * **bold**, __bold__ and headings (`#### Correct!`) as plain words: puzzle texts are
+ * written in Markdown.
+ */
+const plain = (s: string): string =>
+	s.replace(/^[ \t]*#{1,6}[ \t]*/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').trim();
 
 /* ------------------------------------------------------------- games, reviews */
 

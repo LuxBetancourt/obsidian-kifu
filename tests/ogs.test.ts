@@ -53,7 +53,7 @@ test('a puzzle turned into SGF: setup, turns, verdicts, comments, marks, the mai
 		move_tree: {
 			x: -1, y: -1,
 			marks: [{ x: 3, y: 3, marks: { triangle: true } }],
-			trunk_next: { x: 4, y: 4, text: 'the main line', branches: [{ x: 5, y: 5, correct_answer: true }] },
+			trunk_next: { x: 4, y: 4, text: '####the main line', branches: [{ x: 5, y: 5, correct_answer: true }] },
 			branches: [
 				{ x: 0, y: 8, branches: [{ x: 1, y: 8, wrong_answer: true, text: 'dead', marks: [{ x: 2, y: 8, marks: { letter: 'A', cross: true } }] }] },
 			],
@@ -70,7 +70,7 @@ test('a puzzle turned into SGF: setup, turns, verdicts, comments, marks, the mai
 	assert.deepEqual(root.props.TR, ['dd']);
 	const [main, side] = root.children;
 	assert.deepEqual(main.props.W, ['ee']); // white moves first; the trunk is the first line
-	assert.equal(getText(main, 'C'), 'the main line');
+	assert.equal(getText(main, 'C'), 'the main line'); // (and a Markdown heading)
 	assert.deepEqual(main.children[0].props.B, ['ff']);
 	assert.deepEqual(main.children[0].props.TE, ['1']);
 	assert.deepEqual(side.props.W, ['ai']);
