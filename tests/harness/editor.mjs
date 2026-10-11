@@ -805,25 +805,43 @@ await scenario('embedded links in Live Preview: a board, the link again under th
 	assert.equal(await boards(), 1); // the one embed; the two in code are left alone
 	// (the board, not Obsidian's image of the link: the stand-in draws one, as Obsidian does)
 	assert.equal(await page.locator('.lp-image-embed[src="https://online-go.com/puzzle/2"]').count(), 0);
-	const cursorAt = (pos) => page.evaluate((pos) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: pos } }); }, pos);
+	const cursorAt = (pos) => page.evaluate((pos) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.focus(); v.cm.dispatch({ selection: { anchor: pos } }); }, pos);
 	const link = '![](https://online-go.com/puzzle/2)';
-	// the cursor at the end of the link (a click at the end of the line): the board stays,
-	// where Obsidian would draw a broken image
+	const selected = () => page.locator('.kifu-linked-embed.is-selected').count();
+	const board = await page.evaluateHandle(() => document.querySelector('.kifu-linked-embed'));
+	// the cursor at the end of the link (a click at the end of the line, or up or down onto
+	// its line): the board stays, marked as selected, where Obsidian would draw a broken image
 	await cursorAt(5 + link.length);
 	await sleep(100);
 	assert.equal(await boards(), 1);
-	// the cursor in the link: it is text again, and Obsidian's image of it is not shown
+	assert.equal(await selected(), 1);
+	// arrowed into it: still the board, selected, as an embedded image is
 	await cursorAt(8);
 	await sleep(100);
+	assert.equal(await boards(), 1);
+	assert.equal(await selected(), 1);
+	assert.equal(await page.evaluate((el) => el.isConnected, board), true); // (the same board, not a new one)
+	// Enter: the link as text, to edit; Obsidian's image of it not shown; nothing typed
+	const unedited = await doc(page);
+	await page.keyboard.press('Enter');
+	await sleep(100);
 	assert.equal(await boards(), 0);
+	assert.equal(await doc(page), unedited);
 	assert.ok((await page.evaluate(() => document.querySelectorAll('.cm-line')[2].textContent)).includes(link));
 	const img = page.locator('.lp-image-embed[src="https://online-go.com/puzzle/2"]');
 	assert.equal(await img.count(), 1); // (the stand-in draws it after the text, as Obsidian does)
 	assert.equal(await img.evaluate((e) => getComputedStyle(e).display), 'none');
+	// typing in it edits the link, still shown as text
+	await page.keyboard.type('x');
+	await sleep(100);
+	assert.equal(await boards(), 0);
+	await page.keyboard.press('Backspace');
+	await sleep(100);
 	// away from it: the board again
 	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 0 } }); });
 	await sleep(200);
 	assert.equal(await boards(), 1);
+	assert.equal(await selected(), 0);
 	// typing elsewhere keeps the board as it is, without asking the site again
 	const before = await page.evaluate(() => window.__obsidian.requestUrl.log.length);
 	const kept = await page.evaluateHandle(() => document.querySelector('.kifu-linked-embed'));
