@@ -64,5 +64,39 @@ const browser = await chromium.launch();
 	await page.context().close();
 }
 
+// 4. A base shown as Kifu boards: problems with their level, a numbered opening, a game.
+{
+	const files = {
+		'Corner kill.md': '---\nlevel: 15k\ntopic: life and death\n---\n```kifu\n(;GM[1]SZ[19]AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]C[Black to play and kill.](;B[ra];W[qa];B[sa]))\n```\n',
+		'Net.md': '---\nlevel: 20k\ntopic: tesuji\n---\n```kifu\n(;GM[1]SZ[9]AB[cd][dc][ec][fd][fe]AW[dd][de][ed][ee];B[cf]C[A net catches the cutting stones.])\n```\n',
+		'Under the stones.md': '---\nlevel: 3d\ntopic: tesuji\n---\n```kifu\nview: bottom-left 7x6\n(;GM[1]SZ[19]AB[ap][bp][cp][dq][dr]AW[aq][bq][cq][cr][ds];B[br];W[bs];B[ar])\n```\n',
+		'Chinese opening.md': '---\nlevel: \ntopic: opening\n---\n```kifu\nnumbers: on\n(;GM[1]SZ[19];B[pd];W[dp];B[qp];W[dd];B[ip])\n```\n',
+	};
+	const { page, errors } = await open(browser, { scale: 2, width: 1060, height: 560, files, panes: [] });
+	await page.evaluate(() => {
+		const h = window.harness;
+		const v = h.app.vault;
+		const fm = (path, key) => (/^---\n([\s\S]*?)\n---/.exec(v.files.get(path).data)?.[1].match(new RegExp('^' + key + ': (.*)$', 'm'))?.[1] ?? '').trim();
+		const value = (t) => ({ isTruthy: () => !!t, toString: () => t, renderTo: (el) => { el.textContent = t; } });
+		const entries = ['Corner kill.md', 'Net.md', 'Under the stones.md', 'Chinese opening.md'].map((path) => ({
+			file: v.getAbstractFileByPath(path),
+			getValue: (p) => value(fm(path, p.replace(/^note\./, ''))),
+		}));
+		const config = { get: (k) => (k === 'boardScale' ? 60 : true), getOrder: () => ['file.name', 'note.level', 'note.topic'], getDisplayName: (p) => p.replace(/^note\./, '') };
+		const host = document.createElement('div');
+		host.style.cssText = 'width: 1020px; margin: 20px';
+		document.body.innerHTML = '';
+		document.body.appendChild(host);
+		const view = h.app._basesViews.get('kifu-boards').factory({ app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } }, host);
+		view.load();
+		view.onDataUpdated();
+	});
+	await sleep(600);
+	const box = await page.locator('.kifu-bases').boundingBox();
+	await page.screenshot({ path: path.join(docs, 'bases.png'), clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
+	if (errors.length) console.log('bases', errors);
+	await page.context().close();
+}
+
 await browser.close();
 console.log('docs pictures written');
