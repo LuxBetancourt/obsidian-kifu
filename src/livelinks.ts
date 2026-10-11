@@ -4,8 +4,8 @@
  * link shows as text again, to be edited.
  */
 
-import { Extension, Prec, RangeSetBuilder } from '@codemirror/state';
-import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
+import { EditorState, Extension, Prec, RangeSetBuilder, StateField } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import { editorInfoField, editorLivePreviewField } from 'obsidian';
 import type KifuPlugin from './main';
 import { LinkTarget, LinkedBoard, linkTarget } from './linked';
@@ -49,13 +49,12 @@ class LinkWidget extends WidgetType {
 }
 
 /** Lines inside fenced code (``` or ~~~): a link there is code, not an embed. */
-function fencedLines(view: EditorView, upTo: number): Set<number> {
+function fencedLines(state: EditorState): Set<number> {
 	const inside = new Set<number>();
-	const doc = view.state.doc;
+	const doc = state.doc;
 	let fence: string | null = null;
 	for (let n = 1; n <= doc.lines; n++) {
 		const line = doc.line(n);
-		if (line.from > upTo) break;
 		const m = /^\s{0,3}(`{3,}|~{3,})/.exec(line.text);
 		if (fence) {
 			inside.add(n);
@@ -68,49 +67,43 @@ function fencedLines(view: EditorView, upTo: number): Set<number> {
 	return inside;
 }
 
-function build(view: EditorView, plugin: KifuPlugin): DecorationSet {
+function build(state: EditorState, plugin: KifuPlugin): DecorationSet {
 	const b = new RangeSetBuilder<Decoration>();
-	if (!view.state.field(editorLivePreviewField, false)) return b.finish();
-	const notePath = view.state.field(editorInfoField, false)?.file?.path ?? '';
-	const sel = view.state.selection.ranges;
-	const last = view.visibleRanges.length ? view.visibleRanges[view.visibleRanges.length - 1].to : 0;
-	const fenced = fencedLines(view, last);
-	for (const { from, to } of view.visibleRanges) {
-		const text = view.state.doc.sliceString(from, to);
-		EMBED.lastIndex = 0;
-		for (let m: RegExpExecArray | null; (m = EMBED.exec(text)); ) {
-			const start = from + m.index;
-			const end = start + m[0].length;
-			const t = linkTarget(m[1]);
-			if (!t) continue;
-			const line = view.state.doc.lineAt(start);
-			if (fenced.has(line.number)) continue;
-			// inside inline code: an odd number of backticks before it on its line
-			if (((line.text.slice(0, start - line.from).match(/`/g) ?? []).length & 1) === 1) continue;
-			// the cursor on it: shown as text, to be edited
-			if (sel.some((r) => r.from <= end && r.to >= start)) continue;
-			b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath) }));
-		}
+	if (!state.field(editorLivePreviewField, false)) return b.finish();
+	const text = state.doc.toString();
+	// (most notes have none: then nothing more is looked at)
+	if (!/online-go\.com|goproblems\.com/i.test(text)) return b.finish();
+	const notePath = state.field(editorInfoField, false)?.file?.path ?? '';
+	const sel = state.selection.ranges;
+	const fenced = fencedLines(state);
+	EMBED.lastIndex = 0;
+	for (let m: RegExpExecArray | null; (m = EMBED.exec(text)); ) {
+		const start = m.index;
+		const end = start + m[0].length;
+		const t = linkTarget(m[1]);
+		if (!t) continue;
+		const line = state.doc.lineAt(start);
+		if (fenced.has(line.number)) continue;
+		// inside inline code: an odd number of backticks before it on its line
+		if (((line.text.slice(0, start - line.from).match(/`/g) ?? []).length & 1) === 1) continue;
+		// the cursor on it: shown as text, to be edited
+		if (sel.some((r) => r.from <= end && r.to >= start)) continue;
+		b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath) }));
 	}
 	return b.finish();
 }
 
-/** The editor extension, ahead of Obsidian's own drawing of an embedded image. */
+/**
+ * The editor extension. The boards come from a state field, not a view plugin: the
+ * editor ranks decorations from fields above those from plugins, whatever their
+ * precedence, and Obsidian draws its embedded images from a field. Ours goes ahead of it.
+ */
 export function linkedBoards(plugin: KifuPlugin): Extension {
-	return Prec.highest(
-		ViewPlugin.fromClass(
-			class {
-				decorations: DecorationSet;
-				constructor(view: EditorView) {
-					this.decorations = build(view, plugin);
-				}
-				update(u: ViewUpdate): void {
-					if (u.docChanged || u.viewportChanged || u.selectionSet || u.startState.field(editorLivePreviewField, false) !== u.state.field(editorLivePreviewField, false)) {
-						this.decorations = build(u.view, plugin);
-					}
-				}
-			},
-			{ decorations: (v) => v.decorations },
-		),
-	);
+	const field = StateField.define<DecorationSet>({
+		create: (state) => build(state, plugin),
+		update: (deco, tr) =>
+			tr.docChanged || tr.selection || tr.startState.field(editorLivePreviewField, false) !== tr.state.field(editorLivePreviewField, false) ? build(tr.state, plugin) : deco,
+		provide: (f) => EditorView.decorations.from(f),
+	});
+	return Prec.highest(field);
 }

@@ -19,6 +19,39 @@ const O = window.__obsidian;
 // Obsidian answers them with its own (see loadPlugin in index.html).
 window.__cm = { '@codemirror/state': cmState, '@codemirror/view': cmView };
 
+// Like Obsidian, which draws ![](link) as an image from a state field of its own: a
+// plugin that draws something else in its place has to win against it.
+class ImageEmbed extends WidgetType {
+	constructor(readonly url: string) {
+		super();
+	}
+	eq(o: ImageEmbed): boolean {
+		return o.url === this.url;
+	}
+	toDOM(): HTMLElement {
+		const img = document.createElement('img');
+		img.className = 'lp-image-embed';
+		img.setAttribute('src', this.url);
+		return img;
+	}
+}
+const imageEmbeds = StateField.define<DecorationSet>({
+	create: (state) => images(state),
+	update: (deco, tr) => (tr.docChanged || tr.selection ? images(tr.state) : deco),
+	provide: (f) => EditorView.decorations.from(f),
+});
+function images(state: EditorState): DecorationSet {
+	const text = state.doc.toString();
+	const out = [];
+	for (const m of text.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)) {
+		const from = m.index ?? 0;
+		const to = from + m[0].length;
+		if (state.selection.ranges.some((r) => r.from <= to && r.to >= from)) continue;
+		out.push(Decoration.replace({ widget: new ImageEmbed(m[1]) }).range(from, to));
+	}
+	return Decoration.set(out);
+}
+
 // Obsidian's editor fields: is this pane Live Preview, and which file is it.
 O.editorLivePreviewField = StateField.define<boolean>({ create: () => true, update: (v) => v });
 O.editorInfoField = StateField.define<{ file: unknown } | null>({ create: () => null, update: (v) => v });
@@ -340,7 +373,8 @@ export class CMMarkdownView extends O.ItemView {
 			parent: this.contentEl,
 			state: EditorState.create({
 				doc: app.vault.files.get(file.path).data,
-				extensions: [blocks, keys, listener, EditorView.lineWrapping, O.editorLivePreviewField.init(() => true), O.editorInfoField.init(() => ({ file })), ...(app._editorExtensions ?? [])],
+				// (Obsidian's own extensions first, the plugins' after them, as in Obsidian)
+				extensions: [blocks, keys, listener, EditorView.lineWrapping, O.editorLivePreviewField.init(() => true), O.editorInfoField.init(() => ({ file })), imageEmbeds, ...(app._editorExtensions ?? [])],
 			}),
 		});
 		this.editor = new CMEditor(this);

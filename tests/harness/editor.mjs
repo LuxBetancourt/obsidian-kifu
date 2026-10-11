@@ -803,6 +803,8 @@ await scenario('embedded links in Live Preview: a board, the link again under th
 	await sleep(300);
 	const boards = () => page.locator('.kifu-linked-embed .kifu-svg').count();
 	assert.equal(await boards(), 1); // the one embed; the two in code are left alone
+	// (the board, not Obsidian's image of the link: the stand-in draws one, as Obsidian does)
+	assert.equal(await page.locator('.lp-image-embed[src="https://online-go.com/puzzle/2"]').count(), 0);
 	// the cursor on the link: it is text again
 	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 8 } }); });
 	await sleep(100);
