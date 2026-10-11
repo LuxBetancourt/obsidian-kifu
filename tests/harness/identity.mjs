@@ -23,8 +23,13 @@ const readingPane = (page, path, noLines = false) =>
 	page.evaluate(([path, noLines]) => {
 		const h = window.harness;
 		h.app._noSectionInfo = noLines;
-		h.views.push(h.app.workspace._open(path, 'preview'));
+		h.views.push(h.app.workspace._open(path, 'source'));
 	}, [path, noLines]);
+/** Close the nth pane (as with its tab), and open the note again in a new one. */
+const closePane = (page, i = 0) =>
+	page.evaluate((i) => { const h = window.harness; h.app.workspace._leaves.find((l) => l.view === h.views[i]).detach(); h.views.splice(i, 1); }, i);
+const reopen = (page, path) =>
+	page.evaluate((path) => { const h = window.harness; h.views.push(h.app.workspace._open(path, 'source')); }, path);
 /** The first write to the note fails, as when a sync program has the file locked. */
 const failOnce = (page) =>
 	page.evaluate(() => {
@@ -136,46 +141,12 @@ for (const wait of [5600, 300]) {
 	});
 }
 
-/* A renderer that puts new sections on the page a little after it made them: the board that is
-   asked where it stands must be asked again once it is there. */
-await scenario('a reading view whose sections reach the page 30 ms late: a copy of a block that was just written', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, height: 1400 }, async (page) => {
-	await page.evaluate(() => {
-		const r = window.harness.views[0].renderer;
-		const make = r.make.bind(r);
-		r.make = (sec) => {
-			const x = make(sec);
-			if (sec.type !== 'code') return x;
-			const real = x.el;
-			x.el = document.createElement('div');
-			setTimeout(() => x.el.appendChild(real), 30);
-			return x;
-		};
-	});
-	await toggleLock(page);
-	await tool(page, 'Black stone').click();
-	await clickPoint(page, 0, 'ee');
-	await sleep(700);
-	assert.equal(blocks(await text(page, 'N.md'))[0], '(;SZ[9]AB[cc][ee])');
-	assert.deepEqual(await isEditing(page), [true]);
-	// a copy of the block arrives at the end of the note (another program; a paste would do the same)
-	await page.evaluate(() => {
-		const v = window.harness.app.vault;
-		return v.modify(v.getAbstractFileByPath('N.md'), v.files.get('N.md').data + '\n```kifu\n(;SZ[9]AB[cc][ee])\n```\n');
-	});
-	await sleep(300);
-	assert.deepEqual(await isEditing(page), [true, false]);
-	await focusBoard(page, 1);
-	await page.keyboard.press('Control+z');
-	await sleep(700);
-	assert.deepEqual(blocks(await text(page, 'N.md')), ['(;SZ[9]AB[cc][ee])', '(;SZ[9]AB[cc][ee])']);
-});
-
 /* ------------------------------------------------- a renderer that keeps drawings by their text */
 
 /* Three boards that read the same. When the first is written, such a renderer gives every later
    twin the drawing of the twin before it: a drawing with an edit not yet written is moved on. */
 const THREE = note(X, X, X);
-for (const mode of ['preview', 'source']) {
+for (const mode of ['source']) {
 	await scenario(`three identical boards (${mode}): a stone on the first, then one on the second before the first is written`, { files: { 'T.md': THREE }, panes: [{ path: 'T.md', mode }], autosave: 100, height: 1900 }, async (page) => {
 		await toggleLock(page, 0);
 		await toggleLock(page, 1);
@@ -190,7 +161,7 @@ for (const mode of ['preview', 'source']) {
 	});
 }
 
-await scenario('three identical boards: the second is unlocked, then the first is edited', { files: { 'T.md': THREE }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1900 }, async (page) => {
+await scenario('three identical boards: the second is unlocked, then the first is edited', { files: { 'T.md': THREE }, panes: [{ path: 'T.md', mode: 'source' }], autosave: 100, height: 1900 }, async (page) => {
 	await toggleLock(page, 1);
 	assert.deepEqual(await isEditing(page), [false, true, false]);
 	await toggleLock(page, 0);
@@ -206,65 +177,6 @@ await scenario('three identical boards: the second is unlocked, then the first i
 
 const lagging = { live: ['T.md'], autosave: 60000, lagReading: true, width: 1700, height: 1500 };
 
-/* The count of blocks reading a text is no witness: one block stops reading it, another starts to. */
-for (const lines of ['with', 'WITHOUT']) {
-	await scenario(`a pane that is behind, ${lines} line numbers: block 0 is edited, block 1 made to read what block 0 read, then the stale board of block 0 is used`, { files: { 'T.md': note(X, Y) }, ...lagging }, async (page) => {
-		await readingPane(page, 'T.md', lines === 'WITHOUT');
-		await sleep(100);
-		assert.equal(await boardCount(page), 4); // 0, 1: the editor; 2, 3: the reading pane
-		// editor, block 1: the stone at dd comes off, so that it reads X
-		await toggleLock(page, 1);
-		await tool(page, 'Eraser', 0).click();
-		await clickPoint(page, 1, 'dd');
-		await sleep(700);
-		// editor, block 0: a stone at ee
-		await toggleLock(page, 0);
-		await tool(page, 'Black stone', 0).click();
-		await clickPoint(page, 0, 'ee');
-		await sleep(700);
-		assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', X]);
-		// the reading pane has seen none of this. Its board of block 0 (which shows X): unlock, a stone
-		assert.deepEqual([await stones(page, 2), await stones(page, 3)].map((s) => s.black), [1, 2]);
-		await toggleLock(page, 2);
-		await tool(page, 'Black stone', 2).click();
-		await clickPoint(page, 2, 'gg');
-		await sleep(900);
-		// refused, and said so: block 1 is the one that reads X now, and it is not that board's block
-		assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', X]);
-		assert.equal((await notices(page)).length, 1);
-	});
-}
-
-await scenario('a pane that is behind: twins; inside one lag block 0 is edited and block 1 goes back to what it read; then the stale board of block 0 is used', { files: { 'T.md': note(X, X) }, ...lagging }, async (page) => {
-	await readingPane(page, 'T.md');
-	await sleep(100);
-	// editor, block 1: a stone at dd; then the note is saved and the reading pane catches up
-	await toggleLock(page, 1);
-	await tool(page, 'Black stone', 0).click();
-	await clickPoint(page, 1, 'dd');
-	await sleep(700);
-	await page.evaluate(() => window.harness.views[0].save());
-	await sleep(200);
-	assert.deepEqual(blocks(await text(page, 'T.md')), [X, Y]);
-	assert.deepEqual([await stones(page, 2), await stones(page, 3)].map((s) => s.black), [1, 2]);
-	// inside one lag: block 0 gets ee, and block 1's board undoes its stone
-	await toggleLock(page, 0);
-	await tool(page, 'Black stone', 0).click();
-	await clickPoint(page, 0, 'ee');
-	await sleep(700);
-	await focusBoard(page, 1);
-	await page.keyboard.press('Control+z');
-	await sleep(700);
-	assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', X]);
-	// the reading pane still shows block 0 as X: that board is used
-	if (!(await isEditing(page))[2]) await toggleLock(page, 2);
-	await tool(page, 'White stone', 2).click();
-	await clickPoint(page, 2, 'gg');
-	await sleep(900);
-	assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', X]);
-	assert.equal((await notices(page)).length, 1);
-});
-
 /* The note gains a block while an edit is waiting: every place after it moves on by one. */
 await scenario('a block is typed in above while a board has an edit waiting (live preview)', { files: { 'N.md': note(X, X) }, live: ['N.md'], autosave: 150, height: 1600 }, async (page) => {
 	await toggleLock(page, 1);
@@ -276,57 +188,6 @@ await scenario('a block is typed in above while a board has an edit waiting (liv
 	// the board is still on its block, and says so: the stone goes where it was put
 	assert.deepEqual(blocks(await doc(page)), ['size: 9', X, '(;SZ[9]AB[cc][ee])']);
 	assert.deepEqual(await notices(page), []);
-});
-
-await scenario('a pane that is behind: a block is added in the editor, and a board of the reading pane is edited before the pane has seen it', { files: { 'T.md': note(X, Y) }, ...lagging }, async (page) => {
-	await readingPane(page, 'T.md');
-	await sleep(100);
-	await toggleLock(page, 3); // the reading pane's board of the second block
-	await page.evaluate(() => {
-		const ed = window.harness.views[0].editor;
-		ed.replaceRange('```kifu\nsize: 9\n```\n\n', { line: 0, ch: 0 });
-		ed.setCursor({ line: ed.lineCount() - 1, ch: 0 }); // (out of the new block, so that its board is drawn)
-	});
-	await sleep(150);
-	assert.equal(await boardCount(page), 5); // three in the editor now, still two in the reading pane
-	await tool(page, 'Black stone').click();
-	await clickPoint(page, 4, 'gg');
-	await sleep(900);
-	// The pane counts two blocks, the note has three. But everything from the board's block
-	// on reads as it did, so the block is the same one, one further down.
-	assert.deepEqual(blocks(await doc(page)), ['size: 9', X, '(;SZ[9]AB[cc][dd][gg])']);
-	assert.deepEqual(await notices(page), []);
-});
-
-/* An edit that was refused is over. It must not travel on with its drawing. */
-await scenario("a stale board's edit is refused; the pane catches up and its drawing lands on the twin; one more stone there", { files: { 'T.md': note(X, X) }, ...lagging }, async (page) => {
-	await readingPane(page, 'T.md');
-	await sleep(100);
-	// editor: the first block gets a stone
-	await toggleLock(page, 0);
-	await tool(page, 'Black stone', 0).click();
-	await clickPoint(page, 0, 'ee');
-	await sleep(700);
-	assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', X]);
-	// reading pane (which has seen none of it): a white stone on ITS board of the first block
-	await toggleLock(page, 2);
-	await tool(page, 'White stone', 1).click();
-	await clickPoint(page, 2, 'gg');
-	await sleep(700);
-	assert.equal((await notices(page)).length, 1);
-	assert.match((await notices(page))[0], /changed or removed|no longer certain/);
-	// ...and the board stops showing it: it is back to what it was drawn from, and locked
-	assert.deepEqual([await stones(page, 2), (await isEditing(page))[2]], [{ black: 1, white: 0 }, false]);
-	// the note is saved; the reading pane follows
-	await page.evaluate(() => window.harness.views[0].save());
-	await sleep(300);
-	assert.deepEqual([await stones(page, 2), await stones(page, 3)], [{ black: 2, white: 0 }, { black: 1, white: 0 }]);
-	// the second board of the reading pane: one stone
-	if (!(await isEditing(page))[3]) await toggleLock(page, 3);
-	await tool(page, 'Black stone', (await isEditing(page)).slice(0, 3).filter(Boolean).length).click();
-	await clickPoint(page, 3, 'aa');
-	await sleep(900);
-	assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[cc][ee])', '(;SZ[9]AB[cc][aa])']);
 });
 
 /* ------------------------------------------------- the note is rearranged while a board is in use */
@@ -450,7 +311,7 @@ await scenario('a comment is typed in the panel for a board out of sight while a
 
 for (const reuse of ['ends', 'pool']) {
 	await scenario(`no line numbers, a board with text of its own: a block is added elsewhere after the board's first write [renderer keeps drawings: ${reuse}]`, { files: { 'T.md': note(X, P) }, panes: [], autosave: 100, height: 1700, reuse }, async (page) => {
-		await page.evaluate(() => { const h = window.harness; h.app._noSectionInfo = true; h.views = [h.app.workspace._open('T.md', 'preview')]; });
+		await page.evaluate(() => { const h = window.harness; h.app._noSectionInfo = true; h.views = [h.app.workspace._open('T.md', 'source')]; });
 		await sleep(60);
 		await toggleLock(page, 0);
 		await tool(page, 'Black stone').click();
@@ -474,15 +335,17 @@ for (const reuse of ['ends', 'pool']) {
 /* A sync delivers the note with its identical blocks in another order while a write is being
    tried again. Which block is "the same one" is not a question the text can answer; what has to
    hold is that the stone ends up in the block whose board shows it, and in no other. */
-await scenario('three identical boards: a write is waiting to be tried again when the note comes back rearranged', { files: { 'T.md': note(X, X, X) }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1900, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
+await scenario('three identical boards: a write is waiting to be tried again when the note comes back rearranged', { files: { 'T.md': note(X, X, X) }, panes: [{ path: 'T.md', mode: 'source' }], autosave: 100, saveDelay: 1000, height: 1900, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
 	await failOnce(page);
 	await toggleLock(page, 1);
 	await tool(page, 'White stone').click();
 	await clickPoint(page, 1, 'gg');
+	await closePane(page); // (before the edit is written: it goes into the file, and that fails)
 	await sleep(700);
 	assert.match((await notices(page))[0], /could not be written/);
 	await page.evaluate((t) => { const v = window.harness.app.vault; return v.modify(v.getAbstractFileByPath('T.md'), t); },
 		'# N\n\n```kifu\n' + X + '\n```\n\nbetween\n\n```kifu\n' + X + '\n```\n\nend\n\n```kifu\n' + X + '\n```\n');
+	await reopen(page, 'T.md');
 	await sleep(200);
 	const showing = [await stones(page, 0), await stones(page, 1), await stones(page, 2)].map((s) => s.white);
 	assert.equal(showing.reduce((a, b) => a + b), 1);
@@ -577,22 +440,6 @@ await scenario('no line numbers, drawings kept by their text: the old drawing la
 
 /* ------------------------------------------------- a board's place is carried along with the note */
 
-/* Three writes go into the note before the reading pane draws anything again. What its boards say
-   about where they stand comes from the pane's copy, which is three changes old by the third. */
-await scenario('a pane that is behind: its boards above and below a third are edited, then the one between them', { files: { 'T.md': note(P, X, Q) }, ...lagging }, async (page) => {
-	await readingPane(page, 'T.md');
-	await sleep(100);
-	assert.equal(await boardCount(page), 6); // 0 to 2: the editor; 3 to 5: the reading pane
-	for (const [board, pt] of [[3, 'ee'], [5, 'ff'], [4, 'gg']]) {
-		await toggleLock(page, board);
-		await toolOn(page, board, 'Black stone').click();
-		await clickPoint(page, board, pt);
-		await sleep(800);
-	}
-	assert.deepEqual(blocks(await doc(page)), ['(;SZ[9]AB[aa][ee])', '(;SZ[9]AB[cc][gg])', '(;SZ[9]AB[ii][ff])']);
-	assert.deepEqual(await notices(page), []);
-});
-
 /* Typing here and there in the note is no reason for a board that was out of sight meanwhile to
    forget that it was unlocked. With the editor's change events it is known where the block has got
    to after each change; without them, a note that has changed both above and below the block is
@@ -683,7 +530,7 @@ await scenario('twins: the unlocked one is dragged below the other in one go; th
 });
 
 /* No editor anywhere: the note's file is what changes, and each writing of it is one change to follow. */
-await scenario('a note is closed with a board left unlocked; another program adds a line above the board, then one below; the note is opened again', { files: { 'N.md': note(P, X, Q) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, height: 1900 }, async (page) => {
+await scenario('a note is closed with a board left unlocked; another program adds a line above the board, then one below; the note is opened again', { files: { 'N.md': note(P, X, Q) }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, height: 1900 }, async (page) => {
 	await toggleLock(page, 1);
 	await sleep(100);
 	await page.evaluate(() => {
@@ -698,7 +545,7 @@ await scenario('a note is closed with a board left unlocked; another program add
 	await sleep(150);
 	await change("t + 'a new last line\\n'");
 	await sleep(150);
-	await page.evaluate(() => { const h = window.harness; h.views = [h.app.workspace._open('N.md', 'preview')]; });
+	await page.evaluate(() => { const h = window.harness; h.views = [h.app.workspace._open('N.md', 'source')]; });
 	await sleep(300);
 	assert.deepEqual(await isEditing(page), [false, true, false]);
 	await toolOn(page, 1, 'Black stone').click();
@@ -747,7 +594,7 @@ await scenario('a space typed by hand into the caption line of an unlocked board
 	assert.match(blocks(await doc(page))[0], /^caption: Black to play\n/);
 });
 
-await scenario('the file is changed from outside in white space only, under an unlocked board (reading view)', { files: { 'N.md': SPACE }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100 }, async (page) => {
+await scenario('the file is changed from outside in white space only, under an unlocked board', { files: { 'N.md': SPACE }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	await toggleLock(page);
 	await sleep(100);
 	const fixed = SPACE.replace('Whiteplays', 'White plays');
@@ -761,46 +608,14 @@ await scenario('the file is changed from outside in white space only, under an u
 	assert.match(blocks(await text(page, 'N.md'))[0], /White plays here/);
 });
 
-await scenario('a pane that is behind: a space typed by hand in the editor, then the stale board in the reading pane is edited', { files: { 'N.md': SPACE }, live: ['N.md'], autosave: 60000, lagReading: true, width: 1600 }, async (page) => {
-	await readingPane(page, 'N.md');
-	await sleep(100);
-	// (the hand edit is made without the cursor going into the block: find and replace, say)
-	await page.evaluate(() => window.harness.views[0].editor.replaceRange(' ', { line: 5, ch: '(;SZ[9]AB[cc]C[White'.length }));
-	await sleep(150);
-	assert.equal(await boardCount(page), 2);
-	await toggleLock(page, 1);
-	await tool(page, 'Black stone').click();
-	await clickPoint(page, 1, 'ee');
-	await sleep(700);
-	// refused, and said so: the block is not what that board shows any more
-	assert.equal(await doc(page), SPACE.replace('Whiteplays', 'White plays'));
-	assert.match((await notices(page))[0], /changed or removed|no longer certain/);
-});
-
 /* ------------------------------------------------- writes that fail, and edits that are refused */
 
-await scenario('a write fails; then the first of three identical boards is edited, and the drawings move on', { files: { 'T.md': THREE }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1900, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
-	await failOnce(page);
-	await toggleLock(page, 1);
-	await tool(page, 'White stone', 0).click();
-	await clickPoint(page, 1, 'gg');
-	await sleep(700);
-	assert.match((await notices(page))[0], /could not be written.*still on the board.*tried again/);
-	// The first board is edited and written; a renderer that keeps drawings by their text hands
-	// every later twin the drawing before it. The stone that is waiting belongs to the second block.
-	await toggleLock(page, 0);
-	await tool(page, 'Black stone', 0).click();
-	await clickPoint(page, 0, 'ee');
-	await sleep(3000); // (the write that failed is tried again by itself)
-	assert.deepEqual(blocks(await text(page, 'T.md')), ['(;SZ[9]AB[cc][ee])', '(;SZ[9]AB[cc]AW[gg])', X]);
-	assert.equal((await notices(page)).length, 1);
-});
-
-await scenario('switching the plugin off after a write that failed: the edit is written all the same', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
+await scenario('switching the plugin off after a write that failed: the edit is written all the same', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, saveDelay: 1000, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
 	await failOnce(page);
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
+	await closePane(page);
 	await sleep(700);
 	assert.match((await notices(page))[0], /could not be written/);
 	await page.evaluate(() => window.harness.plugin.unload());
@@ -808,7 +623,7 @@ await scenario('switching the plugin off after a write that failed: the edit is 
 	assert.match(await text(page, 'N.md'), /AB\[cc\]\[ee\]/);
 });
 
-await scenario('Obsidian quits inside the save delay: the edit is written first', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100 }, async (page) => {
+await scenario('Obsidian quits inside the save delay: the edit is written first', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
@@ -818,19 +633,19 @@ await scenario('Obsidian quits inside the save delay: the edit is written first'
 		window.harness.app.workspace.trigger('quit', { add: (fn) => todo.push(fn()), addPromise: (p) => todo.push(p), isEmpty: () => !todo.length, promise: () => Promise.all(todo) });
 		await Promise.all(todo);
 	});
-	assert.match(await text(page, 'N.md'), /AB\[cc\]\[ee\]/);
+	assert.match(await doc(page), /AB\[cc\]\[ee\]/);
 });
 
-await scenario('a write fails after its board has left the page: it is tried again, and the board that comes back shows the edit', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
+await scenario('a write fails after its board has left the page: it is tried again, and the board that comes back shows the edit', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, saveDelay: 1000, allowErrors: /writing the note failed|EBUSY/ }, async (page) => {
 	await failOnce(page);
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
-	await page.evaluate(() => { const r = window.harness.views[0].renderer; window.__t = r.text; r.set(''); }); // every block leaves the page
+	await closePane(page); // (the note is closed: its board leaves the page)
 	await sleep(800);
 	assert.match((await notices(page))[0], /could not be written, so an edit is not saved yet. Saving will be tried again/);
-	// the board comes back before the next try: it shows the stone that is still waiting
-	await page.evaluate(() => window.harness.views[0].renderer.set(window.__t));
+	// the note is opened again before the next try: its board shows the stone that is still waiting
+	await reopen(page, 'N.md');
 	await sleep(200);
 	assert.deepEqual(await stones(page), { black: 2, white: 0 });
 	await sleep(2500);
@@ -839,7 +654,7 @@ await scenario('a write fails after its board has left the page: it is tried aga
 });
 
 /* The vault takes the write and is never heard of again (a network drive that has gone away). */
-await scenario('a write that never comes back: after a while that is said, and the edit is written once the vault answers again', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, allowErrors: /writing the note failed|no answer after/ }, async (page) => {
+await scenario('a write that never comes back: after a while that is said, and the edit is written once the vault answers again', { files: { 'N.md': note(X) }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, saveDelay: 1000, allowErrors: /writing the note failed|no answer after/ }, async (page) => {
 	await page.evaluate(() => {
 		const v = window.harness.app.vault;
 		const real = v.process.bind(v);
@@ -855,11 +670,12 @@ await scenario('a write that never comes back: after a while that is said, and t
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
+	await closePane(page); // (the edit goes into the file itself)
 	await sleep(2000);
-	// nothing yet: the write may just be slow. The stone is on the board.
-	assert.deepEqual([await notices(page), await stones(page)], [[], { black: 2, white: 0 }]);
+	// nothing yet: the write may just be slow
+	assert.deepEqual(await notices(page), []);
 	await sleep(14000);
-	assert.match((await notices(page))[0], /could not be written.*still on the board.*tried again/);
+	assert.match((await notices(page))[0], /could not be written.*tried again/);
 	// The request that got stuck goes through after all, now that nobody is waiting for it. It must
 	// not write anything: the edit is the retry's to write, and may have grown since.
 	await page.evaluate(() => window.__late());
@@ -871,20 +687,20 @@ await scenario('a write that never comes back: after a while that is said, and t
 	assert.equal((await notices(page)).length, 1);
 });
 
-await scenario('two different boards lose an edit within five seconds: each says so', { files: { 'N.md': note(X, '(;SZ[9]AB[dd])') }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, height: 1400 }, async (page) => {
+await scenario('two different boards lose an edit within five seconds: each says so', { files: { 'N.md': note(X, '(;SZ[9]AB[dd])') }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, height: 1400 }, async (page) => {
 	const start = await text(page, 'N.md');
 	await toggleLock(page, 0);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
-	// the first block is replaced from outside while that edit waits
-	await page.evaluate((t) => { window.harness.app.vault.files.get('N.md').data = t; }, start.replace('AB[cc]', 'AB[aa]'));
+	// the first block is replaced in the editor, by something else, while that edit waits
+	await page.evaluate((t) => window.harness.views[0]._edit(t), start.replace('AB[cc]', 'AB[aa]'));
 	await sleep(1500);
 	assert.equal((await notices(page)).length, 1);
 	await toggleLock(page, 1);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 1, 'gg');
 	// ...and then the same happens to the second block
-	await page.evaluate((t) => { window.harness.app.vault.files.get('N.md').data = t; }, start.replace('AB[cc]', 'AB[aa]').replace('AB[dd]', 'AB[bb]'));
+	await page.evaluate((t) => window.harness.views[0]._edit(t), start.replace('AB[cc]', 'AB[aa]').replace('AB[dd]', 'AB[bb]'));
 	await sleep(1500);
 	assert.equal((await notices(page)).length, 2);
 	assert.doesNotMatch(await text(page, 'N.md'), /\[ee\]|\[gg\]/);
@@ -893,7 +709,7 @@ await scenario('two different boards lose an edit within five seconds: each says
 /* A board inside an embed belongs to the embedded note. If the app should name the embedding note
    as the board's source instead, the block must not be looked for (and found!) there. */
 await scenario('a board shown through an embed whose source is said to be the embedding note is not edited', {
-	files: { 'Host.md': note(X), 'Inner.md': note(X) }, panes: [{ path: 'Host.md', mode: 'preview' }], autosave: 100,
+	files: { 'Host.md': note(X), 'Inner.md': note(X) }, panes: [{ path: 'Host.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	// (what such an embed would look like: the board sits in an element that names the other note)
 	await page.evaluate(() => {
@@ -920,7 +736,7 @@ const noLines = (page, path) =>
 	page.evaluate((path) => {
 		const h = window.harness;
 		h.app._noSectionInfo = true;
-		h.views = [h.app.workspace._open(path, 'preview')];
+		h.views = [h.app.workspace._open(path, 'source')];
 	}, path);
 for (const reuse of ['pool', 'ends']) {
 	for (const which of ['the board that was edited', 'the other board']) {

@@ -194,6 +194,7 @@ export class TreePanel extends ItemView {
 		setIcon(this.#btn.lock.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
 		this.#btn.lock.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
 		this.#btn.lock.classList.toggle('is-active', s.edit);
+		this.#btn.lock.hidden = !s.edit && s.onlyRead;
 
 		const p = s.root.props;
 		const who = (name: string, rank: string) => {

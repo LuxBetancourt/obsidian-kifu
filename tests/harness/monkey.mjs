@@ -24,7 +24,8 @@
 //
 //   node tests/harness/monkey.mjs [arrangements|all] [profiles|all] [seeds: 1-6 or 3,5] [steps] [jobs]
 //
-// Arrangements: live scroll two reading source both lag blind lagblind soloblind.
+// Arrangements: live scroll two source both lag blind lagblind. (A reading view has no lock:
+// beside an editor, its boards are only looked at.)
 // Profiles: plain hands wild. The note changes with the seed (default, twins, empty,
 // callout, crlf in turn); NOTE=twins in the environment picks one.
 import { chromium, open, sleep, notices, out } from './lib.mjs';
@@ -36,8 +37,6 @@ const ARRANGEMENTS = {
 	scroll: { editors: 1, tall: true },
 	/** Two editors on the note. */
 	two: { editors: 2 },
-	/** A reading view and nothing else: changes go straight to the file. */
-	reading: { panes: ['preview'] },
 	/** The mock's own plain editor, whose renderer keeps drawings by their text. */
 	source: { panes: ['source'] },
 	/** An editor with a reading view beside it. */
@@ -48,8 +47,6 @@ const ARRANGEMENTS = {
 	blind: { editors: 1, reading: true, blind: true },
 	/** ...both: what an embedded note is likely to be. */
 	lagblind: { editors: 1, reading: true, lag: true, blind: true },
-	/** A reading view alone that is told nothing about lines. */
-	soloblind: { panes: ['preview'], blindAll: true },
 };
 /** What the monkey does besides using the boards. */
 const PROFILES = {

@@ -18,8 +18,8 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 	const browser = await type.launch();
 	const { scenario, report } = runner(browser);
 	for (const dev of ['iPad (gen 7)', 'iPad (gen 7) landscape', 'iPhone 15']) {
-		for (const mode of ['preview', 'live']) {
-			const panes = mode === 'live' ? { live: ['P.md'] } : { panes: [{ path: 'P.md', mode: 'preview' }] };
+		for (const mode of ['source', 'live']) {
+			const panes = mode === 'live' ? { live: ['P.md'] } : { panes: [{ path: 'P.md', mode: 'source' }] };
 			await scenario(`${engine}, ${dev}, ${mode}: solve, unlock, edit and reset the crop by touch`, { device: devices[dev], files: { 'P.md': note }, autosave: 100, ...panes }, async (page) => {
 				// as on a phone or tablet: no sidebar beside the note; and the button rules of
 				// Obsidian's own stylesheet that bear on ours (on a tablet every button is padded

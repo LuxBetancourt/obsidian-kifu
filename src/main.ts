@@ -990,6 +990,8 @@ export default class KifuPlugin extends Plugin implements Host {
 	}
 
 	toggleLock(s: Session): void {
+		// (the reading view has no lock; nor has the panel, for a board shown only there)
+		if (!s.edit && s.onlyRead) return;
 		if (!s.edit && s.cantEdit) {
 			new Notice(`Kifu: ${s.cantEdit}`);
 			return;
@@ -997,6 +999,11 @@ export default class KifuPlugin extends Plugin implements Host {
 		s.setEdit(!s.edit);
 		// (on a phone the sidebar is a drawer that would cover the board)
 		if (s.edit && this.settings.revealPanel && !Platform.isMobile) void this.showPanel(false);
+	}
+
+	/** Lock a board that was left unlocked, now that it is shown only in the reading view. */
+	lockIfOnlyRead(s: Session): void {
+		if (s.edit && s.onlyRead) s.setEdit(false);
 	}
 
 	/**

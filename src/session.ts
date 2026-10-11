@@ -76,6 +76,8 @@ export interface SessionView {
 	sectionInfo(): { text: string; lineStart: number; lineEnd: number } | null;
 	/** Where the keyboard is, if this board has it: its pane, and whether it is in the label box. */
 	focusState(): { pane: unknown; label: boolean } | null;
+	/** Is this board in a pane that is only read (the reading view)? Boards there stay locked. */
+	readOnlyPane(): boolean;
 }
 
 /** Everything the renderer needs to draw the current position. */
@@ -316,6 +318,15 @@ export class Session {
 		} catch (e) {
 			this.error = (e as Error).message;
 		}
+	}
+
+	/**
+	 * Is this board shown only in panes that are only read (the reading view)? Then it
+	 * can not be unlocked, and is locked if it was left unlocked elsewhere.
+	 */
+	get onlyRead(): boolean {
+		const shown = [...this.views].filter((v) => v.connected());
+		return shown.length > 0 && shown.every((v) => v.readOnlyPane());
 	}
 
 	/** Why this board can not be unlocked ('' if it can). */

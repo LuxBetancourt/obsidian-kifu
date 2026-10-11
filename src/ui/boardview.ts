@@ -135,6 +135,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		for (const type of CONTAINED) root.addEventListener(type, (ev) => ev.stopPropagation());
 		root.addEventListener('pointerdown', () => {
 			this.#activate();
+			if (this.session && this.readOnlyPane()) this.#plugin.lockIfOnlyRead(this.session);
 			this.#pressed = true;
 			// (a press is work going on: the write waits for a pause after it)
 			if (this.session) this.#plugin.stillBusy(this.session);
@@ -179,6 +180,21 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		return this.#root.isConnected;
 	}
 
+	/**
+	 * Is this board in the reading view while its block is unlocked in an editor pane? Then
+	 * it shows the block as it is being edited, and nothing more: no tools, no buttons, and
+	 * it takes no clicks or keys.
+	 */
+	#away(s: Session): boolean {
+		return s.edit && this.readOnlyPane();
+	}
+
+	readOnlyPane(): boolean {
+		const r = this.#root;
+		// the reading view, and the previews that are not part of an editor (a hover preview)
+		return !!r.closest('.markdown-reading-view') || (!!r.closest('.markdown-preview-view') && !r.closest('.markdown-source-view'));
+	}
+
 	sectionInfo(): { text: string; lineStart: number; lineEnd: number } | null {
 		try {
 			const info = this.#ctx.getSectionInfo(this.containerEl);
@@ -210,6 +226,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		s.views.add(this);
 		s.on(this.#onChange);
 		this.#render();
+		this.#whenShown(s);
 		const want = s.refocus;
 		if (want && Date.now() < want.until) {
 			// We rewrote the block while its board had the keyboard, and this is the
@@ -238,6 +255,32 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			};
 			(root.ownerDocument.defaultView ?? window).requestAnimationFrame(take);
 		}
+	}
+
+	/**
+	 * Once on the page (which pane a board is in can only be told then): no lock in the
+	 * reading view, and a board left unlocked elsewhere (the note was switched from
+	 * editing to reading) is locked, unless it is still being edited in another pane.
+	 * (A little later, not at once: a board being edited is redrawn when its block is
+	 * written, and for a moment the old drawing is gone and the new one not there yet.)
+	 */
+	#whenShown(s: Session): void {
+		const root = this.#root;
+		let tries = 60;
+		const look = (): void => {
+			if (this.session !== s) return;
+			const win = root.ownerDocument.defaultView ?? window;
+			if (!root.isConnected) {
+				if (tries-- > 0) win.requestAnimationFrame(look);
+				return;
+			}
+			if (!this.readOnlyPane()) return;
+			this.#render();
+			win.setTimeout(() => {
+				if (this.session === s) this.#plugin.lockIfOnlyRead(s);
+			}, 500);
+		};
+		look();
 	}
 
 	#detach(): void {
@@ -311,10 +354,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const coords = parseBool(s.opts.coords) ?? set.coords;
 		const style = /^(paper|theme)$/.test(s.opts.style ?? '') ? s.opts.style : set.style;
 		const align = /^(left|center|right)$/.test(s.opts.align ?? '') ? s.opts.align : set.align;
+		const away = this.#away(s);
+		const editing = s.edit && !away;
 		root.className =
 			`kifu kifu-${style} kifu-${align}` +
-			(s.edit ? ' is-editing' : '') +
-			(s.edit && s.tool === 'crop' ? ' is-crop' : '') +
+			(editing ? ' is-editing' : '') +
+			(editing && s.tool === 'crop' ? ' is-crop' : '') +
 			(this.#keyFocus ? ' is-keyfocus' : '');
 
 		// (a randomized board is drawn turned and recoloured; the session itself knows nothing of it)
@@ -331,7 +376,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		setIcon(this.#lockBtn.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
 		this.#lockBtn.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
 		this.#lockBtn.classList.toggle('is-active', s.edit);
+		// (in the reading view a board is only played, never edited)
+		this.#lockBtn.hidden = this.readOnlyPane();
 		this.#resetBtn.hidden = s.edit || !s.moved;
+		if (away) this.#problemBtn.hidden = this.#randomBtn.hidden = true;
 		// (shown once something has been played, like the reset button)
 		this.#backBtn.hidden = this.#forwardBtn.hidden = s.edit || !(s.canStepBack || s.canStepForth);
 		this.#backBtn.disabled = !s.canStepBack;
@@ -341,17 +389,17 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#solutionBtn.hidden = !answer;
 		this.#solutionBtn.disabled = !!answer && s.cur === answer;
 		// (while editing, under the lock: is this board a problem?)
-		this.#problemBtn.hidden = !s.edit;
+		this.#problemBtn.hidden = !editing;
 		this.#problemBtn.classList.toggle('is-active', s.problem);
 		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
-		this.#randomBtn.hidden = !s.edit;
+		this.#randomBtn.hidden = !editing;
 		this.#randomBtn.classList.toggle('is-active', s.randomized);
 		this.#randomBtn.setAttribute('aria-pressed', String(s.randomized));
 
 		// (an answer that was shown rather than found gets no stamp: the caption says enough)
 		this.#renderStamp(!s.edit && s.cur !== s.solutionShown ? m.status : null, s.cur);
 		this.#renderCaption(m);
-		if (s.edit) this.#renderTools(s, m);
+		if (editing) this.#renderTools(s, m);
 		else if (this.#tools) {
 			this.#tools.remove();
 			this.#tools = null;
@@ -512,7 +560,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#onKey(ev: KeyboardEvent): void {
 		const s = this.session;
-		if (!s || !s.ready || (ev.target as Element).closest('input, textarea')) return;
+		if (!s || !s.ready || this.#away(s) || (ev.target as Element).closest('input, textarea')) return;
 		let handled = true;
 		if (ev.ctrlKey || ev.metaKey) {
 			// Undo and redo are always ours while the board has the keyboard: left alone,
@@ -566,12 +614,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#cropping(): boolean {
 		const s = this.session;
-		return !!s && s.edit && s.tool === 'crop';
+		return !!s && s.edit && s.tool === 'crop' && !this.#away(s);
 	}
 
 	#onClick(ev: MouseEvent): void {
 		const s = this.session;
-		if (!s || !s.ready || ev.button !== 0 || this.#cropping()) return;
+		if (!s || !s.ready || ev.button !== 0 || this.#cropping() || this.#away(s)) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY);
 		if (p) s.click(...this.#toGame(s, p));
 	}
@@ -604,7 +652,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (p) this.#board.setSelection(this.#rectTo(p));
 			return;
 		}
-		if (ev.pointerType !== 'mouse') return;
+		if (ev.pointerType !== 'mouse' || this.#away(s)) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY);
 		const key = p ? `${p[0]},${p[1]}` : '';
 		if (key === this.#hover) return;

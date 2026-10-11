@@ -31,8 +31,8 @@ const browser = await chromium.launch();
 
 // 2. A board being edited, with the move tree beside it.
 {
-	const { page, errors } = await open(browser, { scale: 2, width: 1120, height: 640, files: { 'Edit.md': problem }, panes: [{ path: 'Edit.md', mode: 'preview' }], autosave: 100 });
-	await page.addStyleTag({ content: '.view-header { display: none } .markdown-preview-view { padding-top: 14px }' });
+	const { page, errors } = await open(browser, { scale: 2, width: 1120, height: 640, files: { 'Edit.md': problem }, panes: [{ path: 'Edit.md', mode: 'source' }], autosave: 100 });
+	await page.addStyleTag({ content: '.view-header { display: none } .cm-content { padding-top: 14px }' });
 	await toggleLock(page);
 	await sleep(150);
 	await clickPoint(page, 0, 'ra');

@@ -1,7 +1,7 @@
 // Drives the built plugin in Chromium against the Obsidian stand-in and checks behaviour.
 import assert from 'node:assert/strict';
 import {
-	chromium, runner, out, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock,
+	chromium, runner, out, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock, doc,
 } from './lib.mjs';
 
 const KILL = `(;GM[1]FF[4]SZ[19]AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]C[Black to play and kill.]
@@ -87,7 +87,6 @@ for (const mode of ['preview', 'source']) {
 }
 
 for (const [label, opts] of [
-	['reading view', { mode: 'preview' }],
 	['live preview', { mode: 'source' }],
 	['live preview, deferred re-render', { mode: 'source', asyncRender: true }],
 ]) {
@@ -162,6 +161,70 @@ for (const [label, opts] of [
 	});
 }
 
+await scenario('in the reading view a board has no lock, and is only played', {
+	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	const p = await pointXY(page, 0, 'ee');
+	await page.mouse.move(p.x, p.y);
+	assert.equal(await lockBtn(page).isHidden(), true);
+	// a click plays a move (White's, as Black has set up a stone)
+	await page.mouse.click(p.x, p.y);
+	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+	// the panel's lock does not unlock it either (nor is it shown there)
+	await page.evaluate(() => window.harness.plugin.toggleLock(window.harness.plugin.activeSession));
+	assert.deepEqual(await isEditing(page), [false]);
+	await page.evaluate(() => window.harness.plugin.showPanel(false));
+	await sleep(100);
+	assert.equal(await page.locator('#right .kifu-btn[aria-label="Unlock to edit"]').isHidden(), true);
+	// and nothing is written
+	await sleep(400);
+	assert.equal(await text(page, 'N.md'), '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n');
+});
+
+await scenario('a board left unlocked is locked, and its edit written, once the note is shown only in the reading view', {
+	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, saveDelay: 5000,
+}, async (page) => {
+	await toggleLock(page);
+	await tool(page, 'Black stone').click();
+	await clickPoint(page, 0, 'ee');
+	// the note is switched to the reading view before the edit is written
+	await page.evaluate(() => {
+		const h = window.harness;
+		h.app.workspace._leaves.find((l) => l.view === h.views[0]).detach();
+		h.views = [h.app.workspace._open('N.md', 'preview')];
+	});
+	await sleep(1000);
+	assert.deepEqual(await isEditing(page), [false]);
+	assert.equal(await lockBtn(page).isHidden(), true);
+	assert.equal(await page.locator('.kifu-tools').count(), 0);
+	assert.equal(await text(page, 'N.md'), '# New\n\n```kifu\n(;SZ[9]AB[cc][ee])\n```\n\nafter\n');
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('a reading pane beside the editor shows the board being edited, but no tools, and takes no clicks', {
+	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }, { path: 'N.md', mode: 'preview' }], width: 1500, autosave: 100,
+}, async (page) => {
+	await toggleLock(page, 0);
+	await tool(page, 'Black stone').click();
+	await clickPoint(page, 0, 'ee');
+	await sleep(700);
+	assert.deepEqual(await stones(page, 1), { black: 2, white: 0 });
+	// still unlocked in the editor, and not locked by the reading pane
+	assert.deepEqual(await isEditing(page), [true, false]);
+	assert.equal(await page.locator('.kifu-tools').count(), 1);
+	assert.equal(await lockBtn(page, 1).isHidden(), true);
+	// a click there neither edits nor plays
+	await clickPoint(page, 1, 'gg');
+	await sleep(700);
+	assert.deepEqual(await stones(page, 1), { black: 2, white: 0 });
+	assert.deepEqual(await isEditing(page), [true, false]);
+	assert.equal(await doc(page), '# New\n\n```kifu\n(;SZ[9]AB[cc][ee])\n```\n\nafter\n');
+	// and the editor carries on
+	await clickPoint(page, 0, 'gg');
+	await sleep(700);
+	assert.deepEqual(await stones(page, 1), { black: 3, white: 0 });
+});
+
 await scenario('editing tools, crop and toolbar looks', { files: { 'E.md': problemNote }, panes: [{ path: 'E.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	let p = await pointXY(page, 0, 'pc');
 	await page.mouse.move(p.x, p.y);
@@ -215,34 +278,35 @@ await scenario('same note in two panes, and twin blocks', {
 	autosave: 100,
 }, async (page) => {
 	assert.equal(await boardCount(page), 4); // two blocks, each shown in both panes
-	// unlock the SECOND block in the reading pane (boards 2 and 3 are the reading pane's)
-	const p = await pointXY(page, 3, 'jj');
+	// the reading pane (boards 2 and 3) has no lock
+	assert.deepEqual(await page.locator('.kifu-ctl .kifu-btn[aria-label="Unlock to edit"]').evaluateAll((bs) => bs.map((b) => b.hidden)), [false, false, true, true]);
+	// unlock the SECOND block in the editor pane
+	const p = await pointXY(page, 1, 'jj');
 	await page.mouse.move(p.x, p.y);
-	await lockBtn(page, 3).click();
-	// only that one board is unlocked: not its twin, and not yet its other self next door
-	assert.deepEqual(await isEditing(page), [false, false, false, true]);
+	await lockBtn(page, 1).click();
+	// only that one board is unlocked: not its twin, and not the reading pane's
+	assert.deepEqual(await isEditing(page), [false, true, false, false]);
 	await tool(page, 'Black stone').click();
-	await clickPoint(page, 3, 'dd');
-	assert.deepEqual(await stones(page, 3), { black: 1, white: 0 });
-	for (const i of [0, 1, 2]) assert.deepEqual(await stones(page, i), { black: 0, white: 0 });
+	await clickPoint(page, 1, 'dd');
+	assert.deepEqual(await stones(page, 1), { black: 1, white: 0 });
+	for (const i of [0, 2, 3]) assert.deepEqual(await stones(page, i), { black: 0, white: 0 });
 	await sleep(700);
-	// the edit went into the second block; the same block in the other pane has followed
+	// the edit went into the second block; the same block in the reading pane has followed
 	assert.equal(await text(page, 'T.md'), '# Twins\n\n```kifu\n```\n\nbetween\n\n```kifu\n(;GM[1]FF[4]CA[UTF-8]SZ[19]AB[dd])\n```\n\nend\n');
 	assert.equal(await boardCount(page), 4);
-	assert.deepEqual(await isEditing(page), [false, true, false, true]);
-	assert.deepEqual(await stones(page, 1), { black: 1, white: 0 });
+	assert.deepEqual(await stones(page, 3), { black: 1, white: 0 });
 	for (const i of [0, 2]) assert.deepEqual(await stones(page, i), { black: 0, white: 0 });
-	// carry on in the reading pane after the re-render: both panes show the block as it changes
-	await clickPoint(page, 3, 'pp');
-	assert.deepEqual(await stones(page, 3), { black: 2, white: 0 });
-	assert.deepEqual(await stones(page, 1), { black: 2, white: 0 });
-	await sleep(700);
-	assert.match(await text(page, 'T.md'), /```kifu\n```\n\nbetween\n\n```kifu\n\(;GM\[1\]FF\[4\]CA\[UTF-8\]SZ\[19\]AB\[dd\]\[pp\]\)/);
-	// ...and from the other pane
+	// it is still not unlocked there, and has no lock
+	assert.equal(await lockBtn(page, 3).isHidden(), true);
+	// carry on in the editor pane: both panes show the block as it changes
+	await clickPoint(page, 1, 'pp');
 	await clickPoint(page, 1, 'dp');
-	assert.deepEqual(await stones(page, 3), { black: 3, white: 0 });
 	await sleep(700);
 	assert.match(await text(page, 'T.md'), /```kifu\n```\n\nbetween\n\n```kifu\n\(;GM\[1\]FF\[4\]CA\[UTF-8\]SZ\[19\]AB\[dd\]\[pp\]\[dp\]\)/);
+	assert.deepEqual(await stones(page, 3), { black: 3, white: 0 });
+	// locked again: the stones are played, not added
+	await lockBtn(page, 1).click();
+	assert.deepEqual(await isEditing(page), [false, false, false, false]);
 	// now the first twin, in the editor pane: it is a board of its own
 	const q = await pointXY(page, 0, 'jj');
 	await page.mouse.move(q.x, q.y);
@@ -268,43 +332,39 @@ await scenario('two panes where the reading pane only follows the editor once th
 	const mark = () => page.evaluate(() => document.querySelectorAll('.kifu').forEach((k, i) => k.setAttribute('data-was', String(i))));
 	const marks = () => page.evaluate(() => [...document.querySelectorAll('.kifu')].map((k) => k.getAttribute('data-was')));
 	await mark();
-	// work on the second block in the READING pane; every write goes through the editor next door
-	const p = await pointXY(page, 3, 'jj');
+	// work on the second block in the editor; the note on disk lags behind it
+	const p = await pointXY(page, 1, 'jj');
 	await page.mouse.move(p.x, p.y);
-	await lockBtn(page, 3).click();
+	await lockBtn(page, 1).click();
 	await tool(page, 'Black stone').click();
-	await clickPoint(page, 3, 'dd');
+	await clickPoint(page, 1, 'dd');
 	await sleep(700);
-	// the editor has the stone; the reading pane has not been drawn again, yet its board carries on
+	// the editor has the stone; the reading pane has not been drawn again
 	assert.match(await page.evaluate(() => window.harness.views[0].data), /between\n\n```kifu\n\(;GM\[1\]FF\[4\]CA\[UTF-8\]SZ\[19\]AB\[dd\]\)\n```/);
 	assert.equal(await text(page, 'T.md'), TWINS);
 	assert.deepEqual(await marks(), ['0', null, '2', '3']);
-	assert.deepEqual(await isEditing(page), [false, true, false, true]);
-	assert.deepEqual(await stones(page, 3), { black: 1, white: 0 });
+	assert.deepEqual(await isEditing(page), [false, true, false, false]);
 	assert.deepEqual(await stones(page, 1), { black: 1, white: 0 });
-	// a second and third edit on the board that is still the old drawing, well apart
-	await clickPoint(page, 3, 'pp');
+	assert.deepEqual(await stones(page, 3), { black: 0, white: 0 });
+	await clickPoint(page, 1, 'pp');
 	await sleep(1700);
-	assert.deepEqual(await isEditing(page), [false, true, false, true]);
-	assert.deepEqual(await stones(page, 3), { black: 2, white: 0 });
-	await clickPoint(page, 3, 'dp');
-	assert.deepEqual(await stones(page, 3), { black: 3, white: 0 });
+	await clickPoint(page, 1, 'dp');
 	assert.deepEqual(await stones(page, 1), { black: 3, white: 0 });
-	// let the note be saved: the reading pane is drawn again and the board is still being edited
+	// let the note be saved: the reading pane is drawn again, with the stones, still locked
 	await sleep(3200);
 	assert.match(await text(page, 'T.md'), /```kifu\n```\n\nbetween\n\n```kifu\n\(;GM\[1\]FF\[4\]CA\[UTF-8\]SZ\[19\]AB\[dd\]\[pp\]\[dp\]\)\n```/);
 	assert.deepEqual(await marks(), ['0', null, '2', null]);
-	assert.deepEqual(await isEditing(page), [false, true, false, true]);
+	assert.deepEqual(await isEditing(page), [false, true, false, false]);
 	assert.deepEqual(await stones(page, 3), { black: 3, white: 0 });
 	for (const i of [0, 2]) assert.deepEqual(await stones(page, i), { black: 0, white: 0 });
-	// and it still takes edits
-	await clickPoint(page, 3, 'pd');
+	// and the editor still takes edits
+	await clickPoint(page, 1, 'pd');
 	await sleep(700);
 	assert.match(await page.evaluate(() => window.harness.views[0].data), /AB\[dd\]\[pp\]\[dp\]\[pd\]/);
 	assert.deepEqual(await page.evaluate(() => window.harness.notices()), []);
 });
 
-await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'preview' }], autosave: 100 }, async (page) => {
+await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	// the command creates the panel; it starts empty
 	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());
 	await sleep(50);
@@ -381,7 +441,7 @@ await scenario('boards that live in SGF files', {
 		'games/pack.sgf': '(;GM[1]SZ[9]AB[cc]AW[dd])\n\n(;GM[1]SZ[9]AB[ee][ff]AW[gg];B[aa])\r\n(;GM[1]SZ[13])',
 		'F.md': '# Files\n\n```kifu\nsgf: [[kill.sgf]]\n```\n\nmid\n\n```kifu\nsgf: games/kill.sgf\nview: full\nscale: 50%\n```\n\n```kifu\nsgf: [[pack.sgf]]\ngame: 2\n```\n\n```kifu\nsgf: nowhere.sgf\n```\n\n```kifu\nsgf: [[pack.sgf]]\ngame: 7\n```\n',
 	},
-	panes: [{ path: 'F.md', mode: 'preview' }],
+	panes: [{ path: 'F.md', mode: 'source' }],
 	autosave: 100,
 }, async (page) => {
 	await sleep(100);
@@ -429,7 +489,7 @@ await scenario('boards that live in SGF files', {
 
 await scenario('a file that is not UTF-8 is shown but not edited', {
 	files: { 'O.md': '```kifu\nsgf: old.sgf\n```\n', 'old.sgf': '(;GM[1]SZ[9]CA[gb2312]PB[��]AB[ee])' },
-	panes: [{ path: 'O.md', mode: 'preview' }],
+	panes: [{ path: 'O.md', mode: 'source' }],
 }, async (page) => {
 	// the real bytes: GB2312 for a two-character name
 	await page.evaluate(() => {
@@ -454,7 +514,7 @@ await scenario('a file that is not UTF-8 is shown but not edited', {
 
 await scenario('blocks in callouts, and saving when the note changed meanwhile', {
 	files: { 'C.md': '# Callout\n\n> [!note] A problem\n> ```kifu\n> (;SZ[9]AB[cc])\n> ```\n> closing words\n\nplain\n' },
-	panes: [{ path: 'C.md', mode: 'preview' }],
+	panes: [{ path: 'C.md', mode: 'source' }],
 	autosave: 100,
 }, async (page) => {
 	const p = await pointXY(page, 0, 'cc');
@@ -466,14 +526,13 @@ await scenario('blocks in callouts, and saving when the note changed meanwhile',
 	await page.evaluate(() => {
 		const v = window.harness.app.vault;
 		const f = v.getAbstractFileByPath('C.md');
-		// (bypass the open view so its section info is stale, as after an outside edit)
-		v.files.get('C.md').data = 'new first line\n\nand another\n\n' + v.files.get('C.md').data;
+		return v.modify(f, 'new first line\n\nand another\n\n' + v.files.get('C.md').data);
 	});
 	await sleep(700);
 	assert.equal(await text(page, 'C.md'), 'new first line\n\nand another\n\n# Callout\n\n> [!note] A problem\n> ```kifu\n> (;SZ[9]AB[cc]AW[gg])\n> ```\n> closing words\n\nplain\n');
 	// if the block itself is gone, nothing is written and the user is told
 	await clickPoint(page, 0, 'hh');
-	await page.evaluate(() => { window.harness.app.vault.files.get('C.md').data = 'everything was replaced\n'; });
+	await page.evaluate(() => { const v = window.harness.app.vault; return v.modify(v.getAbstractFileByPath('C.md'), 'everything was replaced\n'); });
 	await sleep(700);
 	assert.equal(await text(page, 'C.md'), 'everything was replaced\n');
 	assert.match((await page.evaluate(() => window.harness.notices()))[0], /changed or removed/);
@@ -485,7 +544,7 @@ await scenario('figures: numbers option, move option, scale and captions', {
 		'```kifu', 'move: 2', 'scale: 150%', 'coords: on', 'align: left', 'style: theme', '(;GM[1]SZ[19];B[pd];W[nc];B[qf];W[pb];B[qc];W[kc])', '```', '',
 		'```kifu', 'numbers: on', '(;SZ[5]AB[ba][ab][bc]AW[ca][bb][db][cc];B[cb];W[ee];B[ed];W[bb])', '```', '',
 	].join('\n') },
-	panes: [{ path: 'G.md', mode: 'preview' }],
+	panes: [{ path: 'G.md', mode: 'source' }],
 }, async (page) => {
 	assert.equal(await labels(page, 0), '1,2,3,4');
 	assert.equal(await cap(page, 0), 'Dia. 2');
@@ -508,7 +567,7 @@ await scenario('figures: numbers option, move option, scale and captions', {
 	await page.screenshot({ path: `${out}/figures.png` });
 });
 
-await scenario('the settings are read only when the page is first shown, and it then shows them', { files: { 'E.md': 'no boards here\n' }, panes: [{ path: 'E.md', mode: 'preview' }], data: { scale: 1.2, coords: true, style: 'theme' } }, async (page) => {
+await scenario('the settings are read only when the page is first shown, and it then shows them', { files: { 'E.md': 'no boards here\n' }, panes: [{ path: 'E.md', mode: 'source' }], data: { scale: 1.2, coords: true, style: 'theme' } }, async (page) => {
 	// starting the plugin and having the page indexed reads nothing
 	await sleep(100);
 	assert.equal(await page.evaluate(() => window.harness.plugin.settingsReady), false);
@@ -684,7 +743,7 @@ await scenario('figure switch, try-again button, and edits that are still pendin
 
 await scenario('a ✓ or ✗ is stamped over the board when a line ends, once, and never while editing', {
 	files: { 'P.md': problemNote },
-	panes: [{ path: 'P.md', mode: 'preview' }],
+	panes: [{ path: 'P.md', mode: 'source' }],
 }, async (page) => {
 	const stamp = () => page.evaluate(() => [...document.querySelectorAll('.kifu-stamp')].map((e) => e.className).join());
 	assert.equal(await stamp(), '');
@@ -720,7 +779,7 @@ await scenario('a numbered sequence that is not a problem stamps the ✓ its las
 	files: {
 		'W.md': '```kifu\nnumbers: on\nmove: 1\n(;GM[1]FF[4]CA[UTF-8]SZ[19];B[pd]C[Black asks for the corner.]\n;W[qf]C[White approaches.]\n;B[nc]C[Black shares the corner.]\n;W[rd]\n;B[qc]\n;W[qi]C[White takes a 2-space base for safety.]TE[1])\n```\n',
 	},
-	panes: [{ path: 'W.md', mode: 'preview' }],
+	panes: [{ path: 'W.md', mode: 'source' }],
 }, async (page) => {
 	const stamp = () => page.evaluate(() => [...document.querySelectorAll('.kifu-stamp')].map((e) => e.className).join());
 	await clickPoint(page, 0, 'qf');
@@ -736,7 +795,7 @@ await scenario('a numbered sequence that is not a problem stamps the ✓ its las
 
 await scenario('back and forward under the lock step through the moves played, never the record', {
 	files: { 'B.md': '```kifu\nmove: 1\n(;SZ[9];B[cc];W[ee];B[gg];W[cg])\n```\n' },
-	panes: [{ path: 'B.md', mode: 'preview' }],
+	panes: [{ path: 'B.md', mode: 'source' }],
 }, async (page) => {
 	const back = page.locator('.kifu-ctl .kifu-btn[aria-label^="Take back"]');
 	const forward = page.locator('.kifu-ctl .kifu-btn[aria-label^="Play it again"]');
@@ -770,7 +829,7 @@ await scenario('back and forward under the lock step through the moves played, n
 
 await scenario('a locked problem shows its solution on request, without a stamp', {
 	files: { 'P.md': problemNote, 'G.md': '```kifu\n(;SZ[9];B[cc];W[ee]TE[1])\n```\n' },
-	panes: [{ path: 'P.md', mode: 'preview' }, { path: 'G.md', mode: 'preview' }],
+	panes: [{ path: 'P.md', mode: 'source' }, { path: 'G.md', mode: 'source' }],
 }, async (page) => {
 	const show = page.locator('.kifu-ctl .kifu-btn[aria-label="Show the solution"]');
 	assert.equal(await show.count(), 2); // (one per board, shown only where there is an answer)
@@ -797,7 +856,7 @@ await scenario('a locked problem shows its solution on request, without a stamp'
 
 await scenario('a shuffled problem is shown turned and recoloured, solved as shown, and edited as recorded', {
 	files: { 'P.md': problemNote },
-	panes: [{ path: 'P.md', mode: 'preview' }],
+	panes: [{ path: 'P.md', mode: 'source' }],
 }, async (page) => {
 	// the roll is fixed: turned over the diagonal and mirrored both ways (t = 7), colours swapped
 	await page.evaluate(async (note) => {
@@ -833,7 +892,7 @@ await scenario('a shuffled problem is shown turned and recoloured, solved as sho
 
 await scenario('coordinates sit beside the board\'s real edges, wherever they are', {
 	files: { 'C.md': ['top-right', 'bottom-left', 'top', 'center'].map((v) => '```kifu\ncoords: on\nview: ' + v + ' 7x5\n(;SZ[19]AB[pd])\n```').join('\n\n') + '\n' },
-	panes: [{ path: 'C.md', mode: 'preview' }],
+	panes: [{ path: 'C.md', mode: 'source' }],
 }, async (page) => {
 	// for each board: are the numbers right of the grid, and the letters above it?
 	const sides = await page.evaluate(() => [...document.querySelectorAll('.kifu-svg')].map((svg) => {
@@ -894,12 +953,9 @@ await scenario('embedded links to OGS and goproblems.com are drawn as boards in 
 	await clickPoint(page, 0, 'ac');
 	await sleep(100);
 	assert.match(await cap(page, 0), /^Correct/);
-	// it can not be unlocked: there is no block to write to
-	const box = await page.locator('.kifu-svg').nth(0).boundingBox();
-	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-	await lockBtn(page, 0).click();
+	// it can not be unlocked: the reading view has no lock
+	assert.equal(await lockBtn(page, 0).isHidden(), true);
 	assert.deepEqual((await isEditing(page)).slice(0, 1), [false]);
-	assert.ok((await notices(page)).some((n) => /drawn from https:\/\/online-go\.com\/puzzle\/2\. To edit it, import it instead/.test(n)));
 	// and the note was never written
 	assert.match(await text(page, 'L.md'), /^# Links\n\n!\[\]\(https:\/\/online-go\.com\/puzzle\/2\)/);
 });
@@ -1107,7 +1163,7 @@ await scenario('the Bases view: a note whose first board is an embedded link', {
 
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
-	panes: [{ path: 'S.md', mode: 'preview' }],
+	panes: [{ path: 'S.md', mode: 'source' }],
 }, async (page) => {
 	assert.deepEqual(await stones(page), { black: 2, white: 1 }); // a game record rests at its end
 	const p = await pointXY(page, 0, 'ee');
@@ -1122,13 +1178,13 @@ await scenario('the start switch writes a move line, and the locked board opens 
 	assert.equal(await page.locator(start + '.is-active').count(), 0);
 	await lockBtn(page).click();
 	await sleep(300);
-	assert.match(await text(page, 'S.md'), /```kifu\nmove: 2\n\(;SZ\[9\];B\[dd\];W\[ee\];B\[ff\]\)\n```/);
+	assert.match(await doc(page), /```kifu\nmove: 2\n\(;SZ\[9\];B\[dd\];W\[ee\];B\[ff\]\)\n```/);
 	assert.deepEqual(await stones(page), { black: 1, white: 1 });
 });
 
 await scenario('an SGF file that changes while an edit is pending wins', {
 	files: { 'games/g.sgf': '(;GM[1]SZ[9]AB[cc])', 'Y.md': '```kifu\nsgf: [[g.sgf]]\n```\n' },
-	panes: [{ path: 'Y.md', mode: 'preview' }],
+	panes: [{ path: 'Y.md', mode: 'source' }],
 }, async (page) => {
 	await sleep(100);
 	const p = await pointXY(page, 0, 'cc');
@@ -1168,34 +1224,30 @@ const failOnce = (page, method) =>
 		};
 	}, method);
 
-await scenario('a note that can not be written: the edit stays on the board and is written later', {
-	files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, allowErrors: /writing the note failed|EBUSY/,
+/** Close the pane a note is open in (as with the note's tab). */
+const closePane = (page, i = 0) =>
+	page.evaluate((i) => { const h = window.harness; h.app.workspace._leaves.find((l) => l.view === h.views[i]).detach(); }, i);
+
+await scenario('a note that can not be written once its pane is closed: the edit is written later', {
+	files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100, saveDelay: 1000, allowErrors: /writing the note failed|EBUSY/,
 }, async (page) => {
 	await failOnce(page, 'process');
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
 	await clickPoint(page, 0, 'ee');
-	await sleep(700);
+	// closed before the edit was written: with no editor left, it goes into the file itself
+	await closePane(page);
+	await sleep(500);
 	assert.equal(await text(page, 'N.md'), ONE);
-	assert.match((await notices(page))[0], /could not be written.*still on the board/);
-	assert.deepEqual(await stones(page), { black: 2, white: 0 });
-	assert.deepEqual(await isEditing(page), [true]);
-	// locking writes at once, and this time it works
-	await toggleLock(page);
-	await sleep(400);
+	assert.match((await notices(page))[0], /could not be written, so an edit is not saved yet\. Saving will be tried again/);
+	// tried again, and this time it works
+	await sleep(2500);
 	assert.equal(await text(page, 'N.md'), ONE.replace('AB[cc]', 'AB[cc][ee]'));
-	assert.deepEqual(await isEditing(page), [false]);
-	assert.deepEqual(await stones(page), { black: 2, white: 0 });
-	// and editing carries on normally
-	await toggleLock(page);
-	await clickPoint(page, 0, 'gg');
-	await sleep(700);
-	assert.equal(await text(page, 'N.md'), ONE.replace('AB[cc]', 'AB[cc][ee][gg]'));
 	assert.equal((await notices(page)).length, 1);
 });
 
 await scenario('an SGF file that can not be written: the same', {
-	files: { 'g.sgf': '(;GM[1]SZ[9]AB[cc])', 'Y.md': '```kifu\nsgf: [[g.sgf]]\n```\n' }, panes: [{ path: 'Y.md', mode: 'preview' }], autosave: 100,
+	files: { 'g.sgf': '(;GM[1]SZ[9]AB[cc])', 'Y.md': '```kifu\nsgf: [[g.sgf]]\n```\n' }, panes: [{ path: 'Y.md', mode: 'source' }], autosave: 100,
 	allowErrors: /writing the SGF file failed|EBUSY/,
 }, async (page) => {
 	await sleep(100);
@@ -1224,7 +1276,7 @@ await scenario('a note and an SGF file with the same name: the board is the SGF 
 		'Game notes.sgf': '(;GM[1]SZ[9]AB[cc]AW[gg];B[dd])',
 		'N.md': '```kifu\nsgf: [[Game notes]]\n```\n',
 	},
-	panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100,
+	panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	await sleep(100);
 	assert.deepEqual(await stones(page), { black: 1, white: 1 });
@@ -1238,7 +1290,7 @@ await scenario('a note and an SGF file with the same name: the board is the SGF 
 });
 
 await scenario('an SGF file that is saved in another encoding while its board is open', {
-	files: { 'g.sgf': '(;GM[1]SZ[9]CA[gb2312]PB[Li]AB[cc])', 'Y.md': '```kifu\nsgf: g.sgf\n```\n' }, panes: [{ path: 'Y.md', mode: 'preview' }], autosave: 100,
+	files: { 'g.sgf': '(;GM[1]SZ[9]CA[gb2312]PB[Li]AB[cc])', 'Y.md': '```kifu\nsgf: g.sgf\n```\n' }, panes: [{ path: 'Y.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	await sleep(100);
 	await toggleLock(page);
@@ -1258,7 +1310,7 @@ await scenario('an SGF file that is saved in another encoding while its board is
 	assert.equal(await page.evaluate(() => window.harness.app.vault.writes.length), 1); // the other program's, none of ours
 });
 
-await scenario('the label box keeps the keyboard when a save redraws the board (reading view)', { files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100 }, async (page) => {
+await scenario('the label box keeps the keyboard when a save redraws the board (live preview)', { files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	await toggleLock(page);
 	await tool(page, 'Letter or number').click();
 	await clickPoint(page, 0, 'ee');
@@ -1276,7 +1328,7 @@ await scenario('the label box keeps the keyboard when a save redraws the board (
 });
 
 await scenario('switching the plugin off: what was pending is written, and the boards left on the page do nothing', {
-	files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100,
+	files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	await toggleLock(page);
 	await tool(page, 'Black stone').click();
@@ -1296,7 +1348,7 @@ await scenario('switching the plugin off: what was pending is written, and the b
 });
 
 await scenario('identical boards in a reading view that keeps only one of them on the page at a time', {
-	files: { 'T.md': '# Twins\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nbetween\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nend\n' }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1400,
+	files: { 'T.md': '# Twins\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nbetween\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nend\n' }, panes: [{ path: 'T.md', mode: 'source' }], autosave: 100, height: 1400,
 }, async (page) => {
 	// a reading view takes sections that are far off screen out of the page without unloading them
 	await page.evaluate(() => {
@@ -1335,7 +1387,7 @@ await scenario('identical boards in a reading view that keeps only one of them o
 
 const SAME = '# Twins\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nbetween\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nend\n';
 await scenario('identical boards: the renderer may re-use the drawing of the one that was edited for its twin', {
-	files: { 'T.md': SAME }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1400,
+	files: { 'T.md': SAME }, panes: [{ path: 'T.md', mode: 'source' }], autosave: 100, height: 1400,
 }, async (page) => {
 	// (this stand-in matches old drawings to new sections by their text, first come first served:
 	// after the first board is edited, its old drawing is what the second block gets)
@@ -1362,29 +1414,30 @@ await scenario('identical boards: the renderer may re-use the drawing of the one
 await scenario('a reading pane that draws a text the board has already moved on from', {
 	files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'source' }, { path: 'N.md', mode: 'preview' }], width: 1500, autosave: 60000, lagReading: true,
 }, async (page) => {
-	// work in the reading pane; the editor next door takes the writes, the reading pane sees none of them
-	await toggleLock(page, 1);
+	// work in the editor; the reading pane next door sees none of it
+	await toggleLock(page, 0);
 	await tool(page, 'Black stone').click();
-	await clickPoint(page, 1, 'ee');
+	await clickPoint(page, 0, 'ee');
 	await sleep(600);
 	const first = await page.evaluate(() => window.harness.views[0].data);
 	assert.equal(first, ONE.replace('AB[cc]', 'AB[cc][ee]'));
-	await clickPoint(page, 1, 'gg');
+	await clickPoint(page, 0, 'gg');
 	await sleep(600);
 	assert.equal(await page.evaluate(() => window.harness.views[0].data), ONE.replace('AB[cc]', 'AB[cc][ee][gg]'));
 	// now the reading pane catches up half way: it draws the text of the first write
 	await page.evaluate((t) => window.harness.views[1].renderer.set(t), first);
 	await sleep(50);
-	// its new drawing is still that board: unlocked, and showing what the board holds now
-	assert.deepEqual(await isEditing(page), [true, true]);
+	// its new drawing is still that board, showing what the board holds now (and not as
+	// unlocked: that is the editor's business)
+	assert.deepEqual(await isEditing(page), [true, false]);
 	assert.deepEqual(await stones(page, 1), { black: 3, white: 0 });
-	await clickPoint(page, 1, 'aa');
+	await clickPoint(page, 0, 'aa');
 	await sleep(600);
 	assert.equal(await page.evaluate(() => window.harness.views[0].data), ONE.replace('AB[cc]', 'AB[cc][ee][gg][aa]'));
 	assert.deepEqual(await notices(page), []);
 });
 
-for (const mode of ['preview', 'source']) {
+for (const mode of ['source']) {
 	await scenario(`a sequence drawn with the play tool is what the locked board shows (${mode})`, {
 		files: { 'N.md': '# New\n\n```kifu\nsize: 9\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode }], autosave: 100,
 	}, async (page) => {
@@ -1425,7 +1478,7 @@ const noLines = (page, path) =>
 		const h = window.harness;
 		const real = h.app._processors.get('kifu');
 		h.app._processors.set('kifu', (src, el, ctx) => real(src, el, { ...ctx, addChild: ctx.addChild, getSectionInfo: () => null }));
-		h.views = [h.app.workspace._open(path, 'preview')];
+		h.views = [h.app.workspace._open(path, 'source')];
 	}, path);
 for (const which of ['the board that was edited', 'the other board']) {
 	await scenario(`identical boards and no line numbers: the edit is refused, then ${which} gets a caption`, { files: { 'T.md': SAME }, panes: [], autosave: 100, height: 1500 }, async (page) => {
@@ -1458,26 +1511,22 @@ for (const which of ['the board that was edited', 'the other board']) {
 	});
 }
 
-await scenario('identical boards in a note with CR LF line endings, and a renderer that re-uses drawings', {
-	files: { 'T.md': SAME.replace(/\n/g, '\r\n') }, panes: [{ path: 'T.md', mode: 'preview' }], autosave: 100, height: 1400,
+await scenario('identical boards in a note with CR LF line endings, written into the file', {
+	files: { 'T.md': SAME.replace(/\n/g, '\r\n') }, panes: [{ path: 'T.md', mode: 'source' }], autosave: 100, saveDelay: 1000, height: 1400,
 }, async (page) => {
 	const crlf = (t) => t.replace(/\n/g, '\r\n');
-	await toggleLock(page, 0);
-	await tool(page, 'Black stone').click();
-	await clickPoint(page, 0, 'ee');
-	await sleep(700);
-	assert.equal(await text(page, 'T.md'), crlf(SAME.replace('AB[cc]', 'AB[cc][ee]')));
-	assert.deepEqual(await isEditing(page), [true, false]);
-	assert.deepEqual([await stones(page, 0), await stones(page, 1)], [{ black: 2, white: 0 }, { black: 1, white: 0 }]);
 	await toggleLock(page, 1);
-	await tool(page, 'White stone', 1).click();
-	await clickPoint(page, 1, 'gg');
+	await tool(page, 'Black stone').click();
+	await clickPoint(page, 1, 'ee');
+	// closed before the edit was written: it goes into the file itself, into the second
+	// block and not its twin, and the line endings are kept
+	await closePane(page);
 	await sleep(700);
-	assert.equal(await text(page, 'T.md'), crlf('# Twins\n\n```kifu\n(;SZ[9]AB[cc][ee])\n```\n\nbetween\n\n```kifu\n(;SZ[9]AB[cc]AW[gg])\n```\n\nend\n'));
+	assert.equal(await text(page, 'T.md'), crlf('# Twins\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nbetween\n\n```kifu\n(;SZ[9]AB[cc][ee])\n```\n\nend\n'));
 	assert.deepEqual(await notices(page), []);
 });
 
-for (const mode of ['preview', 'source']) {
+for (const mode of ['source']) {
 	await scenario(`identical boards, one unlocked, and the whole note is drawn again (${mode})`, { files: { 'T.md': SAME }, panes: [{ path: 'T.md', mode }], autosave: 100, height: 1400 }, async (page) => {
 		await toggleLock(page, 1);
 		assert.deepEqual(await isEditing(page), [false, true]);
@@ -1493,7 +1542,7 @@ for (const mode of ['preview', 'source']) {
 
 await scenario('a board that could not show its SGF file does so once the file can be shown', {
 	files: { 'g.sgf': '', 'c.sgf': '(;GM[1]SZ[9]AB[aa])', 'N.md': '```kifu\nsgf: g.sgf\n```\n\n```kifu\nsgf: c.sgf\ngame: 2\n```\n' },
-	panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100,
+	panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	const said = () => page.evaluate(() => [...document.querySelectorAll('.kifu-msg')].map((m) => (m.hidden ? '' : m.textContent)));
 	await sleep(150);
@@ -1542,7 +1591,7 @@ await scenario('boards on a canvas card can be played but not unlocked, whether 
 });
 
 await scenario('the note and its SGF file are renamed while edits are waiting to be written', {
-	files: { 'g.sgf': '(;GM[1]SZ[9]AB[cc])', 'A.md': '```kifu\nsgf: g.sgf\n```\n\n```kifu\n(;SZ[9]AB[dd])\n```\n' }, panes: [{ path: 'A.md', mode: 'preview' }], autosave: 100, height: 1300,
+	files: { 'g.sgf': '(;GM[1]SZ[9]AB[cc])', 'A.md': '```kifu\nsgf: g.sgf\n```\n\n```kifu\n(;SZ[9]AB[dd])\n```\n' }, panes: [{ path: 'A.md', mode: 'source' }], autosave: 100, height: 1300,
 }, async (page) => {
 	await sleep(150);
 	await toggleLock(page, 0);
@@ -1562,7 +1611,7 @@ await scenario('the note and its SGF file are renamed while edits are waiting to
 	assert.deepEqual(await notices(page), []);
 });
 
-await scenario('Escape in the middle of dragging a crop (reading view)', { files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100 }, async (page) => {
+await scenario('Escape in the middle of dragging a crop (live preview)', { files: { 'N.md': ONE }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	await toggleLock(page);
 	await tool(page, 'Choose the part').click();
 	const a = await pointXY(page, 0, 'aa');
