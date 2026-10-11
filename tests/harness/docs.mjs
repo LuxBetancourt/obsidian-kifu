@@ -71,7 +71,7 @@ const browser = await chromium.launch();
 		'Corner kill.md': '---\nlevel: 15k\ntopic: life and death\n---\n```kifu\n(;GM[1]SZ[19]AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]C[Black to play and kill.](;B[ra];W[qa];B[sa]))\n```\n',
 		'Net.md': '---\nlevel: 25k\ntopic: tesuji\nsource: OGS, Moongoca\n---\n![](https://online-go.com/puzzle/55961)\n',
 		'Under the stones.md': '---\nlevel: 1d\ntopic: tesuji\nsource: OGS, mark5000\n---\n![](https://online-go.com/puzzle/33)\n',
-		'Chinese opening.md': '---\nlevel: \ntopic: opening\n---\n```kifu\nnumbers: on\n(;GM[1]SZ[19];B[pd];W[dp];B[qp];W[dd];B[qj])\n```\n',
+		'Chinese opening.md': '---\nlevel: \ntopic: opening\nsource: Sensei\'s Library\n---\n```kifu\nnumbers: on\n(;GM[1]SZ[19];B[pd];W[dp];B[pq];W[dd];B[qk])\n```\n',
 	};
 	const { page, errors } = await open(browser, { scale: 2, width: 1060, height: 560, files, panes: [] });
 	const puzzles = Object.fromEntries([33, 55961].map((id) => [id, JSON.parse(readFileSync(path.join(here, 'ogs', `puzzle-${id}.json`), 'utf8'))]));
