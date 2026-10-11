@@ -6,7 +6,8 @@
 
 import { BasesEntry, BasesPropertyId, BasesView, Component, Keymap, QueryController, TFile } from 'obsidian';
 import type KifuPlugin from './main';
-import { mountDetached } from './linked';
+import { firstEmbed, mountDetached } from './linked';
+import { ImportError } from './importing';
 import { composeBlock, parseBlock, setOption } from './options';
 import { findGames } from './sgf';
 import { read, resolveSgf } from './store';
@@ -14,8 +15,10 @@ import { read, resolveSgf } from './store';
 export const BASES_VIEW = 'kifu-boards';
 
 /**
- * The board a card shows: the first block of a note (a block on an SGF file brings the
- * file's game along), or an SGF file itself. Null: there is none.
+ * The board a card shows: the first one in the note, whichever comes first, a block (one
+ * on an SGF file brings the file's game along) or an embedded link to a game or problem
+ * (fetched, as in the note); or an SGF file itself. Null: there is none. A link that can
+ * not be fetched throws an ImportError saying why.
  */
 export async function firstBoard(plugin: KifuPlugin, file: TFile): Promise<string | null> {
 	const app = plugin.app;
@@ -25,7 +28,10 @@ export async function firstBoard(plugin: KifuPlugin, file: TFile): Promise<strin
 		return findGames(text).length ? text : null;
 	}
 	if (ext !== 'md') return null;
-	const block = read(await app.vault.cachedRead(file)).blocks[0];
+	const text = await app.vault.cachedRead(file);
+	const block = read(text).blocks[0];
+	const embed = firstEmbed(text);
+	if (embed && (!block || embed.line < block.open)) return plugin.fetchLinked(embed.target);
 	if (!block) return null;
 	const parsed = parseBlock(block.body);
 	if (!parsed.opts.sgf) return block.body;
@@ -153,7 +159,11 @@ export class KifuBasesView extends BasesView {
 		try {
 			body = await firstBoard(this.#plugin, file);
 		} catch (e) {
-			console.error('Kifu: board for a base', e);
+			if (!owner.alive) return;
+			// (a board from a link that could not be fetched: why, in its place)
+			el.createDiv({ cls: ['kifu-bases-none', 'is-error'], text: `Kifu: ${e instanceof ImportError ? e.message : `could not draw the board of ${file.basename}.`}` });
+			if (!(e instanceof ImportError)) console.error('Kifu: board for a base', e);
+			return;
 		}
 		if (!owner.alive) return;
 		if (body === null) {

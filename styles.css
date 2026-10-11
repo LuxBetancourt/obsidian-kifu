@@ -570,6 +570,10 @@ body .kifu-panel button.kifu-btn {
 	text-align: center;
 }
 
+.kifu-bases-none.is-error {
+	color: var(--text-error);
+}
+
 /* pictures only: no buttons, and the board opens its note */
 .kifu-bases.is-static .kifu-ctl {
 	display: none;

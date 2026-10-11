@@ -166,7 +166,7 @@ Obsidian only lists `.sgf` files in its file explorer when **Settings → Files 
 
 ## Boards in Bases
 
-A base can show its notes as **Kifu boards**: choose it in the base's view menu, next to Table and Cards. Each note gets a card with its first board (or, for an `.sgf` file in the base, its game), its name, and the properties you chose for the view, as in Cards.
+A base can show its notes as **Kifu boards**: choose it in the base's view menu, next to Table and Cards. Each note gets a card with its first board, whichever comes first, a `kifu` block or an embedded link to a game or problem (see *Boards from links*), or, for an `.sgf` file in the base, its game; then its name and the properties you chose for the view, as in Cards.
 
 - The boards can be played: solve a problem or step through a game right in the grid. Nothing is written from here; click the name to open the note (with Ctrl or Cmd, in a new tab) and edit it there.
 - The view's settings choose the **board size**, and whether the boards are **playable** or just pictures (a click then opens the note).

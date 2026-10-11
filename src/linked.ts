@@ -72,6 +72,37 @@ export function mountDetached(
 	return s;
 }
 
+/** `![alt](link)` and `![alt](<link>)`, with an optional title. */
+const EMBED = /!\[[^\]\n]*\]\(\s*<?(https?:\/\/[^\s)>]+)>?(?:\s+"[^"\n]*")?\s*\)/g;
+
+/**
+ * The first link in a note's text that is drawn as a board, and the line it is on; not
+ * one inside code (a fenced block, or between backticks on its line).
+ */
+export function firstEmbed(text: string): { line: number; target: LinkTarget } | null {
+	const lines = text.split('\n');
+	let fence: string | null = null;
+	for (let n = 0; n < lines.length; n++) {
+		const line = lines[n];
+		const f = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+		if (fence) {
+			if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !line.slice(f.index + f[0].length).trim()) fence = null;
+			continue;
+		}
+		if (f) {
+			fence = f[1];
+			continue;
+		}
+		EMBED.lastIndex = 0;
+		for (let m: RegExpExecArray | null; (m = EMBED.exec(line)); ) {
+			if (((line.slice(0, m.index).match(/`/g) ?? []).length & 1) === 1) continue;
+			const target = linkTarget(m[1]);
+			if (target) return { line: n, target };
+		}
+	}
+	return null;
+}
+
 /** A board in place of a link: fetched, then drawn; or a line saying why it could not be. */
 export class LinkedBoard extends MarkdownRenderChild {
 	#plugin: KifuPlugin;

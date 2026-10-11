@@ -1041,6 +1041,57 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	assert.ok(widths.every((w) => w > 0), widths.join());
 });
 
+await scenario('the Bases view: a note whose first board is an embedded link', {
+	files: {
+		'Only.md': '# A puzzle\n\n![](https://online-go.com/puzzle/2)\n',
+		'Before.md': '![](https://online-go.com/game/9)\n\n```kifu\n(;SZ[9];B[ii])\n```\n',
+		'After.md': '```kifu\n(;SZ[9];B[aa])\n```\n\n![](https://online-go.com/game/9)\n',
+		'Code.md': 'Not a board:\n\n```\n![](https://online-go.com/game/9)\n```\n\nnor `![](https://online-go.com/game/9)`\n',
+		'Broken.md': '![](https://online-go.com/game/404)\n',
+	},
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const h = window.harness;
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://online-go.com/api/v1/puzzles/2'] = { status: 200, json: {
+			name: 'P', puzzle: { width: 9, height: 9, initial_player: 'black', initial_state: { black: 'aaba', white: 'cacb' }, puzzle_description: 'Black to live',
+				move_tree: { x: -1, y: -1, branches: [{ x: 0, y: 1, branches: [{ x: 1, y: 1, branches: [{ x: 0, y: 2, correct_answer: true }] }] }] } },
+		} };
+		requestUrl.answers['https://online-go.com/api/v1/games/9/sgf'] = { status: 200, text: '(;FF[4]GM[1]SZ[9];B[ee];W[cc];B[gg])' };
+		const v = h.app.vault;
+		const entries = ['Only.md', 'Before.md', 'After.md', 'Code.md', 'Broken.md'].map((path) => ({ file: v.getAbstractFileByPath(path), getValue: () => null }));
+		const config = { get: (k) => (k === 'boardScale' ? 60 : true), getOrder: () => ['file.name'], getDisplayName: (p) => p };
+		const host = document.createElement('div');
+		host.style.width = '900px';
+		document.getElementById('main').appendChild(host);
+		const view = h.app._basesViews.get('kifu-boards').factory({ app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } }, host);
+		view.load();
+		view.onDataUpdated();
+	});
+	await sleep(500);
+	const cards = page.locator('.kifu-bases-card');
+	const boardIn = (i) => cards.nth(i).locator('.kifu-svg').count();
+	// the embedded puzzle, drawn and playable
+	assert.equal(await boardIn(0), 1);
+	assert.equal(await cards.nth(0).locator('.kifu-cap').textContent(), 'Black to live');
+	// the embed comes first: its game (2 black stones, 1 white), not the block's single stone
+	const stonesIn = (i) => cards.nth(i).locator('.kifu-svg').evaluate((svg) => {
+		const n = (q) => (svg.querySelector(q).getAttribute('d').match(/M/g) ?? []).length;
+		return [n('.kifu-b'), n('.kifu-w')];
+	});
+	assert.deepEqual(await stonesIn(1), [2, 1]);
+	// the block comes first: its board
+	assert.deepEqual(await stonesIn(2), [1, 0]);
+	// links in code are not boards
+	assert.equal(await boardIn(3), 0);
+	assert.equal(await cards.nth(3).locator('.kifu-bases-none').textContent(), 'No board in this note.');
+	// an embed that can not be fetched says why, on its card (once it is in sight: boards are drawn then)
+	await cards.nth(4).scrollIntoViewIfNeeded();
+	await sleep(300);
+	assert.match(await cards.nth(4).locator('.kifu-bases-none.is-error').textContent(), /OGS has no game 404, or it is not public\./);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],
