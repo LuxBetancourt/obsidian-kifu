@@ -13,6 +13,7 @@
 	// Obsidian adds createEl to every node: make an element in the node's document, give it
 	// classes, text and attributes, and append it.
 	Node.prototype.createDiv = function (o) { return this.createEl('div', o); };
+	Node.prototype.createSpan = function (o) { return this.createEl('span', o); };
 	// (the global one makes an element on its own)
 	window.createDiv = (o) => document.createDocumentFragment().createDiv(o);
 	HTMLElement.prototype.setText = function (t) { this.textContent = t; };
@@ -368,6 +369,7 @@
 	class Workspace extends Events {
 		constructor(app) { super(); this.app = app; this._leaves = []; this.layoutReady = true; this.activeEditor = null; this.revealed = []; }
 		onLayoutReady(cb) { cb(); }
+		openLinkText(path, source, newLeaf) { (this.app._opened ??= []).push([path, !!newLeaf]); return Promise.resolve(); }
 		iterateAllLeaves(cb) { for (const l of this._leaves.slice()) cb(l); }
 		getLeavesOfType(type) { return this._leaves.filter((l) => l.view && l.view.getViewType() === type); }
 		getActiveViewOfType(cls) { const l = this._leaves.find((x) => x.view instanceof cls); return l ? l.view : null; }
@@ -398,6 +400,7 @@
 			this._dom = dom;
 			this._processors = new Map(); this._views = new Map(); this._commands = []; this._settingTabs = []; this._icons = new Map(); this._notices = [];
 			this.vault = new Vault();
+			this.renderContext = {};
 			const secrets = new Map();
 			this.secretStorage = { setSecret: (id, v) => secrets.set(id, v), getSecret: (id) => secrets.get(id) ?? null, listSecrets: () => [...secrets.keys()] };
 			this.metadataCache = new MetadataCache(this.vault);
@@ -416,6 +419,7 @@
 			this.register(() => this.app._processors.delete(lang));
 		}
 		registerView(type, factory) { this.app._views.set(type, factory); }
+		registerBasesView(id, registration) { (this.app._basesViews ??= new Map()).set(id, registration); return true; }
 		registerEditorExtension(ext) { (this.app._editorExtensions ??= []).push(ext); }
 		registerMarkdownPostProcessor(fn) {
 			(this.app._postProcessors ??= []).push(fn);
@@ -538,6 +542,13 @@
 	requestUrl.answers = {};
 	requestUrl.log = [];
 
+	// A Bases view as a plugin sees it: the controller hands over the app, the view's
+	// config and the query's results (a check builds them; see the Bases scenario).
+	class BasesView extends Component {
+		constructor(controller) { super(); this.app = controller.app; this.config = controller.config; this.data = controller.data; this.allProperties = []; }
+	}
+	const Keymap = { isModEvent: (e) => !!(e && (e.ctrlKey || e.metaKey)) };
+
 	class Notice { constructor(message) { Notice.log.push(String(message)); console.log('[notice]', message); } }
 	Notice.log = [];
 
@@ -578,7 +589,7 @@
 
 	window.__obsidian = {
 		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, View, WorkspaceLeaf, Editor,
-		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem, SecretComponent, requestUrl,
+		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem, SecretComponent, requestUrl, BasesView, Keymap,
 		normalizePath,
 		addIcon: (id, content) => icons.set(id, content),
 		setIcon: () => {}, setTooltip: () => {},

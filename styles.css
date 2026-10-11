@@ -493,6 +493,86 @@ body .kifu-panel button.kifu-btn {
 	display: none;
 }
 
+/* ----------------------------------------------------- the Bases view */
+
+.kifu-bases {
+	--kifu-card-width: 228px;
+	padding: var(--size-4-2, 8px);
+}
+
+.kifu-bases-group {
+	margin: var(--size-4-3, 12px) 0 var(--size-4-2, 8px);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small, 13px);
+	font-weight: var(--font-semibold, 600);
+}
+
+.kifu-bases-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(var(--kifu-card-width), 1fr));
+	gap: var(--size-4-3, 12px);
+}
+
+.kifu-bases-card {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	padding: var(--size-4-2, 8px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+}
+
+.kifu-bases-board {
+	min-height: 2em;
+}
+
+.kifu-bases-board .kifu {
+	margin: 0;
+	padding: 0 24px 0 0;
+}
+
+.kifu-bases-title {
+	margin-top: var(--size-4-1, 4px);
+	font-weight: var(--font-semibold, 600);
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+
+.kifu-bases-title:hover {
+	color: var(--text-accent);
+}
+
+.kifu-bases-props {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller, 12px);
+}
+
+.kifu-bases-prop-name {
+	margin-right: 0.4em;
+	color: var(--text-faint);
+}
+
+.kifu-bases-none {
+	padding: 1.5em 0;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller, 12px);
+	text-align: center;
+}
+
+/* pictures only: no buttons, and the board opens its note */
+.kifu-bases.is-static .kifu-ctl {
+	display: none;
+}
+
+.kifu-bases.is-static .kifu-svg {
+	pointer-events: none;
+}
+
+.kifu-bases.is-static .kifu-bases-board {
+	cursor: pointer;
+}
+
 /* a board drawn from a link: what is said while it is fetched, or why it is not there */
 .kifu-linked-msg {
 	margin: 0.5em 0;

@@ -22,6 +22,7 @@ import { problemApi, problemId, problemUrl, readProblem } from './goproblems';
 import { Fetched, ImportError } from './importing';
 import { LinkTarget, LinkedBoard, linkTarget } from './linked';
 import { linkedBoards } from './livelinks';
+import { BASES_VIEW, KifuBasesView } from './basesview';
 import { readSgfLink } from './sgflink';
 import { ServerTarget, readDgs, readFox, readGoQuest } from './servers';
 import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
@@ -100,6 +101,16 @@ export default class KifuPlugin extends Plugin implements Host {
 		// ![](link) to OGS or goproblems.com: a board, in the reading view and in Live Preview
 		this.registerMarkdownPostProcessor((el, ctx) => this.#linkBoards(el, ctx));
 		this.registerEditorExtension(linkedBoards(this));
+		// a Bases view: the notes of a base as cards, each with its first board
+		this.registerBasesView(BASES_VIEW, {
+			name: 'Kifu boards',
+			icon: 'kifu-tree',
+			factory: (controller, el) => new KifuBasesView(controller, el, this),
+			options: () => [
+				{ type: 'slider', key: 'boardScale', displayName: 'Board size', min: 30, max: 150, step: 5, default: 60 },
+				{ type: 'toggle', key: 'playable', displayName: 'Playable boards', default: true },
+			],
+		});
 		this.registerView(VIEW_TYPE, (leaf) => new TreePanel(leaf, this));
 		this.addSettingTab(new KifuSettingTab(this.app, this));
 		this.addCommand({

@@ -965,6 +965,79 @@ await scenario('embedded links to games on Dragon Go Server, Fox, GoQuest and St
 	assert.ok(urls.includes('https://online-go.com/api/v1/games/9/sgf')); // (Stone.gs: asked of OGS)
 });
 
+await scenario('the Kifu boards Bases view: a card per note, its first board playable, its properties', {
+	files: {
+		'P.md': '---\nlevel: 20k\n---\n# Problem\n\n```kifu\n(;GM[1]SZ[9]AB[aa][ba]AW[ca][cb]C[Black to live](;B[ab];W[bb];B[ac]TE[1])(;B[bb];W[ab]))\n```\n\n```kifu\n(;SZ[9];B[ii])\n```\n',
+		'G.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n',
+		'N.md': '# Nothing\n\nNo board here.\n',
+		'games/one.sgf': '(;GM[1]SZ[9];B[cc];W[gg])',
+	},
+	panes: [],
+}, async (page) => {
+	// a base as Obsidian hands it to a view: entries for files, values for properties
+	await page.evaluate(() => {
+		const h = window.harness;
+		const v = h.app.vault;
+		const value = (text) => ({ isTruthy: () => !!text, toString: () => text, renderTo: (el) => { el.textContent = text; } });
+		const props = { 'P.md': '20k', 'G.md': '', 'N.md': '', 'games/one.sgf': '' };
+		const entries = Object.keys(props).map((path) => ({ file: v.getAbstractFileByPath(path), getValue: (p) => (p === 'note.level' ? value(props[path]) : null) }));
+		const config = { values: { boardScale: 60, playable: true }, get(k) { return this.values[k]; }, getOrder: () => ['file.name', 'note.level'], getDisplayName: (p) => p.replace(/^note\./, '') };
+		const controller = { app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } };
+		const host = document.createElement('div');
+		host.style.width = '900px';
+		document.getElementById('main').appendChild(host);
+		const reg = h.app._basesViews.get('kifu-boards');
+		const view = reg.factory(controller, host);
+		view.load();
+		view.onDataUpdated();
+		window.__base = { view, config, reg };
+	});
+	await sleep(400);
+	// four cards: three boards (the problem, the game, the SGF file) and a note without one
+	assert.equal(await page.locator('.kifu-bases-card').count(), 4);
+	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
+	assert.equal(await page.locator('.kifu-bases-none').textContent(), 'No board in this note.');
+	assert.deepEqual(await page.locator('.kifu-bases-title').allTextContents(), ['P', 'G', 'N', 'one']);
+	// the properties chosen for the view, as Obsidian renders them; empty ones left out
+	assert.deepEqual(await page.locator('.kifu-bases-prop').allTextContents(), ['level20k']);
+	// the options the view offers
+	assert.deepEqual(await page.evaluate(() => window.__base.reg.options().map((o) => o.key)), ['boardScale', 'playable']);
+	// the first board only (the problem, not the 9x9 after it), and it plays
+	assert.equal(await cap(page, 0), 'Black to live');
+	await clickPoint(page, 0, 'ab');
+	await sleep(700);
+	await clickPoint(page, 0, 'ac');
+	await sleep(100);
+	assert.match(await cap(page, 0), /^Correct/);
+	// it is not edited from here
+	const box = await page.locator('.kifu-svg').nth(0).boundingBox();
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await lockBtn(page, 0).click();
+	assert.ok((await notices(page)).some((n) => /shown in a base\. Open the note to edit it\./.test(n)));
+	// the title opens the note (with Ctrl, in a new tab)
+	await page.locator('.kifu-bases-title').nth(1).click();
+	await page.locator('.kifu-bases-title').nth(1).click({ modifiers: ['Control'] });
+	assert.deepEqual(await page.evaluate(() => window.harness.app._opened), [['G.md', false], ['G.md', true]]);
+	// new data from the base: a card whose note did not change keeps its board (and the solved problem)
+	const first = await page.evaluateHandle(() => document.querySelector('.kifu-bases-card .kifu-svg'));
+	await page.evaluate(() => window.__base.view.onDataUpdated());
+	await sleep(100);
+	assert.equal(await page.evaluate((el) => el.isConnected, first), true);
+	assert.match(await cap(page, 0), /^Correct/);
+	// pictures only: no buttons, and a click on a board opens its note
+	await page.evaluate(() => { window.__base.config.values.playable = false; window.__base.view.onDataUpdated(); });
+	await sleep(400);
+	assert.equal(await page.locator('.kifu-bases.is-static').count(), 1);
+	assert.equal(await page.locator('.kifu-bases-card .kifu-ctl').first().evaluate((e) => getComputedStyle(e).display), 'none');
+	await page.locator('.kifu-bases-board').nth(1).click({ force: true });
+	assert.deepEqual((await page.evaluate(() => window.harness.app._opened)).at(-1), ['G.md', false]);
+	// the board size the view asks for
+	await page.evaluate(() => { window.__base.config.values.boardScale = 100; window.__base.view.onDataUpdated(); });
+	await sleep(400);
+	const widths = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card .kifu-svg')].map((e) => Number(e.getAttribute('width'))));
+	assert.ok(widths.every((w) => w > 0), widths.join());
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],

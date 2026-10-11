@@ -4,7 +4,7 @@
  * minutes), played like any other board, never edited: there is no block to write to.
  */
 
-import { MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
+import { Component, MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
 import type KifuPlugin from './main';
 import { problemId, problemUrl } from './goproblems';
 import { ImportError } from './importing';
@@ -44,13 +44,40 @@ export function linkTarget(href: string): LinkTarget | null {
 	return null;
 }
 
+/**
+ * A board that belongs to no block of the note (drawn from a link, or shown in a base):
+ * played like any other, never edited (`why` says so to whoever tries). It lives as long
+ * as `owner` does. `from` names where it came from.
+ */
+export function mountDetached(
+	owner: Component,
+	el: HTMLElement,
+	plugin: KifuPlugin,
+	notePath: string,
+	body: string,
+	from: string,
+	why: string,
+	ctx: MarkdownPostProcessorContext | null = null,
+): Session {
+	const s = new Session(plugin, notePath, body);
+	s.link = from;
+	s.fixed = why;
+	plugin.linkedShown(s, true);
+	owner.register(() => plugin.linkedShown(s, false));
+	// (a board in the editor or a base has no section of the note to tell about)
+	const stub: MarkdownPostProcessorContext = { docId: '', sourcePath: notePath, frontmatter: null, getSectionInfo: () => null, addChild: (c: MarkdownRenderChild) => owner.addChild(c) };
+	const view = new BoardView(el, plugin, ctx ?? stub, body);
+	owner.addChild(view);
+	view.attach(s);
+	return s;
+}
+
 /** A board in place of a link: fetched, then drawn; or a line saying why it could not be. */
 export class LinkedBoard extends MarkdownRenderChild {
 	#plugin: KifuPlugin;
 	#target: LinkTarget;
 	#notePath: string;
 	#ctx: MarkdownPostProcessorContext | null;
-	#session: Session | null = null;
 	#gone = false;
 
 	constructor(containerEl: HTMLElement, plugin: KifuPlugin, target: LinkTarget, notePath: string, ctx: MarkdownPostProcessorContext | null) {
@@ -74,17 +101,7 @@ export class LinkedBoard extends MarkdownRenderChild {
 			const body = await this.#plugin.fetchLinked(t);
 			if (this.#gone) return;
 			msg.remove();
-			const s = new Session(this.#plugin, this.#notePath, body);
-			s.link = t.url;
-			s.fixed = `this board is drawn from ${t.url}. To edit it, import it instead (right-click, then Kifu).`;
-			this.#session = s;
-			this.#plugin.linkedShown(s, true);
-			// (a board in the editor has no section of the note to tell about)
-			const stub: MarkdownPostProcessorContext = { docId: '', sourcePath: this.#notePath, frontmatter: null, getSectionInfo: () => null, addChild: (c: MarkdownRenderChild) => this.addChild(c) };
-			const ctx = this.#ctx ?? stub;
-			const view = new BoardView(this.containerEl, this.#plugin, ctx, body);
-			this.addChild(view);
-			view.attach(s);
+			mountDetached(this, this.containerEl, this.#plugin, this.#notePath, body, t.url, `this board is drawn from ${t.url}. To edit it, import it instead (right-click, then Kifu).`, this.#ctx);
 		} catch (e) {
 			if (this.#gone) return;
 			msg.setText(`Kifu: ${e instanceof ImportError ? e.message : `could not draw ${t.url}.`}`);
@@ -95,6 +112,5 @@ export class LinkedBoard extends MarkdownRenderChild {
 
 	onunload(): void {
 		this.#gone = true;
-		if (this.#session) this.#plugin.linkedShown(this.#session, false);
 	}
 }
