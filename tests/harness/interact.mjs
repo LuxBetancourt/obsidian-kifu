@@ -998,6 +998,9 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
 	assert.equal(await page.locator('.kifu-bases-none').textContent(), 'No board in this note.');
 	assert.deepEqual(await page.locator('.kifu-bases-title').allTextContents(), ['P', 'G', 'N', 'one']);
+	// every board fills its card (but for the room kept beside it for its buttons)
+	const fill = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card')].filter((c) => c.querySelector('.kifu-svg')).map((c) => c.querySelector('.kifu-svg').getBoundingClientRect().width / c.clientWidth));
+	assert.ok(fill.every((f) => f > 0.8), fill.join());
 	// the properties chosen for the view, as Obsidian renders them; empty ones left out
 	assert.deepEqual(await page.locator('.kifu-bases-prop').allTextContents(), ['level20k']);
 	// the options the view offers

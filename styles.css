@@ -532,6 +532,16 @@ body .kifu-panel button.kifu-btn {
 	padding: 0 24px 0 0;
 }
 
+/* the board fills its card (the drawing scales; the card's width is the view's board size) */
+.kifu-bases-board .kifu-frame {
+	width: 100%;
+}
+
+.kifu-bases-board .kifu-svg {
+	width: 100%;
+	height: auto;
+}
+
 .kifu-bases-title {
 	margin-top: var(--size-4-1, 4px);
 	font-weight: var(--font-semibold, 600);
@@ -563,6 +573,11 @@ body .kifu-panel button.kifu-btn {
 /* pictures only: no buttons, and the board opens its note */
 .kifu-bases.is-static .kifu-ctl {
 	display: none;
+}
+
+/* (and no room kept beside the board for them) */
+.kifu-bases.is-static .kifu-bases-board .kifu {
+	padding: 0;
 }
 
 .kifu-bases.is-static .kifu-svg {
