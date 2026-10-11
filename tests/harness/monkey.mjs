@@ -513,6 +513,11 @@ async function run(browser, arrangement, profile, seed) {
 					await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 					// (a board may be drawn again, or go back to locked, between any two of these steps: then there is nothing to click)
 					if (!(await board.locator('.kifu-ctl .kifu-btn').first().click({ timeout: 1500 }).then(() => true, () => false))) continue;
+					// moves played while it was locked: asked whether to keep them
+					if (await page.evaluate(() => window.__obsidian.Modal.last?.isOpen ?? false)) {
+						await page.locator('.modal-content button', { hasText: one(['Save', 'Discard']) }).click({ timeout: 1500 }).catch(() => {});
+						await page.evaluate(() => window.__obsidian.Modal.last?.close());
+					}
 					used(id);
 					info.get(id).edit = true;
 					await sleep(30);

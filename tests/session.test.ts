@@ -575,6 +575,21 @@ test('edit: unlocking keeps the line on the board, locking saves at once', () =>
 	assert.equal(h.saves, before + 1);
 });
 
+test('edit: unlocking can discard the moves played while locked', () => {
+	const s = new Session(host(), 'note.md', PROBLEM);
+	const saved = s.home.children.length;
+	click(s, 'bb');
+	click(s, 'cc');
+	assert.equal(s.playedMoves, 2);
+	s.setEdit(true, false);
+	assert.equal(s.edit, true);
+	// gone, from the board and the tree: editing starts where they began
+	assert.equal(s.cur, s.home);
+	assert.equal(s.home.children.length, saved);
+	assert.equal(s.dirtyTree, false);
+	assert.equal(s.playedMoves, 0);
+});
+
 test('crop and the resting view', () => {
 	const s = make('scale: 0.8\n' + PROBLEM);
 	s.setEdit(true);

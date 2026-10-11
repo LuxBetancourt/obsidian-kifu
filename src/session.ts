@@ -846,6 +846,13 @@ export class Session {
 		if (next) this.goto(next);
 	}
 
+	/** How many moves of the line on the board were played while locked (and are not saved). */
+	get playedMoves(): number {
+		let k = 0;
+		for (let n: SgfNode | null = this.cur; n; n = n.parent) if (n.temp) k++;
+		return k;
+	}
+
 	/** Anything to undo with reset()? */
 	get moved(): boolean {
 		return this.cur !== this.home || this.scratch;
@@ -1036,21 +1043,26 @@ export class Session {
 		this.commit(shape);
 	}
 
-	setEdit(on: boolean): void {
+	/**
+	 * Unlock or lock. Unlocking keeps the line on the board, moves played while locked
+	 * included, unless `keepPlayed` is false: then those moves go, and editing starts
+	 * where they began. Any other scratch work goes either way.
+	 */
+	setEdit(on: boolean, keepPlayed = true): void {
 		if (on === this.edit || (on && this.cantEdit)) return;
 		this.cancelReply();
 		this.burst = null;
 		if (on) {
-			// The line on the board is kept; any other scratch work goes.
 			let keep = false;
-			for (let n: SgfNode | null = this.cur; n; n = n.parent) if (n.temp) keep = true;
+			if (keepPlayed) for (let n: SgfNode | null = this.cur; n; n = n.parent) if (n.temp) keep = true;
 			if (keep) {
 				this.snapshot(); // (taken while the line is still scratch, so undo removes it again)
 				for (let n: SgfNode | null = this.cur; n; n = n.parent) delete n.temp;
 			}
 			const here = this.cur;
 			this.dropScratch();
-			this.cur = here;
+			// (discarded: where the moves played began, which dropping them leaves on the board)
+			if (keepPlayed) this.cur = here;
 			this.edit = true;
 			if (keep) {
 				this.changed(true);

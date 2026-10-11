@@ -996,9 +996,22 @@ export default class KifuPlugin extends Plugin implements Host {
 			new Notice(`Kifu: ${s.cantEdit}`);
 			return;
 		}
+		const unlocked = (): void => {
+			// (on a phone the sidebar is a drawer that would cover the board)
+			if (s.edit && this.settings.revealPanel && !Platform.isMobile) void this.showPanel(false);
+		};
+		// Moves played on the locked board would become part of the record: ask first.
+		const played = s.edit ? 0 : s.playedMoves;
+		if (played > 0) {
+			new KeepPlayedPrompt(this, played, (keep) => {
+				if (s.edit || s.gone) return;
+				s.setEdit(true, keep);
+				unlocked();
+			}).open();
+			return;
+		}
 		s.setEdit(!s.edit);
-		// (on a phone the sidebar is a drawer that would cover the board)
-		if (s.edit && this.settings.revealPanel && !Platform.isMobile) void this.showPanel(false);
+		unlocked();
 	}
 
 	/** Lock a board that was left unlocked, now that it is shown only in the reading view. */
@@ -1242,6 +1255,42 @@ interface PromptOptions<T> {
 	kindOf?: (text: string) => string | null;
 	/** What to import, or null when the text is no good. */
 	parse: (text: string, kind: string) => T | null;
+}
+
+/**
+ * Asked on unlocking a board that has moves played on it while it was locked: save them
+ * into the board's moves, or discard them. Closed without an answer, the board stays locked.
+ */
+class KeepPlayedPrompt extends Modal {
+	#count: number;
+	#done: (keep: boolean) => void;
+
+	constructor(plugin: KifuPlugin, count: number, done: (keep: boolean) => void) {
+		super(plugin.app);
+		this.#count = count;
+		this.#done = done;
+	}
+
+	onOpen(): void {
+		const n = this.#count;
+		this.setTitle('Keep the moves you played?');
+		this.contentEl.createEl('p', {
+			text: `You played ${n === 1 ? 'a move' : `${n} moves`} on this board while it was locked. Save ${n === 1 ? 'it' : 'them'} as part of the board's moves, or discard ${n === 1 ? 'it' : 'them'} and edit the board as it was.`,
+		});
+		const row = this.contentEl.createDiv({ cls: 'modal-button-container' });
+		const answer = (keep: boolean): void => {
+			this.close();
+			this.#done(keep);
+		};
+		row.createEl('button', { text: 'Discard' }).addEventListener('click', () => answer(false));
+		const save = row.createEl('button', { cls: 'mod-cta', text: 'Save' });
+		save.addEventListener('click', () => answer(true));
+		window.setTimeout(() => save.focus(), 0);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }
 
 /** Asks what to import: its number, or a link to it (and, where it matters, what kind of thing a number is). */

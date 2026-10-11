@@ -201,6 +201,58 @@ await scenario('a board left unlocked is locked, and its edit written, once the 
 	assert.deepEqual(await notices(page), []);
 });
 
+for (const answer of ['Save', 'Discard', 'neither (the prompt is closed)']) {
+	await scenario(`moves played on a locked board: unlocking asks whether to keep them; ${answer}`, {
+		files: { 'N.md': '# New\n\n```kifu\n(;SZ[9])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+	}, async (page) => {
+		const start = '# New\n\n```kifu\n(;SZ[9])\n```\n\nafter\n';
+		await clickPoint(page, 0, 'ee');
+		await clickPoint(page, 0, 'gg');
+		assert.deepEqual(await stones(page), { black: 1, white: 1 });
+		await toggleLock(page);
+		// not unlocked yet: asked first
+		const prompt = () => page.evaluate(() => {
+			const m = window.__obsidian.Modal.last;
+			return m?.isOpen ? { title: m.title, text: m.contentEl.querySelector('p').textContent, buttons: [...m.contentEl.querySelectorAll('button')].map((b) => b.textContent) } : null;
+		});
+		assert.deepEqual(await prompt(), {
+			title: 'Keep the moves you played?',
+			text: "You played 2 moves on this board while it was locked. Save them as part of the board's moves, or discard them and edit the board as it was.",
+			buttons: ['Discard', 'Save'],
+		});
+		assert.deepEqual(await isEditing(page), [false]);
+		if (answer === 'Save' || answer === 'Discard') {
+			await page.locator('.modal-content button', { hasText: answer }).click();
+			assert.equal(await prompt(), null);
+			assert.deepEqual(await isEditing(page), [true]);
+			await sleep(700);
+			if (answer === 'Save') {
+				assert.deepEqual(await stones(page), { black: 1, white: 1 });
+				assert.match(await doc(page), /;B\[ee\];W\[gg\]\)\n```/);
+			} else {
+				assert.deepEqual(await stones(page), { black: 0, white: 0 });
+				assert.equal(await doc(page), start);
+			}
+		} else {
+			await page.evaluate(() => window.__obsidian.Modal.last.close());
+			// still locked, with the moves still on the board, and nothing written
+			assert.deepEqual(await isEditing(page), [false]);
+			assert.deepEqual(await stones(page), { black: 1, white: 1 });
+			await sleep(400);
+			assert.equal(await doc(page), start);
+		}
+		assert.deepEqual(await notices(page), []);
+	});
+}
+
+await scenario('a board unlocked with no moves played on it is not asked about', {
+	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await toggleLock(page);
+	assert.deepEqual(await isEditing(page), [true]);
+	assert.equal(await page.evaluate(() => window.__obsidian.Modal.last?.isOpen ?? false), false);
+});
+
 await scenario('a reading pane beside the editor shows the board being edited, but no tools, and takes no clicks', {
 	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }, { path: 'N.md', mode: 'preview' }], width: 1500, autosave: 100,
 }, async (page) => {
@@ -421,6 +473,8 @@ await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ pa
 
 	// editing a comment from the panel
 	await page.locator('.kifu-p-nav .kifu-btn[aria-label="Unlock to edit"]').click();
+	// (the scratch move on the board: kept)
+	await page.locator('.modal-content button', { hasText: 'Save' }).click();
 	assert.equal(await page.locator('.kifu.is-editing').count(), 1);
 	assert.equal(await eye.isVisible(), false); // nothing is hidden from the one who edits
 	const ta = page.locator('.kifu-p-comment');

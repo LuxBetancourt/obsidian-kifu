@@ -67,7 +67,7 @@ While a board is unlocked the whole board is shown, with the part that will be h
 
 Two things worth knowing:
 
-- If you have been playing on a locked board and then unlock it, the line that is on the board is kept and becomes part of the tree. (Undo takes it out again.)
+- If you have been playing on a locked board and then unlock it, you are asked what to do with the moves you played: **Save** them (the line on the board becomes part of the tree; undo takes it out again), or **Discard** them and edit the board as it was. Close the prompt to leave the board locked.
 - Locking puts the board back to the position the note shows.
 
 Comments are written in the **move tree** panel (see below).
