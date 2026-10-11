@@ -833,6 +833,16 @@ await scenario('embedded links in Live Preview: a board, the link again under th
 	assert.equal(await page.evaluate(() => window.__obsidian.requestUrl.log.length), before);
 });
 
+await scenario('an embedded link to an SGF file in Live Preview', { files: { 'S.md': 'top\n\n![](http://192.168.1.20:8080/kifu/game.sgf)\n\nend\n' } }, async (page) => {
+	await page.evaluate(() => {
+		window.__obsidian.requestUrl.answers['http://192.168.1.20:8080/kifu/game.sgf'] = { status: 200, text: '(;GM[1]SZ[9];B[ee];W[cc];B[gg])' };
+		window.openLivePreview('S.md');
+	});
+	await sleep(300);
+	assert.equal(await page.locator('.kifu-linked-embed .kifu-svg').count(), 1);
+	assert.deepEqual(await stones(page, 0), { black: 2, white: 1 }); // (a game record: its last move)
+});
+
 /* A block that is copied right after its board wrote it reads exactly like what the board is waiting for. */
 for (const which of ['original', 'copy']) {
 	await scenario(`a block is pasted again a moment after its board wrote it; then the ${which} is edited`, { files: { 'N.md': PLAIN }, live: ['N.md'], autosave: 150, height: 1300 }, async (page) => {

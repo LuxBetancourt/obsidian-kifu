@@ -10,14 +10,17 @@ import { problemId, problemUrl } from './goproblems';
 import { ImportError } from './importing';
 import { OgsTarget, ogsPage, ogsTarget } from './ogs';
 import { Session } from './session';
+import { isSgfLink } from './sgflink';
 import { BoardView } from './ui/boardview';
 
-export type LinkTarget = { site: 'ogs'; ogs: OgsTarget; url: string } | { site: 'goproblems'; id: number; url: string };
+export type LinkTarget = { site: 'ogs'; ogs: OgsTarget; url: string } | { site: 'goproblems'; id: number; url: string } | { site: 'sgf'; url: string };
 
 /** The game or problem a link is to, when it is one a board can be drawn from. */
 export function linkTarget(href: string): LinkTarget | null {
 	const s = href.trim();
 	if (!/^https?:\/\//i.test(s)) return null;
+	// an SGF file anywhere (a file server of one's own, say)
+	if (isSgfLink(s)) return { site: 'sgf', url: s };
 	if (/^https?:\/\/(www\.)?online-go\.com\//i.test(s)) {
 		const t = ogsTarget(s, 'game');
 		return t ? { site: 'ogs', ogs: t, url: ogsPage(t) } : null;

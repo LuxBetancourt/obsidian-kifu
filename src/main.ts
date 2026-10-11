@@ -22,6 +22,7 @@ import { problemApi, problemId, problemUrl, readProblem } from './goproblems';
 import { Fetched, ImportError } from './importing';
 import { LinkTarget, LinkedBoard, linkTarget } from './linked';
 import { linkedBoards } from './livelinks';
+import { readSgfLink } from './sgflink';
 import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
@@ -199,6 +200,24 @@ export default class KifuPlugin extends Plugin implements Host {
 		return readProblem(id, answer.status, () => answer.json, !!key);
 	}
 
+	/** Fetch an SGF file from anywhere. */
+	async #getSgfFile(url: string): Promise<string> {
+		let res;
+		try {
+			res = await requestUrl({ url, throw: false });
+		} catch {
+			let host = url;
+			try {
+				host = new URL(url).host;
+			} catch {
+				// (keep the whole link)
+			}
+			throw new ImportError(`could not reach ${host}. Are you online, and is the server running?`);
+		}
+		const answer = res;
+		return readSgfLink(url, answer.status, () => answer.arrayBuffer);
+	}
+
 	/** Ask OGS for a game, review or puzzle. */
 	async #getOgs(t: OgsTarget): Promise<Fetched> {
 		let res;
@@ -222,6 +241,7 @@ export default class KifuPlugin extends Plugin implements Host {
 		if (hit && Date.now() - hit.at < LINK_KEEP) return hit.body;
 		const body = (async () => {
 			if (t.site === 'goproblems') return 'problem: yes\n' + (await this.#getProblem(t.id)).sgf;
+			if (t.site === 'sgf') return this.#getSgfFile(t.url);
 			const { sgf } = await this.#getOgs(t.ogs);
 			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
 		})();

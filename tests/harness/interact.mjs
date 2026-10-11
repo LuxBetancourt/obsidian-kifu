@@ -904,6 +904,34 @@ await scenario('embedded links to OGS and goproblems.com are drawn as boards in 
 	assert.match(await text(page, 'L.md'), /^# Links\n\n!\[\]\(https:\/\/online-go\.com\/puzzle\/2\)/);
 });
 
+await scenario('an embedded link to an SGF file anywhere is drawn as a board', {
+	// (like Obsidian, the reading view first makes each link an image, which the browser
+	// then tries to load from a host that does not exist here)
+	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
+	files: { 'S.md': '# Mine\n\n![](https://files.example.com/go/problem.sgf?key=1)\n\n![](https://files.example.com/go/missing.sgf)\n\n![](https://files.example.com/go/page.sgf)\n' },
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://files.example.com/go/problem.sgf?key=1'] = { status: 200, text: '(;GM[1]SZ[9]AB[aa][ba]AW[ca][cb]C[Black to live](;B[ab];W[bb];B[ac]TE[1])(;B[bb];W[ab]))' };
+		requestUrl.answers['https://files.example.com/go/page.sgf'] = { status: 200, text: '<html>please log in</html>' };
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('S.md', 'preview'));
+	});
+	await sleep(300);
+	assert.equal(await page.locator('.kifu-svg').count(), 1);
+	const errs = await page.locator('.kifu-linked-msg.is-error').allTextContents();
+	assert.ok(errs.some((t) => /there is no file at https:\/\/files\.example\.com\/go\/missing\.sgf\./.test(t)), errs.join(' | '));
+	assert.ok(errs.some((t) => /page\.sgf is not an SGF file\./.test(t)), errs.join(' | '));
+	// a problem in the file: judged as one, and it plays
+	assert.equal(await cap(page, 0), 'Black to live');
+	await clickPoint(page, 0, 'ab');
+	await sleep(700);
+	await clickPoint(page, 0, 'ac');
+	await sleep(100);
+	assert.match(await cap(page, 0), /^Correct/);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'preview' }],
