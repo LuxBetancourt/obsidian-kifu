@@ -253,6 +253,67 @@ await scenario('a board unlocked with no moves played on it is not asked about',
 	assert.equal(await page.evaluate(() => window.__obsidian.Modal.last?.isOpen ?? false), false);
 });
 
+await scenario('a locked game record has a play button that plays it through a move at a time; a problem has none', {
+	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n\n```kifu\n' + KILL + '\n```\n' }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, height: 1400,
+}, async (page) => {
+	const play = (i) => page.locator('.kifu').nth(i).locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
+	// (also in the reading view: it is a way of looking at the board)
+	assert.equal(await play(0).isHidden(), false);
+	assert.equal(await play(1).isHidden(), true); // the problem: that would give its answer away
+	assert.deepEqual(await stones(page, 0), { black: 2, white: 1 }); // a record rests at its end
+	await play(0).click();
+	// it starts over, and plays a move each second
+	assert.deepEqual(await stones(page, 0), { black: 0, white: 0 });
+	assert.equal(await play(0).getAttribute('aria-label'), 'Pause');
+	await sleep(1150);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 0 });
+	await sleep(1000);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 });
+	// paused: it stays there
+	await play(0).click();
+	assert.equal(await play(0).getAttribute('aria-label'), 'Play through the game');
+	await sleep(1300);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 });
+	// on again, to the end, where it stops by itself
+	await play(0).click();
+	await sleep(1150);
+	assert.deepEqual(await stones(page, 0), { black: 2, white: 1 });
+	assert.equal(await play(0).getAttribute('aria-label'), 'Play through the game');
+	assert.equal(await text(page, 'N.md'), '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n\n```kifu\n' + KILL + '\n```\n');
+});
+
+await scenario('the play button is gone while the board is unlocked', {
+	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	const play = page.locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
+	await play.click();
+	assert.equal(await play.getAttribute('aria-label'), 'Pause');
+	// unlocking stops it (and there are no moves played to be asked about)
+	await toggleLock(page);
+	assert.deepEqual(await isEditing(page), [true]);
+	assert.equal(await play.isHidden(), true);
+	await toggleLock(page);
+	assert.equal(await play.isHidden(), false);
+	assert.equal(await play.getAttribute('aria-label'), 'Play through the game');
+});
+
+await scenario('the pass button in the editing toolbar records a pass for the side to play', {
+	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await toggleLock(page);
+	const tools = await page.locator('.kifu-tools .kifu-btn').evaluateAll((bs) => bs.slice(0, 3).map((b) => b.getAttribute('aria-label')));
+	assert.deepEqual(tools, ['Play moves (click again to change who plays)', 'Pass (for the side to play)', 'Black stone']);
+	await tool(page, 'Pass').click();
+	await sleep(700);
+	assert.match(await doc(page), /\(;GM\[1\]SZ\[9\];B\[ee\];W\[\]\)/);
+	// then Black plays on
+	await clickPoint(page, 0, 'cc');
+	await sleep(700);
+	assert.match(await doc(page), /;B\[ee\];W\[\];B\[cc\]\)/);
+	assert.deepEqual(await stones(page), { black: 2, white: 0 });
+	assert.deepEqual(await notices(page), []);
+});
+
 await scenario('a reading pane beside the editor shows the board being edited, but no tools, and takes no clicks', {
 	files: { 'N.md': '# New\n\n```kifu\n(;SZ[9]AB[cc])\n```\n\nafter\n' }, panes: [{ path: 'N.md', mode: 'source' }, { path: 'N.md', mode: 'preview' }], width: 1500, autosave: 100,
 }, async (page) => {

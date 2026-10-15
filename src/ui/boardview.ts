@@ -55,6 +55,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#backBtn: HTMLButtonElement;
 	#forwardBtn: HTMLButtonElement;
 	#solutionBtn: HTMLButtonElement;
+	#playBtn: HTMLButtonElement;
 	#cap: HTMLElement;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
@@ -98,6 +99,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#backBtn = iconButton(ctl, 'prev', 'Take back your last move', () => this.session?.stepBack());
 		this.#forwardBtn = iconButton(ctl, 'next', 'Play it again', () => this.session?.stepForth());
 		this.#solutionBtn = iconButton(ctl, 'eye', 'Show the solution', () => this.session?.showSolution());
+		// a locked board that is not a problem: play its record through, a move at a time
+		this.#playBtn = iconButton(ctl, 'play', 'Play through the game', () => {
+			const s = this.session;
+			if (s) s.playThrough(!s.playing);
+		});
+		this.#playBtn.hidden = true;
 		this.#resetBtn = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
 		this.#problemBtn = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
 			const s = this.session;
@@ -309,6 +316,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#randomBtn.hidden = true;
 		this.#backBtn.hidden = this.#forwardBtn.hidden = true;
 		this.#solutionBtn.hidden = true;
+		this.#playBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
 	}
@@ -388,6 +396,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const answer = s.edit ? null : s.solution();
 		this.#solutionBtn.hidden = !answer;
 		this.#solutionBtn.disabled = !!answer && s.cur === answer;
+		this.#playBtn.hidden = away || !s.playable;
+		setIcon(this.#playBtn.firstChild as SVGSVGElement, s.playing ? 'pause' : 'play');
+		this.#playBtn.setAttribute('aria-label', s.playing ? 'Pause' : 'Play through the game');
+		this.#playBtn.classList.toggle('is-active', s.playing);
 		// (while editing, under the lock: is this board a problem?)
 		this.#problemBtn.hidden = !editing;
 		this.#problemBtn.classList.toggle('is-active', s.problem);
@@ -494,6 +506,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				else s.setTool(tool);
 			});
 			this.#toolBtns.set(tool, b);
+			// (beside the play tool: passing is playing too)
+			if (tool === 'play') this.#toolBtns.set('pass', iconButton(group, 'pass', 'Pass (for the side to play)', () => s.pass()));
 			if (tool === 'label') {
 				const input = (this.#labelInput = el(group, 'input', 'kifu-label'));
 				input.type = 'text';

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Session, Host, nodeMark } from '../src/session';
+import { Session, Host, nodeMark, PLAY_STEP } from '../src/session';
 import { DEFAULT_SETTINGS, KifuSettings } from '../src/config';
 import { getMove, getText, parseSgf, serializeSgf, xy2pt, SgfNode } from '../src/sgf';
 
@@ -573,6 +573,74 @@ test('edit: unlocking keeps the line on the board, locking saves at once', () =>
 	const before = h.saves;
 	s.setEdit(false);
 	assert.equal(h.saves, before + 1);
+});
+
+test('edit: a pass is a move of the record, for the side to play', () => {
+	const s = make('(;GM[1]SZ[9];B[ee])');
+	s.pass(); // locked: nothing
+	assert.equal(s.dirtyTree, false);
+	s.setEdit(true);
+	s.pass();
+	assert.equal(moveOf(s.cur.parent!), 'Bee');
+	assert.deepEqual(s.cur.props.W, ['']);
+	assert.equal(getMove(s.cur, 9, 9)?.pass, true);
+	assert.equal(s.toPlay(), 1); // Black's turn after White passed
+	assert.equal(s.dirtyTree, true);
+	assert.ok(s.blockBody().includes(';B[ee];W[])'));
+	// a stone played after it, and the pass followed again rather than added twice
+	click(s, 'cc');
+	assert.equal(moveOf(s.cur), 'Bcc');
+	s.prev();
+	s.prev();
+	s.pass();
+	assert.equal(s.cur.parent!.children.length, 1);
+	assert.equal(s.cur.children.length, 1);
+	// and it can be undone
+	s.goto(s.cur.children[0]);
+	s.undo();
+	s.undo();
+	assert.ok(s.blockBody().includes(';B[ee])'));
+});
+
+test('a game record is played through a move at a time; never a problem', () => {
+	// the steps run when the test says so
+	const queue: (() => void)[] = [];
+	const h = { ...host(), later: (fn: () => void, ms: number) => { assert.equal(ms, PLAY_STEP); queue.push(fn); return () => { queue.splice(queue.indexOf(fn), 1); }; } };
+	const tick = () => queue.shift()?.();
+	const s = new Session(h, 'note.md', '(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	assert.equal(s.playable, true);
+	assert.equal(s.cur, s.home); // a record rests at its end: playing it starts over
+	s.playThrough(true);
+	assert.equal(s.playing, true);
+	assert.equal(s.cur, s.start);
+	tick();
+	assert.equal(moveOf(s.cur), 'Bee');
+	tick();
+	assert.equal(moveOf(s.cur), 'Wcc');
+	// paused, and on again from there
+	s.playThrough(false);
+	assert.equal(s.playing, false);
+	assert.equal(queue.length, 0);
+	s.playThrough(true);
+	assert.equal(moveOf(s.cur), 'Wcc');
+	tick();
+	assert.equal(moveOf(s.cur), 'Bgg');
+	assert.equal(s.playing, false); // the end: it stops by itself
+	assert.equal(queue.length, 0);
+	// stepping or resetting stops it
+	s.playThrough(true);
+	tick();
+	s.prev();
+	assert.equal(s.playing, false);
+	s.playThrough(true);
+	s.reset();
+	assert.equal(s.playing, false);
+	assert.equal(queue.length, 0);
+	// not while editing; not a problem (it would give the answer away); not a record without moves
+	s.setEdit(true);
+	assert.equal(s.playable, false);
+	assert.equal(new Session(h, 'note.md', PROBLEM).playable, false);
+	assert.equal(new Session(h, 'note.md', '(;SZ[9]AB[cc])').playable, false);
 });
 
 test('edit: unlocking can discard the moves played while locked', () => {

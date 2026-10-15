@@ -127,6 +127,9 @@ export function nodeMark(n: SgfNode): Status {
 	return null;
 }
 
+/** How long each move of a record played through stays on the board before the next, in ms. */
+export const PLAY_STEP = 1000;
+
 const firstSaved = (n: SgfNode): SgfNode | undefined => n.children.find((c) => !c.temp);
 
 function removePoint(node: SgfNode, id: string, pt: string): boolean {
@@ -783,6 +786,65 @@ export class Session {
 	private cancelReply(): void {
 		this.replyTimer?.();
 		this.replyTimer = null;
+		this.stopPlaying();
+	}
+
+	/* ------------------------------------------------------------ playing through */
+
+	/** Calls off the next step of the record being played through, if it is. */
+	private playTimer: (() => void) | null = null;
+
+	/** Is the record being played through, one move at a time? */
+	get playing(): boolean {
+		return this.playTimer !== null;
+	}
+
+	/** The next move of the main line from `n`, if there is one. */
+	private mainNext(n: SgfNode): SgfNode | null {
+		const k = firstSaved(n);
+		return k && getMove(k, this.w, this.h) ? k : null;
+	}
+
+	/**
+	 * Can the record be played through here? On a locked board that is not a problem
+	 * (playing a problem through would give its answer away), with moves to play.
+	 */
+	get playable(): boolean {
+		return !this.edit && !this.problem && this.mainNext(this.start) !== null;
+	}
+
+	/**
+	 * Play the main line through, a move every `PLAY_STEP` ms, from where the board is (from
+	 * the beginning when there is nothing left to play from there); or (`on` false) stop.
+	 */
+	playThrough(on: boolean): void {
+		if (!on || !this.playable) {
+			if (this.playing) {
+				this.stopPlaying();
+				this.emit();
+			}
+			return;
+		}
+		if (this.playing) return;
+		this.goto(this.mainNext(this.cur) ? this.cur : this.start);
+		const step = (): void => {
+			const n = this.mainNext(this.cur);
+			if (!n) {
+				this.playTimer = null;
+				this.emit();
+				return;
+			}
+			this.cur = n;
+			this.playTimer = this.mainNext(n) ? this.host.later(step, PLAY_STEP) : null;
+			this.emit();
+		};
+		this.playTimer = this.host.later(step, PLAY_STEP);
+		this.emit();
+	}
+
+	private stopPlaying(): void {
+		this.playTimer?.();
+		this.playTimer = null;
 	}
 
 	goto(n: SgfNode): void {
@@ -908,6 +970,7 @@ export class Session {
 	/** Locked board: play the position out. Nothing here is ever saved. */
 	private playAt(x: number, y: number): void {
 		if (this.replyTimer !== null) return;
+		this.stopPlaying(); // (a move played: the record is not played on over it)
 		let next = this.childAt(x, y);
 		if (!next) {
 			const color = this.toPlay();
@@ -1180,6 +1243,29 @@ export class Session {
 	}
 
 	/** Change who plays next from here. */
+	/**
+	 * While editing: a pass for the side to play, as a move of the record (`B[]` or `W[]`).
+	 * A pass already saved there is followed rather than added again.
+	 */
+	pass(): void {
+		if (!this.edit) return;
+		const color = this.toPlay();
+		const there = this.cur.children.find((c) => {
+			const m = getMove(c, this.w, this.h);
+			return !!m && m.pass && m.color === color;
+		});
+		if (there) {
+			this.goto(there);
+			return;
+		}
+		this.cancelReply();
+		this.snapshot();
+		const next = newNode(this.cur, { [color === BLACK ? 'B' : 'W']: [''] });
+		this.cur.children.push(next);
+		this.cur = next;
+		this.changed(true);
+	}
+
 	togglePlayer(): void {
 		this.snapshot();
 		this.cur.props.PL = [this.toPlay() === BLACK ? 'W' : 'B'];
