@@ -311,6 +311,25 @@ await scenario('while editing, the stone of the current move can be dragged to a
 		await page.mouse.up();
 		await sleep(700);
 	};
+	// while it is dragged, the stone (with its number) is drawn where it would land
+	const label3 = () => page.evaluate(() => {
+		const t = [...document.querySelectorAll('.kifu-svg .kifu-text')].find((e) => e.textContent === '3');
+		return t ? [Math.round(Number(t.getAttribute('x'))), Math.round(Number(t.getAttribute('y')))] : null;
+	});
+	assert.deepEqual(await label3(), [650, 672]); // G3 (the text sits a little below the centre)
+	{
+		const a = await pointXY(page, 0, 'gg');
+		const b = await pointXY(page, 0, 'hh');
+		await page.mouse.move(a.x, a.y);
+		await page.mouse.down();
+		await page.mouse.move(b.x, b.y, { steps: 4 });
+		assert.deepEqual(await label3(), [750, 772]); // H2, before it is let go
+		await page.mouse.move(a.x, a.y, { steps: 4 });
+		assert.deepEqual(await label3(), [650, 672]); // and back
+		await page.mouse.up();
+		await sleep(700);
+		assert.match(await doc(page), /;B\[ee\];W\[cc\];B\[gg\]\)/); // dropped where it was: nothing changed
+	}
 	// the last move (the current one) goes from G3 to H2; nothing is played at H2 besides
 	await drag('gg', 'hh');
 	assert.match(await doc(page), /;B\[ee\];W\[cc\];B\[hh\]\)/);

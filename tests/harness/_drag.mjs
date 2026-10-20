@@ -1,0 +1,13 @@
+import { chromium, open, pointXY, sleep, toggleLock, doc } from './lib.mjs';
+const browser = await chromium.launch();
+const { page, errors } = await open(browser, { files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n\nafter\n' }, live: ['N.md'], autosave: 100 });
+await toggleLock(page);
+await sleep(300);
+await page.evaluate(() => { window.__ev = []; for (const t of ['pointerdown','pointermove','pointerup','pointercancel','mousedown','click','dragstart']) document.addEventListener(t, (e) => { if (t !== 'pointermove' || window.__ev.at(-1) !== t) window.__ev.push(t + (e.defaultPrevented ? '!' : '')); }, true); });
+const a = await pointXY(page, 0, 'gg'); const b = await pointXY(page, 0, 'hh');
+await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 6 }); await page.mouse.up();
+await sleep(800);
+console.log(await page.evaluate(() => window.__ev.join(' ')));
+console.log(await doc(page));
+console.log(errors);
+await browser.close();

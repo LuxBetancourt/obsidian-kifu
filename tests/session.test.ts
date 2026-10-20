@@ -600,6 +600,20 @@ test('edit: the current move can be put on another point; what follows it stays'
 	assert.equal(s.moveCurrent(0, 0), false);
 });
 
+test('edit: after passes, the stone that can be moved is the last one played before them', () => {
+	const s = make('(;GM[1]SZ[9];B[ee];W[cc];B[];W[])');
+	s.setEdit(true); // (on the last pass)
+	assert.equal(moveOf(s.draggable!), 'Wcc');
+	assert.equal(s.moveCurrent(3, 3), true);
+	assert.ok(s.blockBody().includes(';B[ee];W[dd];B[];W[])')); // the passes stay
+	assert.equal(getMove(s.cur, 9, 9)?.pass, true); // and the board stays where it was
+	// nothing but passes: nothing to move
+	const p = make('(;GM[1]SZ[9];B[];W[])');
+	p.setEdit(true);
+	assert.equal(p.draggable, null);
+	assert.equal(p.moveCurrent(0, 0), false);
+});
+
 test('"move:" can name a point: the first move of the main line played there', () => {
 	const game = '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg](;B[cc]))';
 	assert.equal(moveOf(make('move: G3\n' + game).home), 'Bgg');

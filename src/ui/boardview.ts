@@ -396,7 +396,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const fit = /^fit$/i.test(s.opts.scale ?? '');
 		const lineCell = Math.max(6, Math.round(BASE_CELL * set.scale));
 		const cell = fit ? this.#fitCell(m, coords, lineCell) : usual;
-		this.#board.draw(m, fit ? { cell, coords, lineCell } : { cell, coords });
+		this.#look = fit ? { cell, coords, lineCell } : { cell, coords };
+		this.#board.draw(m, this.#look);
 		this.#hover = '';
 
 		setIcon(this.#lockBtn.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
@@ -672,8 +673,38 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#currentStone(): { x: number; y: number; color: number } | null {
 		const s = this.session;
 		if (!s || !s.ready || !s.edit || s.tool === 'crop' || this.#away(s)) return null;
-		const m = getMove(s.cur, s.w, s.h);
+		const n = s.draggable;
+		const m = n ? getMove(n, s.w, s.h) : null;
 		return m && !m.pass ? m : null;
+	}
+
+	/** The look the board was last drawn with (a dragged stone is drawn with it too). */
+	#look: Parameters<BoardSvg['draw']>[1] | null = null;
+
+	/**
+	 * The board as it would be with the dragged stone on `to`: the stone, its number and the
+	 * latest-move flag go there. (Only a picture: captures are worked out when it is dropped.)
+	 */
+	#drawDragged(from: [number, number], to: [number, number] | null): void {
+		const s = this.session;
+		if (!s || !this.#look) return;
+		const m = s.model();
+		const a = from[1] * m.w + from[0];
+		const b = to ? to[1] * m.w + to[0] : -1;
+		if (b < 0 || b === a || m.grid[b]) {
+			this.#board.draw(m, this.#look);
+			return;
+		}
+		const grid = m.grid.slice();
+		grid[b] = grid[a];
+		grid[a] = 0;
+		const labels = new Map(m.labels);
+		const text = labels.get(a);
+		if (text !== undefined) {
+			labels.delete(a);
+			labels.set(b, text);
+		}
+		this.#board.draw({ ...m, grid, labels, last: m.last === a ? b : m.last }, this.#look);
 	}
 
 	#onCurrentStone(clientX: number, clientY: number): boolean {
@@ -683,9 +714,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	}
 
 	#endStoneDrag(): void {
-		if (!this.#stoneDrag) return;
+		const sd = this.#stoneDrag;
+		if (!sd) return;
 		this.#stoneDrag = null;
 		this.#board.setGhost(-1, -1, 0);
+		// (back to the board as it is; a drop that moved the stone draws it again anyway)
+		if (sd.moved) this.#drawDragged(sd.from, null);
 	}
 
 	#onDown(ev: PointerEvent): void {
@@ -712,9 +746,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (p && (p[0] !== sd.to[0] || p[1] !== sd.to[1])) {
 				sd.to = p;
 				sd.moved = true;
-				// (where it would go: a translucent stone, off its own point)
-				const home = p[0] === sd.from[0] && p[1] === sd.from[1];
-				this.#board.setGhost(home ? -1 : p[0], home ? -1 : p[1], home ? 0 : sd.color);
+				// the stone itself goes where it would land (onto another stone, it stays put)
+				this.#drawDragged(sd.from, p);
 			}
 			return;
 		}

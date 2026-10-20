@@ -1259,14 +1259,25 @@ export class Session {
 
 	/** Change who plays next from here. */
 	/**
-	 * While editing: put the stone of the current move on another point (dragged there).
-	 * The moves after it stay as they are. Refused (false) where that move could not have
-	 * been played, or where another variation already plays there.
+	 * The move whose stone can be dragged while editing: the current move, or, when that
+	 * (and any before it) is a pass, the last stone played before the passes.
+	 */
+	get draggable(): SgfNode | null {
+		let n: SgfNode | null = this.cur;
+		while (n && getMove(n, this.w, this.h)?.pass) n = n.parent;
+		const m = n ? getMove(n, this.w, this.h) : null;
+		return n && m && !m.pass ? n : null;
+	}
+
+	/**
+	 * While editing: put the stone of the draggable move (see above) on another point. The
+	 * moves after it stay as they are. Refused (false) where that move could not have been
+	 * played, or where another variation already plays there.
 	 */
 	moveCurrent(x: number, y: number): boolean {
-		const cur = this.cur;
-		const m = getMove(cur, this.w, this.h);
-		if (!this.edit || !m || m.pass || !cur.parent) return false;
+		const cur = this.edit ? this.draggable : null;
+		const m = cur ? getMove(cur, this.w, this.h) : null;
+		if (!cur || !m || m.pass || !cur.parent) return false;
 		if (x < 0 || y < 0 || x >= this.w || y >= this.h || (m.x === x && m.y === y)) return false;
 		const playsThere = (n: SgfNode): boolean => {
 			const k = getMove(n, this.w, this.h);
