@@ -34,6 +34,8 @@ export function sanitize(data: unknown): KifuSettings {
 	pick('revealPanel', bool);
 	pick('hideAnswers', bool);
 	pick('goproblemsKey', (v) => typeof v === 'string');
+	pick('whatsNew', bool);
+	pick('seenVersion', (v) => typeof v === 'string');
 	return out;
 }
 
@@ -149,6 +151,17 @@ export class KifuSettingTab extends PluginSettingTab {
 						name: 'Open the move tree when a board is unlocked',
 						desc: 'Brings the panel in the right sidebar forward, where comments are written.',
 						control: { type: 'toggle', key: 'revealPanel' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Updates',
+				items: [
+					{
+						name: "Show what's new after an update",
+						desc: 'Once after each update, a window with the new features and a short animation of each. The animations are loaded from the plugin\'s page on GitHub when the window opens.',
+						control: { type: 'toggle', key: 'whatsNew' },
 					},
 				],
 			},

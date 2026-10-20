@@ -43,6 +43,7 @@ import {
 	parseView,
 	pointName,
 	setOption,
+	parsePoint,
 } from './options';
 import { Place, squash } from './blocks';
 import type { KifuSettings } from './config';
@@ -406,9 +407,14 @@ export class Session {
 		}
 		this.start = start;
 		let target: number | null = null;
+		// "move: Q16": the first move of the main line played there
+		let at: SgfNode | null = null;
 		const mv = this.opts.move;
 		const nums = this.numbers;
-		if (mv !== undefined && mv !== '') {
+		const pt = mv && !/^\d+$/.test(mv.trim()) ? parsePoint(mv.trim(), w, h) : null;
+		if (pt) {
+			at = this.firstPlayedAt(pt[0], pt[1]);
+		} else if (mv !== undefined && mv !== '') {
 			target = /^(last|end)$/i.test(mv) ? Infinity : parseInt(mv);
 			if (isNaN(target)) target = null;
 		} else if (nums && !nums.off) {
@@ -425,10 +431,19 @@ export class Session {
 				}
 			}
 		}
-		const home = target !== null && target > 0 ? this.walkMain(target) : start;
+		const home = at ?? (target !== null && target > 0 ? this.walkMain(target) : start);
 		this.home = home;
 		this.startNo = replay(pathTo(start), w, h).moveNo;
 		this.homeNo = home === start ? this.startNo : replay(pathTo(home), w, h).moveNo;
+	}
+
+	/** The first move of the main line from `start` that is played at (x, y), if one is. */
+	private firstPlayedAt(x: number, y: number): SgfNode | null {
+		for (let n = firstSaved(this.start); n; n = firstSaved(n)) {
+			const m = getMove(n, this.w, this.h);
+			if (m && !m.pass && m.x === x && m.y === y) return n;
+		}
+		return null;
 	}
 
 	/** The node a "move: N" line leads to: along the main line from `start` until move N. */
@@ -1243,6 +1258,30 @@ export class Session {
 	}
 
 	/** Change who plays next from here. */
+	/**
+	 * While editing: put the stone of the current move on another point (dragged there).
+	 * The moves after it stay as they are. Refused (false) where that move could not have
+	 * been played, or where another variation already plays there.
+	 */
+	moveCurrent(x: number, y: number): boolean {
+		const cur = this.cur;
+		const m = getMove(cur, this.w, this.h);
+		if (!this.edit || !m || m.pass || !cur.parent) return false;
+		if (x < 0 || y < 0 || x >= this.w || y >= this.h || (m.x === x && m.y === y)) return false;
+		const playsThere = (n: SgfNode): boolean => {
+			const k = getMove(n, this.w, this.h);
+			return !!k && !k.pass && k.x === x && k.y === y;
+		};
+		if (cur.parent.children.some((c) => c !== cur && playsThere(c))) return false;
+		const before = replay(pathTo(cur.parent), this.w, this.h).board;
+		if (!before.legal(y * this.w + x, m.color)) return false;
+		this.cancelReply();
+		this.snapshot();
+		cur.props[m.color === BLACK ? 'B' : 'W'] = [xy2pt(x, y)];
+		this.changed(true);
+		return true;
+	}
+
 	/**
 	 * While editing: a pass for the side to play, as a move of the record (`B[]` or `W[]`).
 	 * A pass already saved there is followed rather than added again.

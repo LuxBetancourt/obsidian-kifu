@@ -146,7 +146,8 @@ export function pointName(x: number, y: number, h: number): string {
 	return x < LETTERS.length ? LETTERS[x] + (h - y) : xy2pt(x, y);
 }
 
-function parsePoint(tok: string, w: number, h: number): [number, number] | null {
+/** A point named "Q16"-style, or with SGF letters ("pd"); null when it is not one on this board. */
+export function parsePoint(tok: string, w: number, h: number): [number, number] | null {
 	let m = /^([A-Za-z])(\d{1,2})$/.exec(tok);
 	if (m) {
 		const x = LETTERS.indexOf(m[1].toUpperCase());
@@ -312,4 +313,15 @@ export function starPoints(w: number, h: number): [number, number][] {
 		out.push([(w - 1) / 2, (h - 1) / 2]);
 	}
 	return out;
+}
+
+/**
+ * Where a link's `#…` says a board opens, as a `move:` line would say it: a move number,
+ * `last` or `end`, or a point such as "Q16". Null when it says none of these.
+ */
+export function moveFragment(frag: string | undefined): string | null {
+	const s = decodeURIComponent(frag ?? '').trim();
+	if (/^\d{1,4}$/.test(s) || /^(last|end)$/i.test(s)) return s.toLowerCase();
+	if (/^[A-HJ-Za-hj-z]\d{1,2}$/.test(s)) return s.toUpperCase();
+	return null;
 }

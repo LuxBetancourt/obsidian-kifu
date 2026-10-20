@@ -11,14 +11,17 @@ import { ImportError } from './importing';
 import { OgsTarget, ogsPage, ogsTarget } from './ogs';
 import { Session } from './session';
 import { isSgfLink } from './sgflink';
+import { JosekiTarget, josekiTarget } from './josekipedia';
 import { ServerTarget, serverTarget } from './servers';
 import { BoardView } from './ui/boardview';
+import { composeBlock, moveFragment, parseBlock, setOption } from './options';
 
 export type LinkTarget =
 	| { site: 'ogs'; ogs: OgsTarget; url: string }
 	| { site: 'goproblems'; id: number; url: string }
 	| { site: 'server'; server: ServerTarget; url: string }
-	| { site: 'sgf'; url: string };
+	| { site: 'sgf'; url: string; move: string | null }
+	| { site: 'josekipedia'; joseki: JosekiTarget; url: string };
 
 /** The game or problem a link is to, when it is one a board can be drawn from. */
 export function linkTarget(href: string): LinkTarget | null {
@@ -32,10 +35,18 @@ export function linkTarget(href: string): LinkTarget | null {
 	}
 	if (other) return { site: 'server', server: other, url: other.url };
 	// an SGF file anywhere (a file server of one's own, say)
-	if (isSgfLink(s)) return { site: 'sgf', url: s };
+	// (after a #, where it opens: "#50", "#Q16"; the fetch leaves that out)
+	if (isSgfLink(s)) {
+		const hash = s.indexOf('#');
+		return { site: 'sgf', url: hash < 0 ? s : s.slice(0, hash), move: hash < 0 ? null : moveFragment(s.slice(hash + 1)) };
+	}
 	if (/^https?:\/\/(www\.)?online-go\.com\//i.test(s)) {
 		const t = ogsTarget(s, 'game');
 		return t ? { site: 'ogs', ogs: t, url: ogsPage(t) } : null;
+	}
+	if (/^https?:\/\/(www\.)?josekipedia\.com\//i.test(s)) {
+		const j = josekiTarget(s);
+		return j ? { site: 'josekipedia', joseki: j, url: j.url } : null;
 	}
 	if (/^https?:\/\/(www\.)?goproblems\.com\//i.test(s)) {
 		const id = problemId(s);
@@ -129,7 +140,11 @@ export class LinkedBoard extends MarkdownRenderChild {
 		const t = this.#target;
 		try {
 			await this.#plugin.settingsLoaded();
-			const body = await this.#plugin.fetchLinked(t);
+			let body = await this.#plugin.fetchLinked(t);
+			if (t.site === 'sgf' && t.move) {
+				const b = parseBlock(body);
+				body = composeBlock(setOption(b.header, 'move', t.move), b.rest, null, null);
+			}
 			if (this.#gone) return;
 			msg.remove();
 			mountDetached(this, this.containerEl, this.#plugin, this.#notePath, body, t.url, `this board is drawn from ${t.url}. To edit it, import it instead (right-click, then Kifu).`, this.#ctx);

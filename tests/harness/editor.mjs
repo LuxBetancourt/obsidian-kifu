@@ -467,7 +467,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(show(flat));
 		return out;
 	});
-	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from online-go.com…', 'Import from goproblems.com…']]]);
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from online-go.com…', 'Import from goproblems.com…', 'Import from Josekipedia…']]]);
 	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
 	assert.equal(res[2], 'first line\n```kifu\nsize: 13\n```\n```kifu\n```\n\nlast');
 	assert.equal(res[3], true);
@@ -479,6 +479,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		['Display SGF file with Kifu…', 'insert', null],
 		['Import a game or puzzle from online-go.com…', 'insert', null],
 		['Import a problem from goproblems.com…', 'insert', null],
+		['Import a joseki from Josekipedia…', 'insert', null],
 	]);
 });
 
@@ -708,6 +709,38 @@ await scenario('importing a problem from goproblems.com: prompt, note, solving, 
 	assert.ok(said.some((n) => /goproblems\.com has no problem 9\./.test(n)), said.join(' | '));
 	assert.ok(said.some((n) => /could not reach goproblems\.com/.test(n)), said.join(' | '));
 	assert.equal(await doc(page), before);
+});
+
+await scenario('importing from Josekipedia: a position by link, with its comments and what may follow', { files: { 'N.md': 'intro\n\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	const done = await page.evaluate(async () => {
+		const { requestUrl } = window.__obsidian;
+		const api = (id) => `https://www.josekipedia.com/db/node.php?id=${id}`;
+		requestUrl.answers[api(1)] = { status: 200, text: JSON.stringify({ _id: 1, _children: [{ _id: 40, B: 'pd', C: 'Star point' }] }) };
+		requestUrl.answers[api(40)] = { status: 200, text: JSON.stringify({ _id: 40, B: 'pd', _children: [{ _id: 42, W: 'qf', C: 'The approach' }, { _id: 453, W: 'qc', C: '3–3' }] }) };
+		const h = window.harness;
+		const v = h.views[0];
+		v.editor.setCursor({ line: 2, ch: 0 });
+		h.app._commands.find((c) => c.id === 'import-josekipedia').editorCallback(v.editor, v);
+		const modal = window.__obsidian.Modal.last;
+		const input = modal.contentEl.querySelector('input');
+		// not a link to a position: said so, and nothing is asked
+		input.value = 'https://www.josekipedia.com/info/tech.php';
+		input.dispatchEvent(new Event('input'));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		const wrong = modal.contentEl.querySelector('.kifu-import-hint').textContent;
+		input.value = 'https://www.josekipedia.com/#path:pd';
+		input.dispatchEvent(new Event('input'));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+		await new Promise((r) => setTimeout(r, 150));
+		return { wrong, open: modal.isOpen, asked: requestUrl.log.map((q) => q.url.replace(/.*id=/, '')) };
+	});
+	assert.deepEqual(done, { wrong: 'That is not a link to a position on Josekipedia.', open: false, asked: ['1', '40'] });
+	const text = await doc(page);
+	assert.match(text, /\[Josekipedia\]\(https:\/\/www\.josekipedia\.com\/#path:pd\) · 1 move\n\n```kifu\nmove: 1\n\(;GM\[1\]FF\[4\]SZ\[19\]GN\[Josekipedia\]SO\[https:\/\/www\.josekipedia\.com\/#path:pd\]\n;B\[pd\]C\[Star point\]\n\(;W\[qf\]C\[The approach\]\)\n\(;W\[qc\]C\[3–3\]\)\)\n```/);
+	// it rests at the position: the star point, and nothing after it
+	await sleep(200);
+	assert.deepEqual(await stones(page), { black: 1, white: 0 });
+	assert.deepEqual(await notices(page), []);
 });
 
 await scenario('importing from OGS: a puzzle by number, a game by link, and one that is not there', { files: { 'N.md': 'intro\n\n\nend' }, live: ['N.md'], autosave: 150 }, async (page) => {

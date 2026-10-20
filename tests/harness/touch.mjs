@@ -63,6 +63,23 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 				assert.deepEqual(await isEditing(page), [true]);
 				assert.ok((await iconsShown()).every((w) => w >= 18), `icons while editing: ${await iconsShown()}`);
 				assert.equal(await hiddenShown(), 0);
+				// the current move's stone dragged by a finger to another point (Chromium: its
+				// protocol can move a touch; WebKit's driver can only tap)
+				if (engine === 'chromium') {
+					const cdp = await page.context().newCDPSession(page);
+					const a = await pointXY(page, 0, 'sa');
+					const b = await pointXY(page, 0, 'pe');
+					const touch = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
+					await touch('touchStart', a);
+					for (let k = 1; k <= 5; k++) await touch('touchMove', { x: a.x + ((b.x - a.x) * k) / 5, y: a.y + ((b.y - a.y) * k) / 5 });
+					await touch('touchEnd', null);
+					await sleep(800);
+					assert.match(await doc(page), /W\[qa\]\s*;B\[pe\]/);
+					// (and back, to leave the rest as it was)
+					await tool(page, 'Undo').tap();
+					await sleep(800);
+					assert.match(await doc(page), /W\[qa\]\s*;B\[sa\]/);
+				}
 				await tool(page, 'Black stone').tap();
 				await tap(page, 'ss');
 				assert.equal((await stones(page)).black, 10);

@@ -575,6 +575,41 @@ test('edit: unlocking keeps the line on the board, locking saves at once', () =>
 	assert.equal(h.saves, before + 1);
 });
 
+test('edit: the current move can be put on another point; what follows it stays', () => {
+	const s = make('(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	s.setEdit(true);
+	s.goto(s.root.children[0].children[0]); // White's move at cc
+	assert.equal(s.moveCurrent(3, 3), true);
+	assert.equal(moveOf(s.cur), 'Wdd');
+	assert.equal(moveOf(s.cur.children[0]), 'Bgg'); // kept
+	assert.ok(s.blockBody().includes(';B[ee];W[dd];B[gg])'));
+	assert.equal(s.dirtyTree, true);
+	// not onto a stone, not where it already is, not while locked
+	assert.equal(s.moveCurrent(4, 4), false);
+	assert.equal(s.moveCurrent(3, 3), false);
+	// not where a variation already plays
+	s.goto(s.cur.parent!);
+	click(s, 'aa'); // a second White move: a variation
+	assert.equal(s.moveCurrent(3, 3), false);
+	assert.equal(moveOf(s.cur), 'Waa');
+	// and it is one undo step
+	s.undo();
+	s.undo();
+	assert.ok(s.blockBody().includes(';B[ee];W[cc];B[gg])'));
+	s.setEdit(false);
+	assert.equal(s.moveCurrent(0, 0), false);
+});
+
+test('"move:" can name a point: the first move of the main line played there', () => {
+	const game = '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg](;B[cc]))';
+	assert.equal(moveOf(make('move: G3\n' + game).home), 'Bgg');
+	assert.equal(moveOf(make('move: gg\n' + game).home), 'Bgg'); // (SGF letters too)
+	assert.equal(moveOf(make('move: C7\n' + game).home), 'Wcc'); // the first time, not a later one
+	const never = make('move: J9\n' + game);
+	assert.equal(never.home, never.start); // never played there: the start
+	assert.equal(moveOf(make('move: 3\n' + game).home), 'Bgg'); // numbers as before
+});
+
 test('edit: a pass is a move of the record, for the side to play', () => {
 	const s = make('(;GM[1]SZ[9];B[ee])');
 	s.pass(); // locked: nothing

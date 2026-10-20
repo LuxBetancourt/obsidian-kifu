@@ -29,6 +29,9 @@ import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuz
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
+import { JosekiTarget, fetchJoseki, josekiApi, josekiTarget } from './josekipedia';
+import { WhatsNew, newsSince } from './whatsnew';
+import { registerSgfEmbeds } from './sgfembed';
 import { BoardView } from './ui/boardview';
 import { TREE_ICON } from './ui/dom';
 import { TreePanel } from './ui/panel';
@@ -101,6 +104,8 @@ export default class KifuPlugin extends Plugin implements Host {
 		// ![](link) to OGS or goproblems.com: a board, in the reading view and in Live Preview
 		this.registerMarkdownPostProcessor((el, ctx) => this.#linkBoards(el, ctx));
 		this.registerEditorExtension(linkedBoards(this));
+		// ![[game.sgf#50]]: an SGF file of the vault, embedded, at a move (or a point: #Q16)
+		registerSgfEmbeds(this);
 		// a Bases view: the notes of a base as cards, each with its first board
 		this.registerBasesView(BASES_VIEW, {
 			name: 'Kifu boards',
@@ -134,11 +139,41 @@ export default class KifuPlugin extends Plugin implements Host {
 			editorCallback: (editor) => this.#promptOgs(editor),
 		});
 		this.addCommand({
+			id: 'import-josekipedia',
+			name: 'Import a joseki from Josekipedia',
+			editorCallback: (editor) => this.#promptJoseki(editor),
+		});
+		this.addCommand({
 			id: 'show-tree',
 			name: 'Show move tree',
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+		// after an update, once: what is new (a while after Obsidian is up, not as part of its start)
+		this.app.workspace.onLayoutReady(() => {
+			const id = window.setTimeout(() => void this.#whatsNew(), this.whatsNewDelay);
+			this.register(() => window.clearTimeout(id));
+		});
+	}
+
+	/** How long after Obsidian is up the news of an update are shown, in ms. */
+	whatsNewDelay = 3000;
+
+	/** Show what is new since the version last seen, once; then that version counts as seen. */
+	async #whatsNew(): Promise<void> {
+		await this.settingsLoaded();
+		if (this.#unloaded) return;
+		const now = this.manifest.version;
+		const seen = this.settings.seenVersion;
+		if (seen === now) return;
+		const items = newsSince(seen, now);
+		this.settings.seenVersion = now;
+		await this.#writeSettings();
+		if (!this.settings.whatsNew || !items.length) return;
+		new WhatsNew(this.app, now, items, () => {
+			this.settings.whatsNew = false;
+			void this.#writeSettings();
+		}).open();
 	}
 
 	/** In the reading view an embedded link is an image: one to OGS or goproblems.com becomes a board. */
@@ -230,6 +265,44 @@ export default class KifuPlugin extends Plugin implements Host {
 		return readSgfLink(url, answer.status, () => answer.arrayBuffer);
 	}
 
+	/** Ask Josekipedia for the nodes along a path, one request a move. */
+	#getJoseki(t: JosekiTarget): Promise<Fetched & { moves: number }> {
+		return fetchJoseki(t, async (id) => {
+			let res;
+			try {
+				res = await requestUrl({ url: josekiApi(id), throw: false });
+			} catch {
+				throw new ImportError('could not reach Josekipedia. Are you online?');
+			}
+			return { status: res.status, text: res.status === 200 ? res.text : '' };
+		});
+	}
+
+	/** Ask which Josekipedia position to import, then import it. */
+	#promptJoseki(editor: Editor): void {
+		new ImportPrompt(
+			this,
+			{
+				title: 'Import a joseki from Josekipedia',
+				desc: 'A link to the position (or its moves, as the link has them after #path:).',
+				wrong: 'That is not a link to a position on Josekipedia.',
+				parse: (text) => josekiTarget(text),
+			},
+			(t) => void this.#importJoseki(editor, t),
+		).open();
+	}
+
+	/** Fetch a Josekipedia position and put it where the cursor is, with a link back to it. */
+	async #importJoseki(editor: Editor, t: JosekiTarget): Promise<void> {
+		try {
+			const got = await this.#getJoseki(t);
+			insertBlock(editor, josekiBody(got), `[Josekipedia](${t.url}) · ${got.about}`);
+		} catch (e) {
+			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing ${t.url} failed.`}`);
+			if (!(e instanceof ImportError)) console.error('Kifu: import from Josekipedia', e);
+		}
+	}
+
 	/** Fetch a game from Dragon Go Server, Fox or GoQuest. */
 	async #getServerGame(t: ServerTarget): Promise<string> {
 		let res;
@@ -269,6 +342,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			if (t.site === 'goproblems') return 'problem: yes\n' + (await this.#getProblem(t.id)).sgf;
 			if (t.site === 'sgf') return this.#getSgfFile(t.url);
 			if (t.site === 'server') return this.#getServerGame(t.server);
+			if (t.site === 'josekipedia') return josekiBody(await this.#getJoseki(t.joseki));
 			const { sgf } = await this.#getOgs(t.ogs);
 			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
 		})();
@@ -335,6 +409,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			// (OGS first: it is the more widely used)
 			{ title: 'Import from online-go.com…', flat: 'Import a game or puzzle from online-go.com…', run: () => this.#promptOgs(editor) },
 			{ title: 'Import from goproblems.com…', flat: 'Import a problem from goproblems.com…', run: () => this.#promptImport(editor) },
+			{ title: 'Import from Josekipedia…', flat: 'Import a joseki from Josekipedia…', run: () => this.#promptJoseki(editor) },
 		];
 		const problem = this.#problemEntry(editor, from);
 		if (problem) entries.push({ title: 'Problem board', flat: 'Kifu problem board', ...problem });
@@ -400,6 +475,12 @@ export default class KifuPlugin extends Plugin implements Host {
 	/** First time the plugin is switched on: put the panel in the right sidebar, quietly. */
 	onUserEnable(): void {
 		void this.showPanel(false, false);
+		// (a fresh install: everything is new, which is no news; the README tells it)
+		void this.settingsLoaded().then(() => {
+			if (this.settings.seenVersion) return;
+			this.settings.seenVersion = this.manifest.version;
+			return this.#writeSettings();
+		});
 	}
 
 	/** Switched off: write what is still pending and leave the boards on the page as pictures. */
@@ -449,6 +530,11 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	async saveSettings(): Promise<void> {
 		this.#refreshAll();
+		await this.#writeSettings();
+	}
+
+	/** Write the settings, and only that (the boards are not drawn again). */
+	async #writeSettings(): Promise<void> {
 		// Only what differs from the defaults is written, so a default that changes in a
 		// later version reaches everyone who never chose otherwise.
 		const changed: Partial<KifuSettings> = {};
@@ -1386,4 +1472,9 @@ class SgfPicker extends FuzzySuggestModal<TFile> {
 	onChooseItem(file: TFile): void {
 		this.#pick(file);
 	}
+}
+
+/** A Josekipedia position as a block's text: it rests where the link is to, with what may follow after it. */
+function josekiBody(got: Fetched & { moves: number }): string {
+	return `move: ${got.moves}\n` + got.sgf;
 }

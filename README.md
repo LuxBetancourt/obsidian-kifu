@@ -18,7 +18,7 @@ In Obsidian open **Settings → Community plugins → Browse**, search for **Kif
 
 To install it by hand instead, download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/LuxBetancourt/obsidian-kifu/releases/latest), put them in a folder `<your vault>/.obsidian/plugins/kifu/`, and switch **Kifu** on under **Settings → Community plugins** (press the refresh button next to *Installed plugins* if it is not listed).
 
-Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only for games and problems you ask for (see below): when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to a game or problem on a Go site or to an SGF file elsewhere. It then fetches that one game, problem or file, and nothing else is ever sent anywhere. The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
+Needs Obsidian 1.13 or later. It works on desktop, tablet and phone. It reads nothing outside your vault, and goes online only for games and problems you ask for (see below): when you import one from OGS, goproblems.com or Josekipedia, or when a note is shown that embeds a link to a game or problem on a Go site or to an SGF file elsewhere. It then fetches that one game, problem or file, and nothing else is ever sent anywhere. (After an update, the *What's new* window loads its animations from the plugin's page on GitHub; it can be turned off.) The only time it looks through the vault's files is when you open the SGF file picker, which lists the `.sgf` files to choose from; a board reads only the file it points at.
 
 To see everything at once, copy the two files in `demo/` into your vault and open *Kifu demo*.
 
@@ -66,6 +66,8 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ✓ ✗ | Mark the line through this move as correct or incorrect. |
 | ↑ | Move this variation up, towards being the main line. |
 | 🗑 | Delete this move and everything after it. |
+
+**Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual.
 
 Two things worth knowing:
 
@@ -164,7 +166,22 @@ game: 12
 - A file that is not UTF-8, or whose game is cut short (no closing parenthesis), is shown but cannot be edited from here.
 - A game record shows its last position; add `move:` or `numbers:` to show another.
 
-Obsidian only lists `.sgf` files in its file explorer when **Settings → Files and links → Detect all file extensions** is on. If a board cannot find a file that is there, turn that setting on.
+### Embedding an SGF file
+
+An SGF file of the vault can also be embedded the way an image is, with no block at all:
+
+```markdown
+![[game.sgf]]
+![[game.sgf#50]]
+![[game.sgf#Q16]]
+```
+
+- With no `#`, a game shows its last position (a problem its start), as a block would.
+- `#50` opens it after move 50; `#Q16` opens it at the first move of the main line played at Q16 (the start, if no move is played there). `#last` works too.
+- The board is played like any other, and follows the file when it changes. It is not edited: show the file with a `kifu` block (`sgf: [[game.sgf]]`) to edit it.
+- A link to an SGF file on the web takes the same `#`: `![](https://files.example.com/go/game.sgf#50)`.
+
+Obsidian only lists `.sgf` files in its file explorer, and finds them for links and embeds, when **Settings → Files and links → Detect all file extensions** is on. If a board cannot find a file that is there, turn that setting on.
 
 ## Boards in Bases
 
@@ -188,6 +205,7 @@ Embed a link to a game, review or puzzle on OGS, a problem on goproblems.com, a 
 ![](https://online-go.com/puzzle/2)
 ![](https://www.goproblems.com/problems/5)
 ![](https://files.example.com/go/my-game.sgf)
+![](https://www.josekipedia.com/#path:pdqf)
 ```
 
 Instead of an image you get a board, fetched from the site each time the note is shown, in the reading view and in Live Preview (put the cursor on the link to edit it). A puzzle or problem can be solved on it and a game stepped through, like any other board, but nothing is ever written: to change one, import it instead (see below) and edit the copy in your note. A link that is shown again within a few minutes is not fetched again. A link to anything else stays an ordinary embed.
@@ -202,6 +220,7 @@ These links work, besides OGS and goproblems.com:
 | GoQuest | the game record page, `https://kifu.questgames.net/go/…` (GoQuest keeps games for a while only) |
 | Pandanet | an SGF file it offers, such as a tournament game (ordinary games are kept in its app) |
 | Stone.gs | an OGS game it shows, `https://stone.gs/games/ogs/…` |
+| Josekipedia | a position, `https://www.josekipedia.com/#path:…` (see *Joseki from Josekipedia*) |
 
 Games on Tygem, WBaduk and PlayGo, and problems on BlackToPlay and 101weiqi, can not be shown: these sites offer no record that can be fetched without signing in, or their terms forbid it.
 
@@ -233,7 +252,19 @@ goproblems.com marks a correct line by ending its comment with RIGHT. On import 
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 
-**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS or goproblems.com, or when a note is shown that embeds a link to one (on those sites, the other Go servers listed above, or an SGF file anywhere). Each time it asks one place (the site the link is to, or for a Stone.gs link OGS) for that one game, problem or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one).
+**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS, goproblems.com or Josekipedia, or when a note is shown that embeds a link to one (on those sites, the other Go servers listed above, or an SGF file anywhere). Each time it asks one place (the site the link is to, or for a Stone.gs link OGS) for that one game, problem, position or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one). The one other time is after an update, if the *What's new* window is on: it loads its animations from this plugin's page on GitHub.
+
+## Joseki from Josekipedia
+
+[Josekipedia](https://www.josekipedia.com) is a joseki dictionary written by its readers. Embed a link to a position there (copy it from the address bar: it ends in `#path:` and the moves), or run **Kifu: Import a joseki from Josekipedia** (right-click in the editor: **Kifu → Import from Josekipedia…**) and paste one. You get
+
+- the moves that lead to the position, each with the comment Josekipedia's contributors wrote for it;
+- the board resting at that position;
+- the moves that may follow, as variations with their comments: click one to play it.
+
+An import puts a link back to the position above the board. The comments are Josekipedia's contributors' work; keep the link with them.
+
+The board asks Josekipedia for the position one move at a time, as its own pages do, through the interface its site describes as public. That interface is not documented, so a change on Josekipedia's side could stop this working until the plugin follows.
 
 ## The move tree panel
 
@@ -272,7 +303,7 @@ Option lines come first in the block, one per line, before any SGF.
 | `game` | number | which game, when the file (or the block) holds several |
 | `size` | `19`, `13x9` | size of a board with no SGF yet |
 | `view` | see above | part of the board to show |
-| `move` | number, `last` | position to show |
+| `move` | number, `last`, a point (`Q16`) | position to show (a point: the first move of the main line played there) |
 | `numbers` | see above | numbered figure |
 | `scale` | `80%`, `1.5`, `fit` | size of this board (`fit`: as wide as the note, with lines as thin as at the usual size) |
 | `coords` | `on` / `off` | coordinates beside the board's edges (the real ones, where the part shown has any) |
@@ -286,6 +317,8 @@ Option lines come first in the block, one per line, before any SGF.
 ## Settings
 
 **Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
+
+**What's new:** once after each update, a window shows the new features, each with a short animation (loaded from the plugin's page on GitHub when the window opens). A fresh install shows nothing. Turn it off under **Settings → Kifu → Updates**, or with the link at the bottom of the window.
 
 ## Changing the look
 
@@ -344,7 +377,7 @@ npm run lint           # Obsidian's own lint rules
 - `tests/*.test.ts` — unit tests. `markdown.test.ts` checks the code that finds and rewrites a block against a CommonMark parser on thousands of generated notes.
 - `tests/harness/obsidian-mock.js` — the stand-in for the Obsidian API; `cm-lp.ts` — Live Preview on a real CodeMirror 6.
 - `tests/harness/touch.mjs` — taps on tablet and phone profiles, in WebKit (once: `npx playwright install webkit`) and Chromium.
-- `tests/harness/interact.mjs`, `editor.mjs`, `identity.mjs` — the scenarios (the last one is all about boards that read the same, notes rearranged under a board, panes that are behind, and writes that fail); `ONLY='pattern'` in the environment runs the scenarios whose names match. `perf.mjs` — timings; `shots.mjs`, `docs.mjs` — pictures.
+- `tests/harness/interact.mjs`, `editor.mjs`, `identity.mjs` — the scenarios (the last one is all about boards that read the same, notes rearranged under a board, panes that are behind, and writes that fail); `ONLY='pattern'` in the environment runs the scenarios whose names match. `perf.mjs` — timings; `shots.mjs`, `docs.mjs` — pictures; `whatsnew.mjs` — the animations of the *What's new* window (needs ffmpeg).
 - `tests/harness/monkey.mjs` — a "monkey" that places and removes stones, marks and labels, types comments, locks, scrolls and (in its rougher profiles) edits the note by hand at the same time: types into blocks, deletes, copies and moves them, undoes, changes the file from outside. It does so in eight arrangements of panes and five kinds of note, most of them full of identical boards. After every step it checks that nothing is in a block other than the one whose board was used, and at the end that nothing outside the blocks changed, that every board shows what its block says, that no edit vanished without a notice, that none vanished at all from a block nobody had touched by hand, and that nothing typed by hand was taken back. `node tests/harness/monkey.mjs live,both hands 1-10` runs chosen arrangements, profiles and seeds.
 
 ### Releasing

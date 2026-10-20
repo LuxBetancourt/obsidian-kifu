@@ -27,6 +27,10 @@ export interface KifuSettings {
 	hideAnswers: boolean;
 	/** The name of the secret (in Obsidian's secret storage) holding a goproblems.com API token; '' for none. */
 	goproblemsKey: string;
+	/** After an update, show what is new in it. */
+	whatsNew: boolean;
+	/** The version whose news were last shown (or that was installed): '' before there was any. */
+	seenVersion: string;
 }
 
 export const DEFAULT_SETTINGS: KifuSettings = {
@@ -43,6 +47,8 @@ export const DEFAULT_SETTINGS: KifuSettings = {
 	revealPanel: true,
 	hideAnswers: true,
 	goproblemsKey: '',
+	whatsNew: true,
+	seenVersion: '',
 };
 
 /** Pixels between two lines at 100 % scale. */

@@ -205,17 +205,35 @@
 				r.el = doc.createElement('div');
 				r.el.className = h ? 'el-h' + h[1].length : 'el-p';
 				const inner = doc.createElement(h ? 'h' + h[1].length : 'p');
-				// ![alt](link) is an image, as Obsidian draws it; the rest is text
+				// ![alt](link) is an image, as Obsidian draws it; ![[file#sub]] an embed of a vault
+				// file (drawn by whoever registered its extension); the rest is text
 				const text = h ? h[2] : sec.raw;
-				const embed = /!\[([^\]\n]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?\s*\)/g;
+				const embed = /!\[([^\]\n]*)\]\(\s*<?(https?:\/\/[^\s)>]+)>?\s*\)|!\[\[([^\]|\n]+)(?:\|[^\]\n]*)?\]\]/g;
 				let at = 0;
 				for (let m; (m = embed.exec(text)); ) {
 					inner.append(text.slice(at, m.index));
+					at = m.index + m[0].length;
+					if (m[3] !== undefined) {
+						const span = doc.createElement('span');
+						span.className = 'internal-embed';
+						span.setAttribute('src', m[3]);
+						inner.append(span);
+						const hash = m[3].indexOf('#');
+						const linkpath = hash < 0 ? m[3] : m[3].slice(0, hash);
+						const subpath = hash < 0 ? '' : m[3].slice(hash);
+						const file = this.app.metadataCache.getFirstLinkpathDest(linkpath, this.sourcePath);
+						const make = file && this.app.embedRegistry._exts.get(file.extension);
+						if (!make) { span.textContent = m[3]; continue; }
+						const c = make({ app: this.app, containerEl: span, sourcePath: this.sourcePath }, file, subpath);
+						r.children.push(c);
+						this.addChild(c);
+						c.loadFile();
+						continue;
+					}
 					const img = doc.createElement('img');
 					img.setAttribute('src', m[2]);
 					img.setAttribute('alt', m[1]);
 					inner.append(img);
-					at = m.index + m[0].length;
 				}
 				inner.append(text.slice(at));
 				r.el.appendChild(inner);
@@ -401,6 +419,15 @@
 			this._processors = new Map(); this._views = new Map(); this._commands = []; this._settingTabs = []; this._icons = new Map(); this._notices = [];
 			this.vault = new Vault();
 			this.renderContext = {};
+			// (not in Obsidian's typings: how it is told to embed a file type)
+			this.embedRegistry = {
+				_exts: new Map(),
+				registerExtension: (ext, make) => {
+					if (this.embedRegistry._exts.has(ext)) throw new Error('Attempting to register an existing file extension');
+					this.embedRegistry._exts.set(ext, make);
+				},
+				unregisterExtension: (ext) => this.embedRegistry._exts.delete(ext),
+			};
 			const secrets = new Map();
 			this.secretStorage = { setSecret: (id, v) => secrets.set(id, v), getSecret: (id) => secrets.get(id) ?? null, listSecrets: () => [...secrets.keys()] };
 			this.metadataCache = new MetadataCache(this.vault);

@@ -297,6 +297,91 @@ await scenario('the play button is gone while the board is unlocked', {
 	assert.equal(await play.getAttribute('aria-label'), 'Play through the game');
 });
 
+await scenario('while editing, the stone of the current move can be dragged to another point', {
+	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await toggleLock(page);
+	const drag = async (from, to) => {
+		const a = await pointXY(page, 0, from);
+		const b = await pointXY(page, 0, to);
+		await page.mouse.move(a.x, a.y);
+		await page.mouse.down();
+		await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 3 });
+		await page.mouse.move(b.x, b.y, { steps: 3 });
+		await page.mouse.up();
+		await sleep(700);
+	};
+	// the last move (the current one) goes from G3 to H2; nothing is played at H2 besides
+	await drag('gg', 'hh');
+	assert.match(await doc(page), /;B\[ee\];W\[cc\];B\[hh\]\)/);
+	assert.deepEqual(await stones(page), { black: 2, white: 1 });
+	// onto another stone: it stays where it was
+	await drag('hh', 'ee');
+	assert.match(await doc(page), /;B\[ee\];W\[cc\];B\[hh\]\)/);
+	// an earlier move, once it is the current one: the moves after it stay
+	await tool(page, 'Previous move').click();
+	await drag('cc', 'dc');
+	assert.match(await doc(page), /;B\[ee\];W\[dc\];B\[hh\]\)/);
+	// undone in one step
+	await page.keyboard.press('Control+z');
+	await sleep(700);
+	assert.match(await doc(page), /;B\[ee\];W\[cc\];B\[hh\]\)/);
+	assert.deepEqual(await notices(page), []);
+});
+
+{
+	const news = (page) => page.evaluate(() => {
+		const m = window.__obsidian.Modal.last;
+		return m?.isOpen ? {
+			title: m.title,
+			items: [...m.contentEl.querySelectorAll('.kifu-news-item h3')].map((h) => h.textContent),
+			gifs: [...m.contentEl.querySelectorAll('img.kifu-news-gif')].map((i) => i.getAttribute('src')),
+		} : null;
+	});
+	const saved = (page) => page.evaluate(() => JSON.parse(window.harness.plugin._data));
+	for (const [label, data, fresh, want] of [
+		['an update from 1.6.3: once, the news of 1.6.4', { seenVersion: '1.6.3' }, false, true],
+		['an update from a version that kept no record (before 1.6.4): the news too', {}, false, true],
+		['an update, with the setting off: nothing shown', { seenVersion: '1.6.3', whatsNew: false }, false, false],
+		['a fresh install: nothing shown', {}, true, false],
+		['the same version started again: nothing shown', { seenVersion: '1.6.4' }, false, false],
+	]) {
+		await scenario(`what's new after an update: ${label}`, { files: { 'N.md': 'text\n' }, panes: [], version: '1.6.4', newsDelay: 150, data }, async (page) => {
+			// (the animations: answered here, never fetched from GitHub by the checks)
+			await page.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64') }));
+			// (a fresh install: Obsidian says the plugin was switched on by the user)
+			if (fresh) await page.evaluate(() => window.harness.plugin.onUserEnable());
+			await sleep(400);
+			const shown = await news(page);
+			if (!want) {
+				assert.equal(shown, null);
+			} else {
+				assert.deepEqual(shown, {
+					title: "What's new in Kifu 1.6.4",
+					items: ['Drag a stone to move it', 'Embed an SGF file at a move', 'Josekipedia'],
+					// (from the repository, at the version's own tag: the plugin does not carry them)
+					gifs: ['drag', 'embed', 'josekipedia'].map((g) => `https://raw.githubusercontent.com/LuxBetancourt/obsidian-kifu/1.6.4/docs/whatsnew/${g}.gif`),
+				});
+			}
+			// either way the version counts as seen: the next start shows nothing
+			assert.equal((await saved(page)).seenVersion, '1.6.4');
+			if (want) {
+				// and the window can turn itself off for later updates
+				await page.locator('.modal-content button', { hasText: "Don't show this after updates" }).click();
+				assert.equal(await news(page), null);
+				assert.equal((await saved(page)).whatsNew, false);
+			}
+		});
+	}
+
+	await scenario("what's new, offline: a line where an animation could not be loaded", { allowErrors: /Failed to load resource: net::ERR_FAILED/, files: { 'N.md': 'text\n' }, panes: [], version: '1.6.4', newsDelay: 150, data: { seenVersion: '1.6.3' } }, async (page) => {
+		await page.route('https://raw.githubusercontent.com/**', (r) => r.abort());
+		await sleep(600);
+		assert.deepEqual((await news(page)).items, ['Drag a stone to move it', 'Embed an SGF file at a move', 'Josekipedia']);
+		assert.deepEqual(await page.locator('.kifu-news-missing').allTextContents(), Array(3).fill('The animation could not be loaded.'));
+	});
+}
+
 await scenario('the pass button in the editing toolbar records a pass for the side to play', {
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
@@ -719,7 +804,7 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	});
 	assert.ok(tab);
 	await sleep(50);
-	assert.equal(await page.locator('.setting-item').count(), 17); // the preview, and 13 settings under 3 headings
+	assert.equal(await page.locator('.setting-item').count(), 19); // the preview, and 14 settings under 4 headings
 	// the goproblems.com token: only the name of the secret is kept with the settings, never the token
 	await page.evaluate(() => {
 		window.harness.app.secretStorage.setSecret('gp-token', 's3cret');
@@ -1073,6 +1158,75 @@ await scenario('embedded links to OGS and goproblems.com are drawn as boards in 
 	assert.deepEqual((await isEditing(page)).slice(0, 1), [false]);
 	// and the note was never written
 	assert.match(await text(page, 'L.md'), /^# Links\n\n!\[\]\(https:\/\/online-go\.com\/puzzle\/2\)/);
+});
+
+for (const mode of ['preview', 'source']) {
+	await scenario(`an SGF file of the vault embedded as ![[g.sgf]], at a move or a point (${mode})`, {
+		allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
+		files: {
+			'g.sgf': '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg])',
+			'E.md': '# Embeds\n\n![[g.sgf]]\n\n![[g.sgf#2]]\n\n![[g.sgf#G3]]\n\n![[g.sgf#J9]]\n\n![](https://files.example.com/go/g.sgf#1)\n',
+		},
+		panes: [],
+	}, async (page) => {
+		await page.evaluate((mode) => {
+			window.__obsidian.requestUrl.answers['https://files.example.com/go/g.sgf'] = { status: 200, text: '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg])' };
+			const h = window.harness;
+			h.views.push(h.app.workspace._open('E.md', mode));
+		}, mode);
+		await sleep(400);
+		// (a web link is drawn in an editor by the editor extension, which this plain editor has not got)
+		const n = mode === 'preview' ? 5 : 4;
+		assert.equal(await boardCount(page), n);
+		const all = async () => { const out = []; for (let i = 0; i < n; i++) out.push(await stones(page, i)); return out; };
+		assert.deepEqual(await all(), [
+			{ black: 2, white: 2 }, // no number: a game rests at its end
+			{ black: 1, white: 1 }, // #2
+			{ black: 2, white: 1 }, // #G3: the first move played there
+			{ black: 0, white: 0 }, // #J9: never played there: the start
+			{ black: 1, white: 0 }, // a web link, #1 (and the fetch asked for the file without it)
+		].slice(0, n));
+		if (mode === 'preview') assert.deepEqual(await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url)), ['https://files.example.com/go/g.sgf']);
+		// the file changes (a stone set up at the start): so do the boards that show it
+		await page.evaluate(() => { const v = window.harness.app.vault; return v.modify(v.getAbstractFileByPath('g.sgf'), '(;GM[1]SZ[9]AB[aa];B[ee];W[cc];B[gg];W[cg])'); });
+		await sleep(300);
+		assert.deepEqual(await stones(page, 0), { black: 3, white: 2 });
+		// played like a board, never edited: the file stays as it is
+		if (mode === 'source') {
+			await toggleLock(page, 1);
+			assert.deepEqual((await isEditing(page)).slice(0, 2), [false, false]);
+			assert.match((await notices(page))[0], /an embedded SGF file\. To edit it, show it with a kifu block instead: sgf: \[\[g\]\]/);
+		} else {
+			assert.equal(await lockBtn(page, 1).isHidden(), true);
+		}
+		assert.equal(await text(page, 'g.sgf'), '(;GM[1]SZ[9]AB[aa];B[ee];W[cc];B[gg];W[cg])');
+	});
+}
+
+await scenario('an embedded Josekipedia link is drawn as the position, with what may follow as variations', {
+	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
+	files: { 'J.md': '# Joseki\n\n![](https://www.josekipedia.com/#path:pdqf)\n' },
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		const api = (id) => `https://www.josekipedia.com/db/node.php?id=${id}`;
+		requestUrl.answers[api(1)] = { status: 200, text: JSON.stringify({ _id: 1, _children: [{ _id: 40, B: 'pd', C: 'Star point' }] }) };
+		requestUrl.answers[api(40)] = { status: 200, text: JSON.stringify({ _id: 40, B: 'pd', _children: [{ _id: 42, W: 'qf', C: 'The approach' }] }) };
+		requestUrl.answers[api(42)] = { status: 200, text: JSON.stringify({ _id: 42, W: 'qf', _children: [{ _id: 50, B: 'nc', C: 'Most common' }, { _id: 51, B: 'qh', C: 'A pincer' }] }) };
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('J.md', 'preview'));
+	});
+	await sleep(400);
+	// the position the link is to, not a move further
+	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+	assert.equal(await cap(page), 'The approach');
+	// what may follow is there to play: a saved continuation is followed, with its comment
+	await clickPoint(page, 0, 'nc');
+	assert.deepEqual(await stones(page), { black: 2, white: 1 });
+	assert.equal(await cap(page), 'Most common');
+	// asked a node at a time, once each
+	assert.deepEqual(await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url.replace(/.*id=/, ''))), ['1', '40', '42']);
 });
 
 await scenario('an embedded link to an SGF file anywhere is drawn as a board', {

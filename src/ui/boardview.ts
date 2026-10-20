@@ -5,6 +5,7 @@ import type KifuPlugin from '../main';
 import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
+import { getMove } from '../sgf';
 import { BoardSvg, bandPixels } from './boardsvg';
 import { clear, el, icon, iconButton, setIcon } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
@@ -62,6 +63,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#toolBtns = new Map<string, HTMLButtonElement>();
 	#labelInput: HTMLInputElement | null = null;
 	#drag: [number, number] | null = null;
+	/** The current move's stone being dragged to another point: where from, where to, and whether it has left its point. */
+	#stoneDrag: { from: [number, number]; to: [number, number]; color: number; moved: boolean; touch: boolean } | null = null;
+	/** A click that follows a drag of the stone is part of the drag, not a click of its own. */
+	#noClickUntil = 0;
 	/** When the last plain tap with the crop tool ended, and when a double tap last reset the crop. */
 	#lastTap = 0;
 	#tapReset = 0;
@@ -174,7 +179,20 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		svgEl.addEventListener('pointerdown', (ev) => this.#onDown(ev));
 		svgEl.addEventListener('pointermove', (ev) => this.#onMove(ev));
 		svgEl.addEventListener('pointerup', (ev) => this.#onUp(ev));
-		svgEl.addEventListener('pointercancel', () => this.#endDrag());
+		svgEl.addEventListener('pointercancel', () => {
+			this.#endDrag();
+			this.#endStoneDrag();
+		});
+		// On a touch screen a finger that starts on the stone that can be dragged drags it
+		// rather than scrolling the note (anywhere else, it scrolls as usual).
+		svgEl.addEventListener(
+			'touchstart',
+			(ev) => {
+				const t = ev.touches[0];
+				if (ev.touches.length === 1 && t && this.#onCurrentStone(t.clientX, t.clientY)) ev.preventDefault();
+			},
+			{ passive: false },
+		);
 		svgEl.addEventListener('pointerleave', () => {
 			this.#hover = '';
 			this.#board.setGhost(-1, -1, 0);
@@ -634,6 +652,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#onClick(ev: MouseEvent): void {
 		const s = this.session;
 		if (!s || !s.ready || ev.button !== 0 || this.#cropping() || this.#away(s)) return;
+		if (Date.now() < this.#noClickUntil) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY);
 		if (p) s.click(...this.#toGame(s, p));
 	}
@@ -649,7 +668,33 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		return { x0: Math.min(d[0], p[0]), y0: Math.min(d[1], p[1]), x1: Math.max(d[0], p[0]), y1: Math.max(d[1], p[1]) };
 	}
 
+	/** The stone of the current move, while editing: it can be dragged to another point. */
+	#currentStone(): { x: number; y: number; color: number } | null {
+		const s = this.session;
+		if (!s || !s.ready || !s.edit || s.tool === 'crop' || this.#away(s)) return null;
+		const m = getMove(s.cur, s.w, s.h);
+		return m && !m.pass ? m : null;
+	}
+
+	#onCurrentStone(clientX: number, clientY: number): boolean {
+		const st = this.#currentStone();
+		const p = st ? this.#board.pointAt(clientX, clientY) : null;
+		return !!st && !!p && p[0] === st.x && p[1] === st.y;
+	}
+
+	#endStoneDrag(): void {
+		if (!this.#stoneDrag) return;
+		this.#stoneDrag = null;
+		this.#board.setGhost(-1, -1, 0);
+	}
+
 	#onDown(ev: PointerEvent): void {
+		if (ev.button === 0 && !this.#cropping() && this.#onCurrentStone(ev.clientX, ev.clientY)) {
+			const st = this.#currentStone() as { x: number; y: number; color: number };
+			this.#stoneDrag = { from: [st.x, st.y], to: [st.x, st.y], color: st.color, moved: false, touch: ev.pointerType !== 'mouse' };
+			this.#board.el.setPointerCapture(ev.pointerId);
+			return;
+		}
 		if (!this.#cropping() || ev.button !== 0) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
 		if (!p) return;
@@ -661,6 +706,18 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#onMove(ev: PointerEvent): void {
 		const s = this.session;
 		if (!s || !s.ready) return;
+		const sd = this.#stoneDrag;
+		if (sd) {
+			const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
+			if (p && (p[0] !== sd.to[0] || p[1] !== sd.to[1])) {
+				sd.to = p;
+				sd.moved = true;
+				// (where it would go: a translucent stone, off its own point)
+				const home = p[0] === sd.from[0] && p[1] === sd.from[1];
+				this.#board.setGhost(home ? -1 : p[0], home ? -1 : p[1], home ? 0 : sd.color);
+			}
+			return;
+		}
 		if (this.#drag) {
 			const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
 			if (p) this.#board.setSelection(this.#rectTo(p));
@@ -684,6 +741,22 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#onUp(ev: PointerEvent): void {
 		const s = this.session;
+		const sd = this.#stoneDrag;
+		if (sd) {
+			this.#endStoneDrag();
+			if (!s) return;
+			const [x, y] = sd.to;
+			if (sd.moved) {
+				// dropped somewhere else: the stone goes there, if it may (if not, it stays)
+				this.#noClickUntil = Date.now() + 400;
+				if (x !== sd.from[0] || y !== sd.from[1]) s.moveCurrent(x, y);
+			} else if (sd.touch) {
+				// a tap on it (the touch that might have been a drag kept the browser from clicking)
+				this.#noClickUntil = Date.now() + 400;
+				s.click(x, y);
+			}
+			return;
+		}
 		if (!this.#drag || !s) return;
 		// (the board may have been locked, or the tool changed, while the mouse was down)
 		const still = this.#cropping();
