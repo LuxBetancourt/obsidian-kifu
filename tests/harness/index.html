@@ -82,11 +82,13 @@ input[type='text'] { height: 30px; }
 			const app = new O.App({ main: document.getElementById('main'), right: document.getElementById('right') });
 			app._asyncRender = asyncRender; app._lagReading = lagReading; app._reuse = reuse; app._autosave = autosave; app._editorChange = editorChange;
 			for (const [path, text] of Object.entries(files)) app.vault._add(path, text);
-			const plugin = new this.PluginClass(app, { id: 'kifu', name: 'Kifu', version });
+			const plugin = new this.PluginClass(app, { id: 'kifu', name: 'Kifu', version, dir: '.obsidian/plugins/kifu' });
 			// (what is new after an update: not in the way of the checks, unless one asks for it)
 			plugin.whatsNewDelay = newsDelay;
 			// (the checks expect the first saved reply unless they say otherwise)
-			plugin._data = JSON.stringify({ reply: 'first', ...(data ?? {}) });
+			// (data: 'none' is a fresh install, with no data.json yet)
+			plugin._data = data === 'none' ? null : JSON.stringify({ reply: 'first', ...(data ?? {}) });
+			app.vault._outside = (path) => (path === plugin.manifest.dir + '/data.json' ? plugin._data !== null : undefined);
 			// (the scenarios were written for a short pause before a board writes; the plugin waits 3 s)
 			plugin.saveDelay = saveDelay;
 			const t0 = performance.now();

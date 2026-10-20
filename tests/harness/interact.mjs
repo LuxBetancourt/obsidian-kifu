@@ -358,18 +358,18 @@ await scenario('while editing, the stone of the current move can be dragged to a
 		} : null;
 	});
 	const saved = (page) => page.evaluate(() => JSON.parse(window.harness.plugin._data));
-	for (const [label, data, fresh, want] of [
-		['an update from 1.6.3: once, the news of 1.6.4', { seenVersion: '1.6.3' }, false, true],
-		['an update from a version that kept no record (before 1.6.4): the news too', {}, false, true],
-		['an update, with the setting off: nothing shown', { seenVersion: '1.6.3', whatsNew: false }, false, false],
-		['a fresh install: nothing shown', {}, true, false],
-		['the same version started again: nothing shown', { seenVersion: '1.6.4' }, false, false],
+	for (const [label, data, want] of [
+		['an update from 1.6.3: once, the news of 1.6.4', { seenVersion: '1.6.3' }, true],
+		['an update from a version that kept no record (before 1.6.4): the news too', {}, true],
+		['an update, with the setting off: nothing shown', { seenVersion: '1.6.3', whatsNew: false }, false],
+		['a fresh install (no settings file yet): nothing shown', 'none', false],
+		['the same version started again: nothing shown', { seenVersion: '1.6.4' }, false],
 	]) {
 		await scenario(`what's new after an update: ${label}`, { files: { 'N.md': 'text\n' }, panes: [], version: '1.6.4', newsDelay: 150, data }, async (page) => {
 			// (the animations: answered here, never fetched from GitHub by the checks)
 			await page.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64') }));
-			// (a fresh install: Obsidian says the plugin was switched on by the user)
-			if (fresh) await page.evaluate(() => window.harness.plugin.onUserEnable());
+			// (Obsidian says the plugin was switched on by the user after an install, and after an update too)
+			await page.evaluate(() => window.harness.plugin.onUserEnable());
 			await sleep(400);
 			const shown = await news(page);
 			if (!want) {

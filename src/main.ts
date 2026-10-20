@@ -166,7 +166,10 @@ export default class KifuPlugin extends Plugin implements Host {
 		const now = this.manifest.version;
 		const seen = this.settings.seenVersion;
 		if (seen === now) return;
-		const items = newsSince(seen, now);
+		// A fresh install has no settings file yet: everything is new, which is no news (the
+		// README tells it). Not told by onUserEnable(): Obsidian calls that after an update too.
+		const fresh = !seen && !(await this.app.vault.adapter.exists(`${this.manifest.dir ?? ''}/data.json`));
+		const items = fresh ? [] : newsSince(seen, now);
 		this.settings.seenVersion = now;
 		await this.#writeSettings();
 		if (!this.settings.whatsNew || !items.length) return;
@@ -475,12 +478,6 @@ export default class KifuPlugin extends Plugin implements Host {
 	/** First time the plugin is switched on: put the panel in the right sidebar, quietly. */
 	onUserEnable(): void {
 		void this.showPanel(false, false);
-		// (a fresh install: everything is new, which is no news; the README tells it)
-		void this.settingsLoaded().then(() => {
-			if (this.settings.seenVersion) return;
-			this.settings.seenVersion = this.manifest.version;
-			return this.#writeSettings();
-		});
 	}
 
 	/** Switched off: write what is still pending and leave the boards on the page as pictures. */

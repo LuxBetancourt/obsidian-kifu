@@ -72,7 +72,11 @@
 	const normalizePath = (p) => p.replace(/[\\/]+/g, '/').replace(/^\/|\/$/g, '').replace(/ /g, ' ').normalize();
 
 	class Vault extends Events {
-		constructor() { super(); this.files = new Map(); this.binary = new Map(); this.writes = []; }
+		constructor() {
+			super(); this.files = new Map(); this.binary = new Map(); this.writes = [];
+			// (files outside the vault's notes, such as a plugin's data.json, are answered by _outside)
+			this.adapter = { exists: async (path) => this._outside?.(path) ?? this.files.has(path) };
+		}
 		_add(path, data, bytes) { const f = new TFile(path); this.files.set(path, { file: f, data }); if (bytes) this.binary.set(path, bytes); return f; }
 		getAbstractFileByPath(p) { return this.files.get(p)?.file ?? null; }
 		getFileByPath(p) { return this.getAbstractFileByPath(p); }
