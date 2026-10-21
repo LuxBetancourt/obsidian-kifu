@@ -10,6 +10,7 @@ import { nodeMark } from '../session';
 import { SgfNode, getMove, getText, pathTo } from '../sgf';
 import { STRIDE, TreeLayout, layoutLine, layoutTree } from '../tree';
 import { clear, el, icon, iconButton, setIcon, svg } from './dom';
+import { GameInfoPrompt } from './gameinfo';
 
 /** Size of one tree cell, and of the stones in it. */
 const CELL = 26;
@@ -28,6 +29,7 @@ export class TreePanel extends ItemView {
 	#main!: HTMLElement;
 	#pos!: HTMLElement;
 	#game!: HTMLElement;
+	#gameText!: HTMLElement;
 	#treeBox!: HTMLElement;
 	#treeSvg!: SVGSVGElement;
 	#ring!: SVGCircleElement;
@@ -80,7 +82,12 @@ export class TreePanel extends ItemView {
 		this.#btn.reset = iconButton(nav, 'reset', 'Back to the starting position', act((s) => s.reset()));
 		this.#btn.lock = iconButton(nav, 'lock', 'Unlock to edit', act((s) => this.#plugin.toggleLock(s)));
 
+		// the game's heading (players, result…), and while editing a button to change it all
 		this.#game = el(main, 'div', 'kifu-p-game');
+		this.#gameText = el(this.#game, 'span', 'kifu-p-game-text');
+		this.#btn.info = iconButton(this.#game, 'info', 'Game info: players, ranks, komi, result…', act((s) => {
+			new GameInfoPrompt(this.app, s.gameInfo(), (info) => s.setGameInfo(info)).open();
+		}));
 		this.#treeBox = el(main, 'div', 'kifu-p-tree');
 		this.#treeSvg = svg(this.#treeBox, 'svg', { class: 'kifu-t' });
 		this.#treeSvg.addEventListener('click', (ev) => this.#onTreeClick(ev));
@@ -204,8 +211,10 @@ export class TreePanel extends ItemView {
 		};
 		const players = [who('PB', 'BR'), who('PW', 'WR')].filter(Boolean).join(' – ');
 		const title = [getText(s.root, 'GN'), players, p.RE ? getText(s.root, 'RE') : ''].filter(Boolean).join(' · ');
-		this.#game.textContent = title;
-		this.#game.hidden = !title;
+		this.#gameText.textContent = title || 'No game info yet';
+		this.#gameText.classList.toggle('is-empty', !title);
+		this.#game.hidden = !title && !s.edit;
+		this.#btn.info.hidden = !s.edit;
 
 		this.#drawTree(s);
 		this.#drawInfo(s);

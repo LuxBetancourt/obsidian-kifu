@@ -6,7 +6,6 @@ import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
 import { getMove } from '../sgf';
-import { GameInfoPrompt } from './gameinfo';
 import { BoardSvg, bandPixels } from './boardsvg';
 import { clear, el, icon, iconButton, setIcon } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
@@ -551,12 +550,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			['incorrect', 'cross', 'Mark this line as incorrect', () => s.mark('incorrect')],
 			['promote', 'up', 'Move this variation up', () => s.promote()],
 			['delete', 'trash', 'Delete this move and what follows', () => s.deleteNode()],
-			['info', 'info', 'Game info: players, ranks, komi, result…', () => {
-				new GameInfoPrompt(this.#plugin.app, s.gameInfo(), (info) => s.setGameInfo(info)).open();
-			}],
 		];
 		for (const [id, ic, title, fn] of more) {
-			if (id === 'undo' || id === 'prev' || id === 'correct' || id === 'promote' || id === 'info') group = el(bar, 'div', 'kifu-group');
+			if (id === 'undo' || id === 'prev' || id === 'correct' || id === 'promote') group = el(bar, 'div', 'kifu-group');
 			// (the figure and start switches sit with the crop tool: they all decide what the locked board shows)
 			this.#toolBtns.set(id, iconButton(group, ic, title, fn));
 		}

@@ -404,8 +404,15 @@ await scenario('while editing, the stone of the current move can be dragged to a
 await scenario('game info: players, ranks, komi and the rest, in a form, written into the game', {
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9]PB[Lee];B[ee])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
+	const info = page.locator('.kifu-p-game .kifu-btn[aria-label^="Game info"]');
+	// in the move tree panel, beside the game's heading: only while editing
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	await clickPoint(page, 0, 'aa');
+	assert.equal(await info.isVisible(), false);
+	await page.keyboard.press('Escape');
 	await toggleLock(page);
-	await tool(page, 'Game info').click();
+	assert.equal(await page.locator('.kifu-tools .kifu-btn[aria-label^="Game info"]').count(), 0); // (not in the board's toolbar)
+	await info.click();
 	const form = page.locator('.modal-content.kifu-game-info');
 	assert.deepEqual(await form.locator('.setting-item-name').allTextContents(), ['Game name', 'Event', 'Round', 'Date', 'Place', 'Black', 'Black rank', 'White', 'White rank', 'Komi', 'Handicap', 'Rules', 'Result', 'Source']);
 	const field = (id) => form.locator(`input[data-prop="${id}"]`);
@@ -417,8 +424,10 @@ await scenario('game info: players, ranks, komi and the rest, in a form, written
 	await form.locator('button', { hasText: 'Save' }).click();
 	await sleep(700);
 	assert.match(await doc(page), /\(;GM\[1\]SZ\[9\]PB\[Lee\]BR\[9p\]PW\[AlphaGo\]KM\[7\.5\]RE\[W\+R\];B\[ee\]\)/);
+	// the heading follows
+	assert.equal(await page.locator('.kifu-p-game-text').textContent(), 'Lee (9p) – AlphaGo · W+R');
 	// Cancel changes nothing
-	await tool(page, 'Game info').click();
+	await info.click();
 	await field('PB').fill('someone else');
 	await form.locator('button', { hasText: 'Cancel' }).click();
 	await sleep(700);
@@ -1262,9 +1271,9 @@ await scenario('an SGF file opened by itself: a board in a tab of its own, edite
 	const hidden = await page.evaluate(() => {
 		const t = (label) => document.querySelector(`.kifu-tools .kifu-btn[aria-label^="${label}"]`)?.hidden;
 		const c = (label) => document.querySelector(`.kifu-ctl .kifu-btn[aria-label^="${label}"]`)?.hidden;
-		return [t('Choose the part'), t('When locked, show the moves'), t('Open the board at this position'), c('Problem'), c('Shuffle'), t('Play moves'), t('Pass'), t('Game info')];
+		return [t('Choose the part'), t('When locked, show the moves'), t('Open the board at this position'), c('Problem'), c('Shuffle'), t('Play moves'), t('Pass')];
 	});
-	assert.deepEqual(hidden, [true, true, true, true, true, false, false, false]);
+	assert.deepEqual(hidden, [true, true, true, true, true, false, false]);
 	await clickPoint(page, 0, 'gg');
 	await sleep(700);
 	assert.equal(await text(page, 'g.sgf'), '(;GM[1]SZ[9];B[ee];W[cc];B[gg])');

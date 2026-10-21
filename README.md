@@ -66,7 +66,6 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ✓ ✗ | Mark the line through this move as correct or incorrect. |
 | ↑ | Move this variation up, towards being the main line. |
 | 🗑 | Delete this move and everything after it. |
-| ⓘ Game info | The game's details in a form: game name, event, round, date, place, the players and their ranks, komi, handicap, rules, result and source (the SGF properties GN, EV, RO, DT, PC, PB, BR, PW, WR, KM, HA, RU, RE, SO). An empty field takes the property away. |
 
 **Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual.
 
@@ -280,7 +279,8 @@ The panel lives in the right sidebar (command **Kifu: Show move tree**; on a com
 
 - the tree, moves running downwards and variations branching to the right — click any move to go there; dashed stones are ones you played on a locked board and are not saved;
 - ✓ / ✗ on lines that carry a verdict, and a dot on moves that have a comment;
-- the comment of the current move — a text box while the board is unlocked.
+- the comment of the current move — a text box while the board is unlocked;
+- above the tree, the game's name, players and result; while the board is unlocked, the ⓘ button beside them opens **Game info**, a form for the game name, event, round, date, place, the players and their ranks, komi, handicap, rules, result and source (the SGF properties GN, EV, RO, DT, PC, PB, BR, PW, WR, KM, HA, RU, RE, SO). An empty field takes the property away; one undo puts it all back.
 
 While a **problem** is locked the panel keeps the answers to itself: it shows only the moves that are on the board. The eye button shows all the saved lines; starting over hides them again. (There is a setting for this. Stepping forward with `→` walks along a saved line, so that shows the answer too.)
 

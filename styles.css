@@ -904,3 +904,19 @@ body .kifu-panel button.kifu-btn {
 	width: min(100%, 100cqh - 9em);
 	min-width: 240px;
 }
+
+/* the game's heading in the panel, with the game info button beside it while editing */
+.kifu-p-game {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+}
+
+.kifu-p-game-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.kifu-p-game-text.is-empty {
+	color: var(--text-faint);
+}

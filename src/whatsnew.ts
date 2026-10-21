@@ -22,7 +22,7 @@ export const NEWS: News[] = [
 	{
 		version: '1.6.6',
 		title: 'Open SGF files',
-		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker. Right-click a folder for New SGF, and use the Game info button while editing for the players, ranks, komi and result.',
+		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker. Right-click a folder for New SGF, and, while editing, the Game info button in the move tree panel for the players, ranks, komi and result.',
 		gif: 'viewer.gif',
 	},
 	{
