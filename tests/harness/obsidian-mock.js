@@ -67,7 +67,7 @@
 	class TFile extends TAbstractFile {
 		constructor(path) { super(path); const i = this.name.lastIndexOf('.'); this.extension = i < 0 ? '' : this.name.slice(i + 1); this.basename = i < 0 ? this.name : this.name.slice(0, i); this.stat = { mtime: Date.now(), size: 0 }; }
 	}
-	class TFolder extends TAbstractFile {}
+	class TFolder extends TAbstractFile { isRoot() { return this.path === '' || this.path === '/'; } }
 
 	const normalizePath = (p) => p.replace(/[\\/]+/g, '/').replace(/^\/|\/$/g, '').replace(/ /g, ' ').normalize();
 
@@ -85,6 +85,13 @@
 		async read(f) { return this.cachedRead(f); }
 		async readBinary(f) { await 0; return this.binary.get(f.path) ?? new TextEncoder().encode(this.files.get(f.path).data).buffer; }
 		async modify(f, data) { await 0; this._set(f, data); }
+		async create(path, data) {
+			await 0;
+			if (this.files.has(path)) throw new Error('File already exists.');
+			const f = this._add(path, data);
+			this.trigger('create', f);
+			return f;
+		}
 		async process(f, fn) {
 			await 0;
 			const e = this.files.get(f.path);
@@ -399,6 +406,20 @@
 			await this.view.onOpen();
 		}
 		_setView(view) { this.view = view; view.load(); }
+		/** A file in this pane: a note as a reading view, a file of a registered type in its plugin's view. */
+		async openFile(file) {
+			this.view?.unload();
+			this.containerEl.replaceChildren();
+			const type = this.app._extensions.get(file.extension);
+			this.app.workspace._activate(this);
+			if (type) {
+				this._setView(this.app._views.get(type)(this));
+				await this.view._setFile(file);
+			} else {
+				this._setView(new MarkdownView(this, file, 'preview'));
+			}
+			(this.app._opened ??= []).push([file.path, true]);
+		}
 		detach() { this.view?.unload(); this.containerEl.remove(); const l = this.app.workspace._leaves; l.splice(l.indexOf(this), 1); }
 	}
 
@@ -425,6 +446,8 @@
 			return leaf;
 		}
 		async revealLeaf(leaf) { this.revealed.push(leaf.view.getViewType()); this.app._dom.right.classList.remove('is-collapsed'); }
+		/** A pane for something to be opened in (always a new one here). */
+		getLeaf() { const leaf = new WorkspaceLeaf(this.app, this.app._dom.main); this._leaves.push(leaf); return leaf; }
 		getRightLeaf() { const leaf = new WorkspaceLeaf(this.app, this.app._dom.right); this._leaves.push(leaf); return leaf; }
 		/** test helper: open a file of a type a plugin registered, in a new pane, in that plugin's view */
 		async _openFile(path) {

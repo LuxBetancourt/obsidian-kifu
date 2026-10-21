@@ -1268,6 +1268,38 @@ await scenario('the move tree panel follows the SGF file of the tab with the foc
 	assert.equal(await move(), 'Black 1 · E5');
 });
 
+await scenario('"New SGF" in a folder\'s menu in the file explorer: an empty game, opened in its tab', {
+	files: { 'N.md': 'text\n' }, panes: [], autosave: 100, data: { boardSize: 13 },
+}, async (page) => {
+	const menu = (file, source) => page.evaluate(([file, source]) => {
+		const O = window.__obsidian;
+		const m = new O.Menu();
+		const f = file.endsWith('/') ? new O.TFolder(file.slice(0, -1)) : window.harness.app.vault.getAbstractFileByPath(file);
+		window.harness.app.workspace.trigger('file-menu', m, f, source);
+		window.__menu = m;
+		return m.items.map((i) => [i.title, i.section]);
+	}, [file, source]);
+	// a folder in the file explorer: there, in the section of "New note", "New base"…
+	assert.deepEqual(await menu('Games/', 'file-explorer-context-menu'), [['New SGF', 'action-primary']]);
+	// not for a file, and not in other menus of a folder
+	assert.deepEqual(await menu('N.md', 'file-explorer-context-menu'), []);
+	assert.deepEqual(await menu('Games/', 'link-context-menu'), []);
+	// chosen: an empty game of the default size, opened in its tab
+	const choose = () => page.evaluate(async () => { window.__menu.items[0].click(new MouseEvent('click')); await new Promise((r) => setTimeout(r, 300)); });
+	await menu('Games/', 'file-explorer-context-menu');
+	await choose();
+	assert.equal(await text(page, 'Games/Untitled.sgf'), '(;GM[1]FF[4]CA[UTF-8]SZ[13])\n');
+	assert.equal(await page.locator('.kifu-sgf-view .kifu-svg').count(), 1);
+	assert.equal(await page.locator('.view-header').last().textContent(), 'Untitled');
+	// a second one does not take the first one's name; and in the vault's top folder
+	await menu('Games/', 'file-explorer-context-menu');
+	await choose();
+	assert.equal(await text(page, 'Games/Untitled 1.sgf'), '(;GM[1]FF[4]CA[UTF-8]SZ[13])\n');
+	await menu('/', 'file-explorer-context-menu');
+	await choose();
+	assert.equal(await text(page, 'Untitled.sgf'), '(;GM[1]FF[4]CA[UTF-8]SZ[13])\n');
+});
+
 await scenario('an SGF file of several games opened by itself: a picker, and only that game is edited', {
 	files: { 'c.sgf': '(;GM[1]SZ[9]AB[aa])\n(;GM[1]SZ[9]AB[bb][cc])\n(;GM[1]SZ[9]AB[dd][ee][ff])\n' }, panes: [], autosave: 100,
 }, async (page) => {

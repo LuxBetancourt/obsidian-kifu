@@ -185,6 +185,7 @@ An SGF file of the vault can also be embedded the way an image is, with no block
 
 Click an `.sgf` file in the file explorer (or a link to one) and it opens in a tab of its own, as a board as large as the tab. It works like a board in a note: play on it locked, unlock it to edit, and the move tree panel follows it. Edits go straight into the file.
 
+- To start a new one, right-click a folder in the file explorer and choose **New SGF** (under *New base*): an empty game of your default board size, named *Untitled*, opens in its tab.
 - A file that holds several games (problem collections usually do) has a picker above the board.
 - The crop, the numbered-figure switch, the ⚑ start, and the problem and shuffle switches are not offered here: what they set is written as an option line in a `kifu` block, and an SGF file has no place for one.
 - Kifu tells Obsidian that `.sgf` files are its to open, so they are listed in the file explorer and found for links and embeds without **Detect all file extensions**. (If another plugin opens SGF files already, it keeps them; then turn that setting on for links and embeds.)

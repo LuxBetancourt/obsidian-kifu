@@ -1,6 +1,7 @@
 import {
 	Editor,
 	FuzzySuggestModal,
+	Keymap,
 	MarkdownPostProcessorContext,
 	MarkdownView,
 	Menu,
@@ -12,6 +13,7 @@ import {
 	Setting,
 	TAbstractFile,
 	TFile,
+	TFolder,
 	addIcon,
 	requestUrl,
 } from 'obsidian';
@@ -157,11 +159,33 @@ export default class KifuPlugin extends Plugin implements Host {
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+		// a folder in the file explorer: "New SGF", under "New base"
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file, source) => {
+				if (source !== 'file-explorer-context-menu' || !(file instanceof TFolder)) return;
+				menu.addItem((item) => item.setSection('action-primary').setIcon('kifu-tree').setTitle('New SGF').onClick((evt) => void this.#newSgf(file, evt)));
+			}),
+		);
 		// after an update, once: what is new (a while after Obsidian is up, not as part of its start)
 		this.app.workspace.onLayoutReady(() => {
 			const id = window.setTimeout(() => void this.#whatsNew(), this.whatsNewDelay);
 			this.register(() => window.clearTimeout(id));
 		});
+	}
+
+	/** A new, empty SGF file in a folder (of the default board size), opened in its tab. */
+	async #newSgf(folder: TFolder, evt: MouseEvent | KeyboardEvent): Promise<void> {
+		await this.settingsLoaded();
+		const base = folder.isRoot() ? '' : `${folder.path}/`;
+		let path = `${base}Untitled.sgf`;
+		for (let n = 1; this.app.vault.getAbstractFileByPath(path); n++) path = `${base}Untitled ${n}.sgf`;
+		try {
+			const file = await this.app.vault.create(path, `(;GM[1]FF[4]CA[UTF-8]SZ[${this.settings.boardSize}])\n`);
+			await this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+		} catch (e) {
+			new Notice(`Kifu: could not create ${path}.`);
+			console.error('Kifu: new SGF file', e);
+		}
 	}
 
 	/** How long after Obsidian is up the news of an update are shown, in ms. */
