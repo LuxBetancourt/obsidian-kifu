@@ -1,5 +1,5 @@
 /**
- * After an update, once: what is new, each feature with a short animation of it. Not on a
+ * After an update, once: what is new, each feature with a picture of it (an animation or a screenshot). Not on a
  * fresh install (everything is new then; the README says it better), and not at all
  * when the setting is off. The animations are fetched from the plugin's repository, at
  * the version's own tag, only when the window is shown: they are not in the plugin, so
@@ -13,35 +13,41 @@ export interface News {
 	version: string;
 	title: string;
 	text: string;
-	/** Its animation: a file in docs/whatsnew of the repository. */
-	gif: string;
+	/** Its picture (an animation or a screenshot): a file in docs/whatsnew of the repository. */
+	image: string;
 }
 
 /** Newest first. A feature belongs to the version that brought it. */
 export const NEWS: News[] = [
 	{
-		version: '1.6.6',
+		version: '1.7.0',
 		title: 'Open SGF files',
-		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker. Right-click a folder for New SGF, and, while editing, the Game info button in the move tree panel for the players, ranks, komi and result.',
-		gif: 'viewer.gif',
+		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker. To start one, right-click a folder: New SGF.',
+		image: 'viewer.png',
+	},
+	{
+		version: '1.7.0',
+		title: 'Game info',
+		text: 'While a board is unlocked, the info button beside the game\'s heading in the move tree panel opens a form for the game name, the players and their ranks, komi, handicap, result and the rest.',
+		image: 'gameinfo.png',
 	},
 	{
 		version: '1.6.4',
 		title: 'Drag a stone to move it',
 		text: 'While editing, drag the stone of the current move to another point. The moves after it stay as they are, and one undo puts it back.',
-		gif: 'drag.gif',
+		image: 'drag.gif',
 	},
 	{
 		version: '1.6.4',
 		title: 'Embed an SGF file at a move',
 		text: 'Embed an SGF file of your vault the way you embed an image: ![[game.sgf]]. Add #50 to open it at move 50, or a point, #Q16, to open it at the first move played there. Links to SGF files on the web take the same #.',
-		gif: 'embed.gif',
+		image: 'embed.gif',
 	},
 	{
 		version: '1.6.4',
 		title: 'Josekipedia',
 		text: 'Embed a link to a position on Josekipedia, or import one (right-click, Kifu): the moves that lead to it, the comments its contributors wrote, and the moves that may follow, to play through.',
-		gif: 'josekipedia.gif',
+		image: 'josekipedia.gif',
 	},
 ];
 
@@ -86,7 +92,7 @@ export class WhatsNew extends Modal {
 			item.createEl('p', { text: n.text });
 			const img = item.createEl('img', {
 				cls: 'kifu-news-gif',
-				attr: { src: `${REPO}/${n.version}/docs/whatsnew/${n.gif}`, alt: n.title, loading: 'lazy' },
+				attr: { src: `${REPO}/${n.version}/docs/whatsnew/${n.image}`, alt: n.title, loading: 'lazy' },
 			});
 			// (offline, say: a line instead of a broken picture)
 			img.addEventListener('error', () => img.replaceWith(createDiv({ cls: 'kifu-news-missing', text: 'The animation could not be loaded.' })));

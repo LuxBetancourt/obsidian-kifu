@@ -17,8 +17,12 @@ const W = 560;
 const H = 560;
 const browser = await chromium.launch();
 
+/** ONLY=pattern in the environment makes just the pictures whose names match. */
+const wanted = (name) => !process.env.ONLY || new RegExp(process.env.ONLY).test(name);
+
 /** Record `fn` on a fresh page and write it as docs/whatsnew/<name>.gif. */
 async function record(name, opts, fn) {
+	if (!wanted(name)) return;
 	const dir = path.join(tmp, name);
 	const { page, errors } = await open(browser, {
 		device: { viewport: { width: W, height: H }, deviceScaleFactor: 1, recordVideo: { dir, size: { width: W, height: H } } },
@@ -148,30 +152,38 @@ await record('josekipedia', {
 	await sleep(2600);
 });
 
-// 4. An SGF file opened in a tab of its own, stepped through, and a move added
-await record('viewer', {
-	files: { 'game.sgf': GAME },
-	panes: [],
-	autosave: 100,
-	data: { revealPanel: false },
-}, async (page) => {
-	await page.evaluate(() => window.harness.app.workspace._openFile('game.sgf'));
-	await page.addStyleTag({ content: '.view-header { display: block; padding: 6px 12px; font-weight: 600; border-bottom: 1px solid #ddd }' });
-	await sleep(1200);
-	const box = await page.locator('.kifu-svg').boundingBox();
-	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
-	await page.locator('.kifu').first().focus();
-	for (let k = 0; k < 6; k++) {
-		await page.keyboard.press('ArrowLeft');
-		await sleep(250);
-	}
-	await sleep(500);
+// 4. Screenshots: an SGF file in a tab of its own, with the move tree panel; the game info form
+async function shot(name, opts, fn) {
+	if (!wanted(name)) return;
+	const { page, errors } = await open(browser, { width: W, height: H, scale: 2, ...opts });
+	await page.addStyleTag({ content: '.view-header { padding: 6px 12px; font-weight: 600; border-bottom: 1px solid #ddd }' });
+	const clip = await fn(page);
+	await page.screenshot({ path: path.join(docs, name + '.png'), clip });
+	if (errors.length) console.log(name, errors);
+	await page.context().close();
+	console.log('wrote', name + '.png');
+}
+
+const INFO = '(;GM[1]FF[4]SZ[19]GN[Club league, round 3]PB[Kim]BR[3d]PW[Sato]WR[2d]KM[6.5]RE[B+4.5]DT[2026-10-12]' + GAME.slice(GAME.indexOf(';B['));
+
+await shot('viewer', { files: { 'Club game.sgf': INFO }, panes: [], width: 900, height: 600 }, async (page) => {
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	await page.evaluate(() => window.harness.app.workspace._openFile('Club game.sgf'));
+	await sleep(600);
+	return { x: 0, y: 0, width: 900, height: 600 };
+});
+
+await shot('gameinfo', { files: { 'Club game.sgf': INFO }, panes: [], width: 640, height: 1000, data: { revealPanel: false } }, async (page) => {
+	await page.evaluate(() => window.harness.app.workspace._openFile('Club game.sgf'));
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	await sleep(300);
 	await toggleLock(page);
-	await sleep(700);
-	await moveTo(page, 0, 'qj');
-	await page.mouse.down();
-	await page.mouse.up();
-	await sleep(1500);
+	await page.locator('.kifu-p-game .kifu-btn[aria-label^="Game info"]').click();
+	await sleep(300);
+	// the form by itself, as Obsidian shows it: a window over the page
+	await page.addStyleTag({ content: '.modal-content.kifu-game-info { position: fixed; left: 20px; right: 20px; top: 20px; z-index: 50; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 18px 22px; box-shadow: 0 6px 24px rgba(0,0,0,.18) } .kifu-game-info .setting-item { padding: 5px 0 } .kifu-game-info::before { content: "Game info"; display: block; font-weight: 600; font-size: 1.1em; margin-bottom: 8px }' });
+	const box = await page.locator('.modal-content.kifu-game-info').boundingBox();
+	return box;
 });
 
 await browser.close();
