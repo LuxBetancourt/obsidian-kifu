@@ -1214,13 +1214,78 @@ for (const mode of ['preview', 'source']) {
 		if (mode === 'source') {
 			await toggleLock(page, 1);
 			assert.deepEqual((await isEditing(page)).slice(0, 2), [false, false]);
-			assert.match((await notices(page))[0], /an embedded SGF file\. To edit it, show it with a kifu block instead: sgf: \[\[g\]\]/);
+			assert.match((await notices(page))[0], /an embedded SGF file\. To edit it, open the file itself, or show it with a kifu block: sgf: \[\[g\]\]/);
 		} else {
 			assert.equal(await lockBtn(page, 1).isHidden(), true);
 		}
 		assert.equal(await text(page, 'g.sgf'), '(;GM[1]SZ[9]AB[aa];B[ee];W[cc];B[gg];W[cg])');
 	});
 }
+
+await scenario('an SGF file opened by itself: a board in a tab of its own, edited into the file', {
+	files: { 'g.sgf': '(;GM[1]SZ[9];B[ee];W[cc])' }, panes: [], autosave: 100, width: 1000, height: 900,
+}, async (page) => {
+	await page.evaluate(() => window.harness.app.workspace._openFile('g.sgf'));
+	await sleep(300);
+	assert.equal(await page.locator('.view-header').first().textContent(), 'g');
+	assert.deepEqual(await stones(page), { black: 1, white: 1 }); // (a game rests at its end)
+	// as large as the tab allows
+	assert.ok((await page.locator('.kifu-svg').boundingBox()).width > 500);
+	await toggleLock(page);
+	assert.deepEqual(await isEditing(page), [true]);
+	// what only an option line can say is not offered: the file has no place for it
+	const hidden = await page.evaluate(() => {
+		const t = (label) => document.querySelector(`.kifu-tools .kifu-btn[aria-label^="${label}"]`)?.hidden;
+		const c = (label) => document.querySelector(`.kifu-ctl .kifu-btn[aria-label^="${label}"]`)?.hidden;
+		return [t('Choose the part'), t('When locked, show the moves'), t('Open the board at this position'), c('Problem'), c('Shuffle'), t('Play moves'), t('Pass')];
+	});
+	assert.deepEqual(hidden, [true, true, true, true, true, false, false]);
+	await clickPoint(page, 0, 'gg');
+	await sleep(700);
+	assert.equal(await text(page, 'g.sgf'), '(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	// the file changed by someone else: the board follows
+	await toggleLock(page);
+	await page.evaluate(() => { const v = window.harness.app.vault; return v.modify(v.getAbstractFileByPath('g.sgf'), '(;GM[1]SZ[9]AB[aa];B[ee];W[cc];B[gg])'); });
+	await sleep(300);
+	assert.deepEqual(await stones(page), { black: 3, white: 1 });
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('the move tree panel follows the SGF file of the tab with the focus, with no click on its board', {
+	files: { 'a.sgf': '(;GM[1]SZ[9];B[ee])', 'b.sgf': '(;GM[1]SZ[9];B[cc];W[gg])' }, panes: [], autosave: 100,
+}, async (page) => {
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	const move = () => page.locator('.kifu-p-move').textContent();
+	await page.evaluate(() => window.harness.app.workspace._openFile('a.sgf'));
+	await sleep(300);
+	assert.equal(await move(), 'Black 1 · E5');
+	await page.evaluate(() => window.harness.app.workspace._openFile('b.sgf'));
+	await sleep(300);
+	assert.equal(await move(), 'White 2 · G3');
+	// back to the first tab
+	await page.evaluate(() => { const w = window.harness.app.workspace; w._activate(w._leaves.find((l) => l.view?.file?.path === 'a.sgf')); });
+	await sleep(100);
+	assert.equal(await move(), 'Black 1 · E5');
+});
+
+await scenario('an SGF file of several games opened by itself: a picker, and only that game is edited', {
+	files: { 'c.sgf': '(;GM[1]SZ[9]AB[aa])\n(;GM[1]SZ[9]AB[bb][cc])\n(;GM[1]SZ[9]AB[dd][ee][ff])\n' }, panes: [], autosave: 100,
+}, async (page) => {
+	await page.evaluate(() => window.harness.app.workspace._openFile('c.sgf'));
+	await sleep(300);
+	const pick = page.locator('.kifu-sgf-games select');
+	assert.deepEqual(await pick.locator('option').allTextContents(), ['Game 1 of 3', 'Game 2 of 3', 'Game 3 of 3']);
+	assert.deepEqual(await stones(page), { black: 1, white: 0 });
+	await pick.selectOption('2');
+	await sleep(300);
+	assert.deepEqual(await stones(page), { black: 2, white: 0 });
+	assert.equal(await pick.inputValue(), '2');
+	await toggleLock(page);
+	await tool(page, 'White stone').click();
+	await clickPoint(page, 0, 'gg');
+	await sleep(700);
+	assert.equal(await text(page, 'c.sgf'), '(;GM[1]SZ[9]AB[aa])\n(;GM[1]SZ[9]AB[bb][cc]AW[gg])\n(;GM[1]SZ[9]AB[dd][ee][ff])\n');
+});
 
 await scenario('an embedded Josekipedia link is drawn as the position, with what may follow as variations', {
 	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,

@@ -420,10 +420,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#playBtn.setAttribute('aria-label', s.playing ? 'Pause' : 'Play through the game');
 		this.#playBtn.classList.toggle('is-active', s.playing);
 		// (while editing, under the lock: is this board a problem?)
-		this.#problemBtn.hidden = !editing;
+		this.#problemBtn.hidden = !editing || s.fileView;
 		this.#problemBtn.classList.toggle('is-active', s.problem);
 		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
-		this.#randomBtn.hidden = !editing;
+		this.#randomBtn.hidden = !editing || s.fileView;
 		this.#randomBtn.classList.toggle('is-active', s.randomized);
 		this.#randomBtn.setAttribute('aria-pressed', String(s.randomized));
 
@@ -568,6 +568,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			input.hidden = s.tool !== 'label';
 			if (input.ownerDocument.activeElement !== input && input.value !== s.nextLabel) input.value = s.nextLabel;
 		}
+		// (what only an option line can hold: not for an SGF file shown by itself)
+		btn('crop').hidden = btn('figure').hidden = btn('start').hidden = s.fileView;
 		btn('figure').classList.toggle('is-active', s.figure);
 		const isStart = s.hasStart && s.cur === s.home;
 		btn('start').classList.toggle('is-active', isStart);

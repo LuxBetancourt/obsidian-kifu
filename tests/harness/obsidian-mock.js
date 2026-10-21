@@ -319,6 +319,20 @@
 		}
 	}
 
+	/** A view of one file (what a plugin registers for a file type of its own). */
+	class FileView extends ItemView {
+		constructor(leaf) { super(leaf); this.file = null; this.allowNoFile = false; }
+		async onLoadFile() {} async onUnloadFile() {}
+		/** (what Obsidian does when the view is given a file) */
+		async _setFile(file) {
+			if (this.file) await this.onUnloadFile(this.file);
+			this.file = file;
+			this._header.textContent = this.getDisplayText();
+			await this.onLoadFile(file);
+		}
+		unload() { if (this.file) void this.onUnloadFile(this.file); super.unload(); }
+	}
+
 	/** A note open in a pane, either as a reading view or as an editor with live preview. */
 	class MarkdownView extends ItemView {
 		constructor(leaf, file, mode) {
@@ -394,7 +408,11 @@
 		openLinkText(path, source, newLeaf) { (this.app._opened ??= []).push([path, !!newLeaf]); return Promise.resolve(); }
 		iterateAllLeaves(cb) { for (const l of this._leaves.slice()) cb(l); }
 		getLeavesOfType(type) { return this._leaves.filter((l) => l.view && l.view.getViewType() === type); }
-		getActiveViewOfType(cls) { const l = this._leaves.find((x) => x.view instanceof cls); return l ? l.view : null; }
+		getActiveViewOfType(cls) {
+			// (the pane with the focus, when one was given it; else, as before, the first of the kind)
+			if (this.activeLeaf !== undefined) return this.activeLeaf?.view instanceof cls ? this.activeLeaf.view : null;
+			const l = this._leaves.find((x) => x.view instanceof cls); return l ? l.view : null;
+		}
 		_markdownViews(path) { return this._leaves.map((l) => l.view).filter((v) => v instanceof MarkdownView && v.file.path === path); }
 		async ensureSideLeaf(type, side, opts = {}) {
 			let leaf = this.getLeavesOfType(type)[0];
@@ -408,6 +426,23 @@
 		}
 		async revealLeaf(leaf) { this.revealed.push(leaf.view.getViewType()); this.app._dom.right.classList.remove('is-collapsed'); }
 		getRightLeaf() { const leaf = new WorkspaceLeaf(this.app, this.app._dom.right); this._leaves.push(leaf); return leaf; }
+		/** test helper: open a file of a type a plugin registered, in a new pane, in that plugin's view */
+		async _openFile(path) {
+			const file = this.app.vault.getAbstractFileByPath(path);
+			const type = this.app._extensions.get(file.extension);
+			const leaf = new WorkspaceLeaf(this.app, this.app._dom.main);
+			this._leaves.push(leaf);
+			leaf._setView(this.app._views.get(type)(leaf));
+			// (as when a file is opened from the file explorer: its tab gets the focus)
+			this._activate(leaf);
+			await leaf.view._setFile(file);
+			return leaf.view;
+		}
+		/** test helper: give a pane the focus, as a click on its tab does */
+		_activate(leaf) {
+			this.activeLeaf = leaf;
+			this.trigger('active-leaf-change', leaf);
+		}
 		/** test helper: open a note in a new pane */
 		_open(path, mode) {
 			const leaf = new WorkspaceLeaf(this.app, this.app._dom.main);
@@ -420,6 +455,7 @@
 	class App {
 		constructor(dom) {
 			this._dom = dom;
+			this._extensions = new Map();
 			this._processors = new Map(); this._views = new Map(); this._commands = []; this._settingTabs = []; this._icons = new Map(); this._notices = [];
 			this.vault = new Vault();
 			this.renderContext = {};
@@ -450,6 +486,11 @@
 			this.register(() => this.app._processors.delete(lang));
 		}
 		registerView(type, factory) { this.app._views.set(type, factory); }
+		registerExtensions(exts, type) {
+			for (const e of exts) if (this.app._extensions.has(e)) throw new Error('Attempting to register an existing file extension "' + e + '"');
+			for (const e of exts) this.app._extensions.set(e, type);
+			this.register(() => { for (const e of exts) this.app._extensions.delete(e); });
+		}
 		registerBasesView(id, registration) { (this.app._basesViews ??= new Map()).set(id, registration); return true; }
 		registerEditorExtension(ext) { (this.app._editorExtensions ??= []).push(ext); }
 		registerMarkdownPostProcessor(fn) {
@@ -619,7 +660,7 @@
 	const icons = new Map();
 
 	window.__obsidian = {
-		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, View, WorkspaceLeaf, Editor,
+		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, FileView, View, WorkspaceLeaf, Editor,
 		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem, SecretComponent, requestUrl, BasesView, Keymap,
 		normalizePath,
 		addIcon: (id, content) => icons.set(id, content),

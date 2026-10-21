@@ -262,6 +262,11 @@ export class Session {
 	fixed = '';
 	/** The page a board drawn from a link came from ('' for a board of a block). */
 	link = '';
+	/**
+	 * An SGF file shown by itself, in a tab of its own: the game is its file's, and there is
+	 * no block for option lines (what they would say stays on the board until it is closed).
+	 */
+	fileView = false;
 	/** A save is running / another one is wanted after it. */
 	saving = false;
 	saveAgain = false;

@@ -178,10 +178,16 @@ An SGF file of the vault can also be embedded the way an image is, with no block
 
 - With no `#`, a game shows its last position (a problem its start), as a block would.
 - `#50` opens it after move 50; `#Q16` opens it at the first move of the main line played at Q16 (the start, if no move is played there). `#last` works too.
-- The board is played like any other, and follows the file when it changes. It is not edited: show the file with a `kifu` block (`sgf: [[game.sgf]]`) to edit it.
+- The board is played like any other, and follows the file when it changes. It is not edited from the note: open the file itself (see below), or show it with a `kifu` block (`sgf: [[game.sgf]]`), to edit it.
 - A link to an SGF file on the web takes the same `#`: `![](https://files.example.com/go/game.sgf#50)`.
 
-Obsidian only lists `.sgf` files in its file explorer, and finds them for links and embeds, when **Settings → Files and links → Detect all file extensions** is on. If a board cannot find a file that is there, turn that setting on.
+### Opening an SGF file
+
+Click an `.sgf` file in the file explorer (or a link to one) and it opens in a tab of its own, as a board as large as the tab. It works like a board in a note: play on it locked, unlock it to edit, and the move tree panel follows it. Edits go straight into the file.
+
+- A file that holds several games (problem collections usually do) has a picker above the board.
+- The crop, the numbered-figure switch, the ⚑ start, and the problem and shuffle switches are not offered here: what they set is written as an option line in a `kifu` block, and an SGF file has no place for one.
+- Kifu tells Obsidian that `.sgf` files are its to open, so they are listed in the file explorer and found for links and embeds without **Detect all file extensions**. (If another plugin opens SGF files already, it keeps them; then turn that setting on for links and embeds.)
 
 ## Boards in Bases
 

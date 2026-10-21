@@ -601,6 +601,8 @@ export async function saveSession(app: App, s: Session, hooks: SaveHooks): Promi
 					}
 					if (unchanged()) s.dirtyTree = false;
 				}
+				// (a file shown by itself has no block to write option lines to)
+				if (s.dirtyHeader && s.fileView) s.dirtyHeader = false;
 				if (s.dirtyHeader) {
 					const r = await writeBlock(app, s, hooks);
 					if (r !== 'ok') {

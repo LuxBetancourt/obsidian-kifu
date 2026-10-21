@@ -148,5 +148,31 @@ await record('josekipedia', {
 	await sleep(2600);
 });
 
+// 4. An SGF file opened in a tab of its own, stepped through, and a move added
+await record('viewer', {
+	files: { 'game.sgf': GAME },
+	panes: [],
+	autosave: 100,
+	data: { revealPanel: false },
+}, async (page) => {
+	await page.evaluate(() => window.harness.app.workspace._openFile('game.sgf'));
+	await page.addStyleTag({ content: '.view-header { display: block; padding: 6px 12px; font-weight: 600; border-bottom: 1px solid #ddd }' });
+	await sleep(1200);
+	const box = await page.locator('.kifu-svg').boundingBox();
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
+	await page.locator('.kifu').first().focus();
+	for (let k = 0; k < 6; k++) {
+		await page.keyboard.press('ArrowLeft');
+		await sleep(250);
+	}
+	await sleep(500);
+	await toggleLock(page);
+	await sleep(700);
+	await moveTo(page, 0, 'qj');
+	await page.mouse.down();
+	await page.mouse.up();
+	await sleep(1500);
+});
+
 await browser.close();
 for (const f of readdirSync(docs)) console.log(f);

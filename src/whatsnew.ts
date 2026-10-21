@@ -20,6 +20,12 @@ export interface News {
 /** Newest first. A feature belongs to the version that brought it. */
 export const NEWS: News[] = [
 	{
+		version: '1.6.6',
+		title: 'Open SGF files',
+		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker.',
+		gif: 'viewer.gif',
+	},
+	{
 		version: '1.6.4',
 		title: 'Drag a stone to move it',
 		text: 'While editing, drag the stone of the current move to another point. The moves after it stay as they are, and one undo puts it back.',

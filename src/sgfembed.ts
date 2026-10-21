@@ -2,7 +2,8 @@
  * `![[game.sgf]]`: an SGF file of the vault embedded in a note is drawn as a board. After
  * a `#`, where it opens: a move number (`#50`), or a point (`#Q16`), for the first move of
  * the main line played there. The board is played like any other and follows the file
- * as it changes, but is not edited: a `kifu` block with `sgf: [[game.sgf]]` is for that.
+ * as it changes, but is not edited: the file opened by itself, or a `kifu` block with
+ * `sgf: [[game.sgf]]`, is for that.
  */
 
 import { App, Component, TFile } from 'obsidian';
@@ -70,7 +71,7 @@ class SgfEmbed extends Component {
 		el.empty();
 		el.addClass('kifu-linked');
 		const body = `sgf: ${this.#file.path}` + (this.#move ? `\nmove: ${this.#move}` : '');
-		const s = mountDetached(this, el, plugin, this.#notePath, body, this.#file.path, `this board is an embedded SGF file. To edit it, show it with a kifu block instead: sgf: [[${this.#file.basename}]].`);
+		const s = mountDetached(this, el, plugin, this.#notePath, body, this.#file.path, `this board is an embedded SGF file. To edit it, open the file itself, or show it with a kifu block: sgf: [[${this.#file.basename}]].`);
 		await loadGame(plugin.app, s);
 		s.emit();
 		// the file changes (another program, or a block that edits it): so does the board

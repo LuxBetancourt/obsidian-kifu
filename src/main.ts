@@ -31,6 +31,7 @@ import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
 import { JosekiTarget, fetchJoseki, josekiApi, josekiTarget } from './josekipedia';
 import { WhatsNew, newsSince } from './whatsnew';
+import { SGF_VIEW, SgfView } from './sgfview';
 import { registerSgfEmbeds } from './sgfembed';
 import { BoardView } from './ui/boardview';
 import { TREE_ICON } from './ui/dom';
@@ -117,6 +118,13 @@ export default class KifuPlugin extends Plugin implements Host {
 			],
 		});
 		this.registerView(VIEW_TYPE, (leaf) => new TreePanel(leaf, this));
+		// an SGF file opened by itself: a board in a tab of its own
+		this.registerView(SGF_VIEW, (leaf) => new SgfView(leaf, this));
+		try {
+			this.registerExtensions(['sgf'], SGF_VIEW);
+		} catch {
+			// (another plugin opens SGF files already: it keeps them)
+		}
 		this.addSettingTab(new KifuSettingTab(this.app, this));
 		this.addCommand({
 			id: 'insert-board',
@@ -1035,6 +1043,11 @@ export default class KifuPlugin extends Plugin implements Host {
 	}
 
 	/** Save for the last time (the plugin is being switched off, or Obsidian is closing): there will be no other try. */
+	/** How a save reports back (for a board saved from outside the plugin's own list: an SGF file's tab). */
+	get saveHooks(): SaveHooks {
+		return this.#hooks;
+	}
+
 	async #lastSave(s: Session): Promise<void> {
 		const outcome = await saveSession(this.app, s, this.#hooks);
 		if (outcome === 'failed') new Notice('Kifu: an edit could not be written before closing, and is lost.', 10000);
