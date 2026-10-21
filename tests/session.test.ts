@@ -624,6 +624,29 @@ test('"move:" can name a point: the first move of the main line played there', (
 	assert.equal(moveOf(make('move: 3\n' + game).home), 'Bgg'); // numbers as before
 });
 
+test('edit: the game info (players, ranks, komi…) is the root\'s, one undo step', () => {
+	const s = make('(;GM[1]SZ[9]PB[Lee]KM[6.5];B[ee])');
+	assert.equal(s.gameInfo().PB, 'Lee');
+	assert.equal(s.gameInfo().PW, '');
+	s.setGameInfo({ PW: 'Cho' }); // locked: nothing
+	assert.equal(s.dirtyTree, false);
+	s.setEdit(true);
+	s.setGameInfo({ PB: 'Lee Sedol ', PW: 'Cho [Hun-hyun]', KM: '', RE: 'W+R' });
+	const body = s.blockBody();
+	assert.match(body, /PB\[Lee Sedol\]/); // (trimmed)
+	assert.match(body, /PW\[Cho \[Hun-hyun\\\]\]/); // (escaped)
+	assert.doesNotMatch(body, /KM\[/); // empty: taken away
+	assert.match(body, /RE\[W\+R\]/);
+	assert.equal(s.dirtyTree, true);
+	assert.ok(body.includes(';B[ee])')); // the moves are left alone
+	s.undo();
+	assert.match(s.blockBody(), /PB\[Lee\]KM\[6\.5\]/);
+	// nothing changed: no step at all
+	const steps = s.canUndo;
+	s.setGameInfo({ PB: 'Lee' });
+	assert.equal(s.canUndo, steps);
+});
+
 test('edit: a pass is a move of the record, for the side to play', () => {
 	const s = make('(;GM[1]SZ[9];B[ee])');
 	s.pass(); // locked: nothing

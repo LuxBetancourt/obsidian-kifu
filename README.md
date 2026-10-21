@@ -66,6 +66,7 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ✓ ✗ | Mark the line through this move as correct or incorrect. |
 | ↑ | Move this variation up, towards being the main line. |
 | 🗑 | Delete this move and everything after it. |
+| ⓘ Game info | The game's details in a form: game name, event, round, date, place, the players and their ranks, komi, handicap, rules, result and source (the SGF properties GN, EV, RO, DT, PC, PB, BR, PW, WR, KM, HA, RU, RE, SO). An empty field takes the property away. |
 
 **Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual.
 

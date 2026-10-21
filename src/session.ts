@@ -128,6 +128,24 @@ export function nodeMark(n: SgfNode): Status {
 	return null;
 }
 
+/** The game's details that can be edited, in the order they are asked for: SGF property and what it is. */
+export const GAME_INFO: [string, string][] = [
+	['GN', 'Game name'],
+	['EV', 'Event'],
+	['RO', 'Round'],
+	['DT', 'Date'],
+	['PC', 'Place'],
+	['PB', 'Black'],
+	['BR', 'Black rank'],
+	['PW', 'White'],
+	['WR', 'White rank'],
+	['KM', 'Komi'],
+	['HA', 'Handicap'],
+	['RU', 'Rules'],
+	['RE', 'Result'],
+	['SO', 'Source'],
+];
+
 /** How long each move of a record played through stays on the board before the next, in ms. */
 export const PLAY_STEP = 1000;
 
@@ -1318,6 +1336,24 @@ export class Session {
 		const next = newNode(this.cur, { [color === BLACK ? 'B' : 'W']: [''] });
 		this.cur.children.push(next);
 		this.cur = next;
+		this.changed(true);
+	}
+
+	/** The game's details (players, ranks, komi…), as its root has them: id → text. */
+	gameInfo(): Record<string, string> {
+		const out: Record<string, string> = {};
+		for (const [id] of GAME_INFO) out[id] = getText(this.root, id);
+		return out;
+	}
+
+	/** While editing: change the game's details. Empty text takes a property away. One undo step. */
+	setGameInfo(info: Record<string, string>): void {
+		if (!this.edit) return;
+		const was = this.gameInfo();
+		const ids = GAME_INFO.map(([id]) => id).filter((id) => id in info && info[id].trim() !== was[id]);
+		if (!ids.length) return;
+		this.snapshot();
+		for (const id of ids) setText(this.root, id, info[id].trim());
 		this.changed(true);
 	}
 
