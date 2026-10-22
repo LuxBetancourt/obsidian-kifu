@@ -4,7 +4,7 @@
  * link shows as text again, to be edited.
  */
 
-import { EditorState, Extension, Prec, RangeSetBuilder, StateField } from '@codemirror/state';
+import { EditorState, Extension, Prec, RangeSetBuilder, StateField, Transaction } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import { editorInfoField, editorLivePreviewField } from 'obsidian';
 import type KifuPlugin from './main';
@@ -67,12 +67,35 @@ function fencedLines(state: EditorState): Set<number> {
 	return inside;
 }
 
-function build(state: EditorState, plugin: KifuPlugin): DecorationSet {
-	const b = new RangeSetBuilder<Decoration>();
-	if (!state.field(editorLivePreviewField, false)) return b.finish();
+/** Text that might hold a link to a game or problem. (Most notes have none.) */
+const CANDIDATE = /online-go\.com|goproblems\.com|josekipedia\.com|\.sgf|dragongoserver\.net|foxwq\.com|questgames\.net|stone\.gs/i;
+
+/** The field's value: the boards, and whether the note holds any text that could be a link at all. */
+interface Links {
+	deco: DecorationSet;
+	any: boolean;
+}
+
+const NONE: Links = { deco: Decoration.none, any: false };
+
+/** Could the lines a change touched hold a link? Looked at instead of the whole note. */
+function changeMayLink(tr: Transaction): boolean {
+	let may = false;
+	const doc = tr.state.doc;
+	tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+		if (may) return;
+		const from = doc.lineAt(fromB);
+		const to = doc.lineAt(toB);
+		may = CANDIDATE.test(doc.sliceString(from.from, to.to));
+	});
+	return may;
+}
+
+function build(state: EditorState, plugin: KifuPlugin): Links {
+	if (!state.field(editorLivePreviewField, false)) return NONE;
 	const text = state.doc.toString();
-	// (most notes have none: then nothing more is looked at)
-	if (!/online-go\.com|goproblems\.com|\.sgf|dragongoserver\.net|foxwq\.com|questgames\.net|stone\.gs/i.test(text)) return b.finish();
+	if (!CANDIDATE.test(text)) return NONE;
+	const b = new RangeSetBuilder<Decoration>();
 	const notePath = state.field(editorInfoField, false)?.file?.path ?? '';
 	const sel = state.selection.ranges;
 	const fenced = fencedLines(state);
@@ -91,20 +114,32 @@ function build(state: EditorState, plugin: KifuPlugin): DecorationSet {
 		if (sel.some((r) => r.from < end && r.to > start)) continue;
 		b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath) }));
 	}
-	return b.finish();
+	return { deco: b.finish(), any: true };
 }
 
 /**
  * The editor extension. The boards come from a state field, not a view plugin: the
  * editor ranks decorations from fields above those from plugins, whatever their
  * precedence, and Obsidian draws its embedded images from a field. Ours goes ahead of it.
+ *
+ * The field runs in every editor, at every keystroke and cursor move, so it must cost
+ * nothing in the notes that have no links: the whole note is read once, when it opens
+ * (and again only after a change to a line that could hold a link, or when a link is
+ * known to be there). A cursor move matters only where there is a link to step into.
  */
 export function linkedBoards(plugin: KifuPlugin): Extension {
-	const field = StateField.define<DecorationSet>({
+	const field = StateField.define<Links>({
 		create: (state) => build(state, plugin),
-		update: (deco, tr) =>
-			tr.docChanged || tr.selection || tr.startState.field(editorLivePreviewField, false) !== tr.state.field(editorLivePreviewField, false) ? build(tr.state, plugin) : deco,
-		provide: (f) => EditorView.decorations.from(f),
+		update: (links, tr) => {
+			const lpWas = tr.startState.field(editorLivePreviewField, false);
+			const lpNow = tr.state.field(editorLivePreviewField, false);
+			if (lpWas !== lpNow) return build(tr.state, plugin);
+			if (!lpNow) return links;
+			if (tr.docChanged) return links.any || changeMayLink(tr) ? build(tr.state, plugin) : links;
+			if (tr.selection && links.any) return build(tr.state, plugin);
+			return links;
+		},
+		provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 	});
 	return Prec.highest(field);
 }

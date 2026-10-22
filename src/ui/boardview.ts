@@ -300,7 +300,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				return;
 			}
 			if (!this.readOnlyPane()) return;
-			this.#render();
+			// All the reading view changes about a locked board is that it has no lock: that
+			// alone is cheaper than drawing the board again. (One being edited in another
+			// pane is drawn again, without its tools.)
+			if (s.edit) this.#render();
+			else this.#lockBtn.hidden = true;
 			win.setTimeout(() => {
 				if (this.session === s) this.#plugin.lockIfOnlyRead(s);
 			}, 500);

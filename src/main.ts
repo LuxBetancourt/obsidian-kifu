@@ -381,7 +381,10 @@ export default class KifuPlugin extends Plugin implements Host {
 			const { sgf } = await this.#getOgs(t.ogs);
 			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
 		})();
-		this.#linked.set(t.url, { at: Date.now(), body });
+		// (what was fetched long ago goes as new links come, so the cache does not grow for ever)
+		const now = Date.now();
+		for (const [url, e] of this.#linked) if (now - e.at >= LINK_KEEP) this.#linked.delete(url);
+		this.#linked.set(t.url, { at: now, body });
 		// (a failure is not kept: the next time it is asked again)
 		body.catch(() => {
 			if (this.#linked.get(t.url)?.body === body) this.#linked.delete(t.url);

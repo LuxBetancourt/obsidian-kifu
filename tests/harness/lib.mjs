@@ -10,7 +10,8 @@ export const { chromium, webkit, devices } = require('playwright');
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const out = path.resolve(here, '../out');
 export const pageUrl = 'file://' + path.join(here, 'index.html');
-export const mainJs = () => readFileSync(path.resolve(here, '../../main.js'), 'utf8');
+// (KIFU_MAIN in the environment: another build of the plugin to load, such as an unminified one for profiling)
+export const mainJs = () => readFileSync(process.env.KIFU_MAIN ?? path.resolve(here, '../../main.js'), 'utf8');
 mkdirSync(out, { recursive: true });
 
 let cmBundle = null;

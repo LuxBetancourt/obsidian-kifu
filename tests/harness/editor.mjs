@@ -864,6 +864,43 @@ await scenario('embedded links in Live Preview: a board, the link again under th
 	assert.equal(await page.evaluate(() => window.__obsidian.requestUrl.log.length), before);
 });
 
+/* A note with no links gains one (the editor extension looks only at the lines a change
+   touched until a link is known to be there), a Josekipedia link at that; then loses it. */
+await scenario('a Josekipedia link typed into a Live Preview note that had none, and taken out again', { files: { 'J.md': 'top\n\nend\n' } }, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		const api = (id) => `https://www.josekipedia.com/db/node.php?id=${id}`;
+		requestUrl.answers[api(1)] = { status: 200, text: JSON.stringify({ _id: 1, _children: [{ _id: 40, B: 'pd', C: 'Star point' }] }) };
+		requestUrl.answers[api(40)] = { status: 200, text: JSON.stringify({ _id: 40, B: 'pd', _children: [{ _id: 42, W: 'qf', C: 'The approach' }] }) };
+		requestUrl.answers[api(42)] = { status: 200, text: JSON.stringify({ _id: 42, W: 'qf', _children: [{ _id: 50, B: 'nc', C: 'Most common' }] }) };
+		window.openLivePreview('J.md');
+	});
+	await sleep(100);
+	const boards = () => page.locator('.kifu-linked-embed .kifu-svg').count();
+	const edit = (text, from, to) => page.evaluate(([text, from, to]) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ changes: { from, to, insert: text } }); }, [text, from, to]);
+	const cursorAt = (pos) => page.evaluate((pos) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: pos } }); }, pos);
+	assert.equal(await boards(), 0);
+	// the link goes in after "top", as a line of its own: a board, resting at the position
+	const link = '![](https://www.josekipedia.com/#path:pdqf)';
+	await edit(link + '\n\n', 5, 5);
+	await sleep(400);
+	assert.equal(await boards(), 1);
+	assert.equal(await page.locator('.kifu-linked-embed .kifu-cap').textContent(), 'The approach');
+	// the cursor in the link: text again; away from it: the board
+	await cursorAt(8);
+	await sleep(100);
+	assert.equal(await boards(), 0);
+	await cursorAt(0);
+	await sleep(100);
+	assert.equal(await boards(), 1);
+	// the link taken out: no board, and the note as it was
+	await edit('', 5, 5 + link.length + 2);
+	await sleep(100);
+	assert.equal(await boards(), 0);
+	assert.equal(await doc(page), 'top\n\nend\n');
+	assert.deepEqual(await notices(page), []);
+});
+
 await scenario('an embedded link to an SGF file in Live Preview', { files: { 'S.md': 'top\n\n![](http://192.168.1.20:8080/kifu/game.sgf)\n\nend\n' } }, async (page) => {
 	await page.evaluate(() => {
 		window.__obsidian.requestUrl.answers['http://192.168.1.20:8080/kifu/game.sgf'] = { status: 200, text: '(;GM[1]SZ[9];B[ee];W[cc];B[gg])' };
