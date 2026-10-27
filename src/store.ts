@@ -190,7 +190,30 @@ export function editorsHold(app: App, path: string, body: string): boolean | nul
 interface CodeMirrorish {
 	contentDOM?: Element;
 	posAtDOM?: (node: Node, offset?: number) => number;
-	state?: { doc?: { lineAt?: (pos: number) => { number: number } } };
+	state?: { doc?: { lineAt?: (pos: number) => { number: number }; line?: (n: number) => { from: number } } };
+	dispatch?: (tr: { changes: { from: number; to: number; insert: string }; scrollIntoView: boolean }) => void;
+}
+
+/**
+ * Put `text` in place of the lines `from` up to `to` (counting from 0, `to` not included)
+ * of the note an editor holds. Through the editor's CodeMirror view where it is there,
+ * so that the page does not scroll: the editor's own replaceRange scrolls the cursor
+ * into view afterwards, as after typing, and a board that writes its block while the
+ * cursor is somewhere below would pull the page away from itself every time it saves.
+ */
+function replaceLines(view: MarkdownView, from: number, to: number, text: string): void {
+	const cm = (view.editor as unknown as { cm?: CodeMirrorish }).cm;
+	const doc = cm?.state?.doc;
+	if (cm?.dispatch && doc?.line) {
+		try {
+			// (CodeMirror counts lines from 1; `line` is a method of the document, called on it)
+			cm.dispatch({ changes: { from: doc.line(from + 1).from, to: doc.line(to + 1).from, insert: text }, scrollIntoView: false });
+			return;
+		} catch {
+			// (not the CodeMirror we know: the editor's own way, below)
+		}
+	}
+	view.editor.replaceRange(text, { line: from, ch: 0 }, { line: to, ch: 0 });
 }
 
 /**
@@ -440,11 +463,7 @@ async function writeBlockNow(app: App, s: Session, hooks: SaveHooks): Promise<Bl
 				const lines = was.lines.slice();
 				lines.splice(found.block.open + 1, found.block.close - found.block.open - 1, ...body);
 				commit(was, read(lines.join('\n')), found.ord, found.block.body);
-				editor.replaceRange(
-					body.length ? body.join('\n') + '\n' : '',
-					{ line: found.block.open + 1, ch: 0 },
-					{ line: found.block.close, ch: 0 },
-				);
+				replaceLines(view, found.block.open + 1, found.block.close, body.length ? body.join('\n') + '\n' : '');
 			} else {
 				out.result = found.why;
 			}

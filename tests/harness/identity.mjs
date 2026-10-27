@@ -452,10 +452,14 @@ for (const events of ['all', 'own', 'none']) {
 		await scrollNote(page, -1);
 		await sleep(300);
 		assert.equal(await boardCount(page), 0);
-		await page.evaluate(() => window.harness.views[0].editor.replaceRange('typed above\n', { line: 0, ch: 0 }));
+		// (typed without the page following the cursor: the stand-in's replaceRange scrolls
+		// as Obsidian's does, and the point here is that the board stays out of sight)
+		const typeAt = (line, text) => page.evaluate(([line, text]) => { const cm = window.harness.views[0].cm; cm.dispatch({ changes: { from: cm.state.doc.line(line + 1).from, insert: text } }); }, [line, text]);
+		await typeAt(0, 'typed above\n');
 		await sleep(350);
-		await page.evaluate(() => { const ed = window.harness.views[0].editor; ed.replaceRange('typed below\n', { line: ed.lineCount() - 1, ch: 0 }); });
+		await page.evaluate(() => { const cm = window.harness.views[0].cm; cm.dispatch({ changes: { from: cm.state.doc.line(cm.state.doc.lines).from, insert: 'typed below\n' } }); });
 		await sleep(350);
+		assert.equal(await boardCount(page), 0); // (still out of sight)
 		await scrollNote(page, 0);
 		await sleep(400);
 		assert.equal(await boardCount(page), 1);

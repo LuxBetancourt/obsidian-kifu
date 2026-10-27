@@ -246,7 +246,9 @@ class CMEditor {
 	}
 
 	replaceRange(text: string, from: Pos, to?: Pos): void {
-		this.cm.dispatch({ changes: { from: this.off(from), to: this.off(to ?? from), insert: text } });
+		// (as Obsidian's editor does after a change: the cursor is scrolled into view, which
+		// is what pulls the page away from a board that wrote its block)
+		this.cm.dispatch({ changes: { from: this.off(from), to: this.off(to ?? from), insert: text }, scrollIntoView: true });
 	}
 }
 

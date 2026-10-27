@@ -432,6 +432,30 @@ await scenario('the insert command, in the middle of a line and at the very end 
 	assert.equal(await boardCount(page), 2); // the cursor is outside both blocks, so both are drawn
 });
 
+/* A board writing its block must not scroll the page: the editor's own replaceRange
+   scrolls the cursor into view afterwards, and with the cursor below the board that
+   pulls the page down to it every time the board saves. */
+await scenario('a board that saves does not scroll the page to the cursor below it', { files: { 'N.md': 'top\n\n```kifu\n(;SZ[9]AB[cc])\n```\n' + 'a line of text\n'.repeat(120) + 'last line\n' }, live: ['N.md'], autosave: 150, height: 500 }, async (page) => {
+	// the cursor on the last line, far below the board; then the page scrolled back up to the board
+	await page.evaluate(() => { const v = window.harness.views[0]; v.cm.dispatch({ selection: { anchor: v.cm.state.doc.length - 1 }, scrollIntoView: true }); });
+	await sleep(100);
+	await page.evaluate(() => { document.querySelector('.cm-scroller').scrollTop = 0; });
+	await sleep(100);
+	const scrollTop = () => page.evaluate(() => document.querySelector('.cm-scroller').scrollTop);
+	assert.equal(await scrollTop(), 0);
+	// (the cursor is still at the end, well below the block)
+	assert.equal(await page.evaluate(() => { const st = window.harness.views[0].cm.state; return st.selection.main.head > st.doc.length - 12; }), true);
+	await toggleLock(page);
+	await tool(page, 'Black stone').click();
+	await clickPoint(page, 0, 'ee');
+	await sleep(700); // (written)
+	assert.match(await doc(page), /AB\[cc\]\[ee\]/);
+	// the board is still on the page: no scroll happened
+	assert.equal(await scrollTop(), 0);
+	assert.deepEqual(await isEditing(page), [true]);
+	assert.deepEqual(await notices(page), []);
+});
+
 /* A board the insert command puts in a note arrives unlocked, ready to set up; a board
    typed in by hand, or one already there, does not. */
 await scenario('a board inserted by the command is unlocked when it appears; typed ones are not', { files: { 'N.md': 'intro\n\n\nend\n' }, live: ['N.md'], autosave: 150 }, async (page) => {
