@@ -432,6 +432,32 @@ await scenario('the insert command, in the middle of a line and at the very end 
 	assert.equal(await boardCount(page), 2); // the cursor is outside both blocks, so both are drawn
 });
 
+/* A board the insert command puts in a note arrives unlocked, ready to set up; a board
+   typed in by hand, or one already there, does not. */
+await scenario('a board inserted by the command is unlocked when it appears; typed ones are not', { files: { 'N.md': 'intro\n\n\nend\n' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	await page.evaluate(() => {
+		const h = window.harness;
+		const v = h.views[0];
+		v.editor.setCursor({ line: 2, ch: 0 });
+		h.app._commands.find((c) => c.id === 'insert-board').editorCallback(v.editor, v);
+	});
+	await sleep(300);
+	assert.deepEqual(await isEditing(page), [true]);
+	assert.equal(await page.locator('.kifu-tools').count(), 1);
+	// (what the command wrote: an empty block, and the cursor below it)
+	assert.equal(await doc(page), 'intro\n\n```kifu\n```\n\nend\n');
+	// one typed in by hand below it: locked, as any board is
+	await page.evaluate(() => { const v = window.harness.views[0]; v.editor.replaceRange('\n```kifu\n(;SZ[9]AB[cc])\n```\n', { line: 5, ch: 0 }); v.editor.setCursor({ line: 9, ch: 0 }); });
+	await sleep(300);
+	assert.deepEqual(await isEditing(page), [true, false]);
+	// the first is still being edited: a stone goes into its block, not the other
+	await tool(page, 'Black stone').click();
+	await clickPoint(page, 0, 'ee');
+	await sleep(700);
+	assert.equal(await doc(page), 'intro\n\n```kifu\n(;GM[1]FF[4]CA[UTF-8]SZ[19]AB[ee])\n```\n\n\n```kifu\n(;SZ[9]AB[cc])\n```\nend\n');
+	assert.deepEqual(await notices(page), []);
+});
+
 await scenario('the editor menu: a Kifu submenu, or plain items where submenus are missing', { files: { 'N.md': 'first line\n\nlast' }, live: ['N.md'], autosave: 150 }, async (page) => {
 	const res = await page.evaluate(async () => {
 		const h = window.harness;

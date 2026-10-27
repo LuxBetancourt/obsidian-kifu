@@ -24,7 +24,7 @@ To see everything at once, copy the two files in `demo/` into your vault and ope
 
 ## A first board
 
-Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu → Insert 19 × 19 board**, **13 × 13** or **9 × 9**), or type the block yourself:
+Run the command **Kifu: Insert board** (or right-click in the editor: **Kifu → Insert 19 × 19 board**, **13 × 13** or **9 × 9**): the new board arrives unlocked, ready to set up. Or type the block yourself:
 
 ````markdown
 ```kifu
@@ -100,7 +100,7 @@ So the quickest way to write a problem is: enter the answer first, then the fail
 
 SGF files from elsewhere work too. `TE` and `BM` are read as ✓ and ✗ (that is also what the plugin writes). So is a comment on a move that opens with "Correct", "Right", "Solved", "Success", "Wrong", "Incorrect" or "Fail…" as a word of its own, or that begins or ends with `RIGHT` in capitals, the way files from goproblems.com do.
 
-A board is treated as a problem when its position was **set up with stones of both colours** and there are **moves saved** from it. Marks alone do not make one: a reviewed game has its good and bad moves marked too, and stays a game record. Say `problem: yes` or `problem: no` to decide yourself, or use the switch: the **?** button under the lock while a board is unlocked, or **Kifu → Problem board** in the editor's right-click menu (for the board you right-clicked, or the block the cursor is in). The switch writes a `problem:` line only when the board would not decide the same by itself. A board that is not a problem still follows saved moves and answers them, but it does not judge by itself: only a line you marked ✓ or ✗ shows its verdict, once it has been played out to the end. With `problem: no`, nothing is judged at all.
+A board is treated as a problem when its position was **set up with stones of both colours** and there are **moves saved** from it. Marks alone do not make one: a reviewed game has its good and bad moves marked too, and stays a game record. Say `problem: yes` or `problem: no` to decide yourself, or use the switch: the **🎓 graduation cap** button under the lock while a board is unlocked, or **Kifu → Problem board** in the editor's right-click menu (for the board you right-clicked, or the block the cursor is in). The switch writes a `problem:` line only when the board would not decide the same by itself. A board that is not a problem still follows saved moves and answers them, but it does not judge by itself: only a line you marked ✓ or ✗ shows its verdict, once it has been played out to the end. With `problem: no`, nothing is judged at all.
 
 To keep a problem from looking familiar, press the **shuffle** button under the lock while the board is unlocked (or write `randomize: on`). Each time the note is opened, the locked board is then shown turned or mirrored (any of the eight ways for a square board; a board that is not square is only mirrored), and half the time with the colours swapped, so a "Black to play" problem becomes "White to play". Captions and comments follow: "Black" and "White" in them change places. Only the picture changes: what you play is looked up as recorded, and unlocking shows the board the way it is written.
 
@@ -277,8 +277,8 @@ The board asks Josekipedia for the position one move at a time, as its own pages
 
 The panel lives in the right sidebar (command **Kifu: Show move tree**; on a computer it also comes forward when you unlock a board). It follows the board you last used and shows
 
-- the tree, moves running downwards and variations branching to the right — click any move to go there; dashed stones are ones you played on a locked board and are not saved;
-- ✓ / ✗ on lines that carry a verdict, and a dot on moves that have a comment;
+- the tree, moves running downwards and variations branching to the right — click any move to go there, or right-click it for a menu: go there; mark its line ✓ or ✗, move its variation up, open the board there (⚑), edit its comment, or delete it and what follows (these are greyed out while the board is locked); dashed stones are ones you played on a locked board and are not saved;
+- ✓ / ✗ on lines that carry a verdict, a dot on moves that have a comment, and a small ⚑ over the position a `move:` line opens the board at;
 - the comment of the current move — a text box while the board is unlocked;
 - above the tree, the game's name, players and result; while the board is unlocked, the ⓘ button beside them opens **Game info**, a form for the game name, event, round, date, place, the players and their ranks, komi, handicap, rules, result and source (the SGF properties GN, EV, RO, DT, PC, PB, BR, PW, WR, KM, HA, RU, RE, SO). An empty field takes the property away; one undo puts it all back.
 

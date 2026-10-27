@@ -677,8 +677,14 @@
 			cb(item);
 			return this;
 		}
+		addSeparator() { this.items.push({ separator: true }); return this; }
+		/** (a menu the plugin shows itself: kept, for the checks to look at and pick from) */
+		showAtMouseEvent(ev) { this.shownAt = { x: ev.clientX, y: ev.clientY }; Menu.last = this; return this; }
+		showAtPosition(pos) { this.shownAt = pos; Menu.last = this; return this; }
+		hide() { if (Menu.last === this) Menu.last = null; return this; }
 	}
 	Menu.noSubmenu = false;
+	Menu.last = null;
 
 	const icons = new Map();
 

@@ -795,6 +795,25 @@ body .kifu-panel button.kifu-btn {
 	stroke: var(--text-error, #c62f3b);
 }
 
+/* the flag over the position the board opens at (a "move:" line): where the ✓ and ✗ go,
+   over a halo in the background colour that keeps it apart from the current-move ring */
+.kifu-t-flag {
+	fill: var(--interactive-accent);
+	stroke: var(--interactive-accent);
+	stroke-width: 1.5;
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+.kifu-t-flag-halo {
+	fill: var(--background-secondary, var(--background-primary));
+	stroke: var(--background-secondary, var(--background-primary));
+	stroke-width: 4.5;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+	pointer-events: none;
+}
+
 .kifu-t-cur {
 	fill: none;
 	stroke: var(--interactive-accent);

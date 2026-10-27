@@ -1,6 +1,6 @@
 /** The sidebar panel: the move tree of the board in use, and the comment on the current move. */
 
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Menu, WorkspaceLeaf } from 'obsidian';
 import type KifuPlugin from '../main';
 import { VIEW_TYPE } from '../config';
 import { pointName } from '../options';
@@ -33,6 +33,9 @@ export class TreePanel extends ItemView {
 	#treeBox!: HTMLElement;
 	#treeSvg!: SVGSVGElement;
 	#ring!: SVGCircleElement;
+	/** The flag over the position a "move:" line opens the board at, and the halo under it. */
+	#flag!: SVGPathElement;
+	#flagHalo!: SVGPathElement;
 	#info!: HTMLElement;
 	#text!: HTMLElement;
 	#comment!: HTMLTextAreaElement;
@@ -91,6 +94,7 @@ export class TreePanel extends ItemView {
 		this.#treeBox = el(main, 'div', 'kifu-p-tree');
 		this.#treeSvg = svg(this.#treeBox, 'svg', { class: 'kifu-t' });
 		this.#treeSvg.addEventListener('click', (ev) => this.#onTreeClick(ev));
+		this.#treeSvg.addEventListener('contextmenu', (ev) => this.#onTreeMenu(ev));
 
 		const foot = el(main, 'div', 'kifu-p-foot');
 		this.#info = el(foot, 'div', 'kifu-p-info');
@@ -168,15 +172,87 @@ export class TreePanel extends ItemView {
 		ev.stopPropagation();
 	}
 
-	#onTreeClick(ev: MouseEvent): void {
-		const s = this.#session;
-		if (!s || !this.#layout) return;
+	/** The node drawn under a point of the tree, if any. */
+	#nodeAt(ev: MouseEvent): SgfNode | null {
+		if (!this.#layout) return null;
 		const box = this.#treeSvg.getBoundingClientRect();
 		const col = Math.floor((ev.clientX - box.left - PAD) / CELL);
 		const row = Math.floor((ev.clientY - box.top - PAD) / CELL);
-		const node = this.#layout.cells.get(row * STRIDE + col);
+		return this.#layout.cells.get(row * STRIDE + col) ?? null;
+	}
+
+	#onTreeClick(ev: MouseEvent): void {
+		const s = this.#session;
+		if (!s) return;
+		const node = this.#nodeAt(ev);
 		if (node) s.goto(node);
 		this.#main.focus({ preventScroll: true });
+	}
+
+	/**
+	 * A right-click on a move: what the toolbar does to the current move, done to this
+	 * one (the board goes there first, so what is acted on is what is shown). The
+	 * editing items are always listed, so the menu has one shape, but they can be used
+	 * only while the board is unlocked (and never on a move that is not saved): locked,
+	 * they are greyed out, which says what unlocking would allow.
+	 */
+	#onTreeMenu(ev: MouseEvent): void {
+		const s = this.#session;
+		if (!s) return;
+		const node = this.#nodeAt(ev);
+		if (!node) return;
+		ev.preventDefault();
+		const menu = new Menu();
+		const here = (): void => {
+			if (s.cur !== node) s.goto(node);
+		};
+		menu.addItem((i) => i.setTitle('Go here').setIcon('lucide-crosshair').onClick(() => here()));
+		const can = s.edit && !node.temp;
+		const own = node.props.TE ? 'correct' : node.props.BM ? 'incorrect' : null;
+		const isMove = node !== s.root;
+		// (promoting and the start switch go by the current move: look from this node's place)
+		let promotable = false;
+		for (let n = node; n.parent; n = n.parent) if (n.parent.children.indexOf(n) > 0) promotable = true;
+		const isStart = s.hasStart && node === s.home;
+		menu.addSeparator();
+		menu.addItem((i) =>
+			i.setTitle('Mark line correct').setIcon('lucide-check').setChecked(own === 'correct').setDisabled(!can || !isMove).onClick(() => {
+				here();
+				s.mark('correct');
+			}),
+		);
+		menu.addItem((i) =>
+			i.setTitle('Mark line incorrect').setIcon('lucide-x').setChecked(own === 'incorrect').setDisabled(!can || !isMove).onClick(() => {
+				here();
+				s.mark('incorrect');
+			}),
+		);
+		menu.addItem((i) =>
+			i.setTitle('Move variation up').setIcon('lucide-arrow-up').setDisabled(!can || !promotable).onClick(() => {
+				here();
+				s.promote();
+			}),
+		);
+		menu.addItem((i) =>
+			i.setTitle('Open the board here').setIcon('lucide-flag').setChecked(isStart).setDisabled(!can).onClick(() => {
+				here();
+				s.toggleStart();
+			}),
+		);
+		menu.addSeparator();
+		menu.addItem((i) =>
+			i.setTitle('Edit comment').setIcon('lucide-message-square').setDisabled(!can).onClick(() => {
+				here();
+				this.#comment.focus();
+			}),
+		);
+		menu.addItem((i) =>
+			i.setTitle('Delete this move and what follows').setIcon('lucide-trash-2').setDisabled(!can || !isMove).onClick(() => {
+				here();
+				s.deleteNode();
+			}),
+		);
+		menu.showAtMouseEvent(ev);
 	}
 
 	/* ----------------------------------------------------------------- render */
@@ -317,6 +393,27 @@ export class TreePanel extends ItemView {
 			g.appendChild(texts);
 			g.appendChild(badges);
 			this.#ring = svg(g, 'circle', { class: 'kifu-t-cur', r: RAD + 3 });
+			// (the flag over a halo in the background colour, so it reads over the ring, an edge or a verdict)
+			this.#flagHalo = svg(g, 'path', { class: 'kifu-t-flag-halo' });
+			this.#flag = svg(g, 'path', { class: 'kifu-t-flag' });
+		}
+		// the position a "move:" line opens the board at: a little flag over it, at the
+		// upper left (the ✓ and ✗ sit at the upper right, a comment's dot at the lower right)
+		const home = s.hasStart ? this.#layout.at.get(s.home) : undefined;
+		if (home === undefined) {
+			this.#flagHalo.setAttribute('display', 'none');
+			this.#flag.setAttribute('display', 'none');
+		} else {
+			// Where the ✓ and ✗ go, at the stone's upper right (a flagged move with a verdict
+			// shows the flag; the verdict is in the board's caption). The pole's foot rests
+			// on the ring that marks the current move, not inside it: they never cross.
+			const bx = x(home % STRIDE) + RAD - 1;
+			const by = y(Math.floor(home / STRIDE)) - RAD + 1;
+			const d = `M${bx - 2.5} ${by + 3.5}v-8.5M${bx - 2.5} ${by - 5}h6l-1.5 2.5l1.5 2.5h-6`;
+			this.#flagHalo.setAttribute('d', d);
+			this.#flag.setAttribute('d', d);
+			this.#flagHalo.removeAttribute('display');
+			this.#flag.removeAttribute('display');
 		}
 		const at = this.#layout.at.get(s.cur);
 		if (at === undefined) return;

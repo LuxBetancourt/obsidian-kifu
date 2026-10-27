@@ -1580,6 +1580,71 @@ await scenario('the Bases view: a note whose first board is an embedded link', {
 	assert.match(await cards.nth(4).locator('.kifu-bases-none.is-error').textContent(), /OGS has no game 404, or it is not public\./);
 });
 
+/* Right-clicking a move in the tree: a menu of what the toolbar does to the current
+   move, done to that one. Editing items only while unlocked; the board goes there first. */
+await scenario('right-clicking a move in the move tree: go there, mark, promote, flag, comment, delete', {
+	files: { 'T.md': '# T\n\n```kifu\n(;SZ[9];B[dd];W[ee](;B[ff];W[gg])(;B[fe]))\n```\n' },
+	panes: [{ path: 'T.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	await clickPoint(page, 0, 'aa'); // (used: the panel follows it) — and a scratch move, taken back below
+	await sleep(100);
+	await page.keyboard.press('Escape');
+	await sleep(100);
+	// the tree's cells: PAD 6, CELL 26; a node at (col, row) is at its centre
+	const rightClick = (col, row) => page.evaluate(([col, row]) => {
+		const svg = document.querySelector('.kifu-t');
+		const b = svg.getBoundingClientRect();
+		const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 6 + col * 26 + 13, clientY: b.top + 6 + row * 26 + 13 });
+		svg.dispatchEvent(ev);
+		const m = window.__obsidian.Menu.last;
+		window.__obsidian.Menu.last = null;
+		return m ? { prevented: ev.defaultPrevented, items: m.items.map((i) => (i.separator ? '—' : `${i.title}${i.checked ? ' ✓' : ''}${i.disabled ? ' (off)' : ''}`)) } : null;
+	}, [col, row]);
+	const pick = (title) => page.evaluate((title) => { const m = window.__obsidian._lastShown; m.items.find((i) => i.title === title).click(new MouseEvent('click')); }, title);
+	// keep each shown menu for picking from
+	await page.evaluate(() => { const O = window.__obsidian; const orig = O.Menu.prototype.showAtMouseEvent; O.Menu.prototype.showAtMouseEvent = function (ev) { O._lastShown = this; return orig.call(this, ev); }; });
+	const move = () => page.locator('.kifu-p-move').textContent();
+	// locked: the editing items are there but greyed out (they say what unlocking allows); nothing where there is no node
+	assert.deepEqual(await rightClick(1, 3), { prevented: true, items: ['Go here', '—', 'Mark line correct (off)', 'Mark line incorrect (off)', 'Move variation up (off)', 'Open the board here (off)', '—', 'Edit comment (off)', 'Delete this move and what follows (off)'] }); // the variation B[fe]: col 1, row 3 (the root takes row 0)
+	assert.equal(await rightClick(3, 5), null);
+	await pick('Go here');
+	assert.equal(await move(), 'Black 3 · F5');
+	// unlocked: the editing items, the board going to the node first
+	await toggleLock(page);
+	await sleep(100);
+	const menu = await rightClick(0, 3); // the main line's B[ff]
+	assert.deepEqual(menu.items, ['Go here', '—', 'Mark line correct', 'Mark line incorrect', 'Move variation up (off)', 'Open the board here', '—', 'Edit comment', 'Delete this move and what follows']);
+	await pick('Mark line correct');
+	await sleep(700);
+	assert.equal(await move(), 'Black 3 · F4');
+	assert.match(await doc(page), /\(;B\[ff\]TE\[1\];W\[gg\]\)/);
+	assert.deepEqual((await rightClick(0, 3)).items[2], 'Mark line correct ✓');
+	// the variation: it can move up, and become the main line
+	assert.deepEqual((await rightClick(1, 3)).items[4], 'Move variation up');
+	await pick('Move variation up');
+	await sleep(700);
+	assert.match(await doc(page), /W\[ee\]\s*\(;B\[fe\]\)\s*\(;B\[ff\]TE\[1\];W\[gg\]\)\)/); // (the writer puts each variation on a line of its own)
+	// the flag: on the main line's move 2, then shown as checked, and the flag drawn in the tree
+	await pick('Go here'); // (re-show the menu for move 2 first)
+	await rightClick(0, 2);
+	await pick('Open the board here');
+	await sleep(700);
+	assert.match(await doc(page), /```kifu\nmove: 2\n/);
+	assert.equal((await rightClick(0, 2)).items[5], 'Open the board here ✓');
+	assert.notEqual(await page.evaluate(() => document.querySelector('.kifu-t-flag')?.getAttribute('display')), 'none');
+	// the comment box takes the keyboard for "Edit comment"
+	await pick('Edit comment');
+	assert.equal(await active(page), 'TEXTAREA.kifu-p-comment');
+	// delete the (now) variation B[ff] and what follows; the root offers no delete
+	assert.equal((await rightClick(0, 0)).items[8], 'Delete this move and what follows (off)');
+	await rightClick(1, 3);
+	await pick('Delete this move and what follows');
+	await sleep(700);
+	assert.match(await doc(page), /\(;SZ\[9\];B\[dd\];W\[ee\];B\[fe\]\)/);
+	assert.deepEqual(await notices(page), []);
+});
+
 await scenario('the start switch writes a move line, and the locked board opens there', {
 	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9];B[dd];W[ee];B[ff])\n```\n' },
 	panes: [{ path: 'S.md', mode: 'source' }],
@@ -1590,15 +1655,34 @@ await scenario('the start switch writes a move line, and the locked board opens 
 	await lockBtn(page).click();
 	const start = '.kifu-tools .kifu-btn[aria-label^="Open the board at this position"]';
 	assert.equal(await page.locator(start + '.is-active').count(), 0);
+	// the move tree flags the position the board opens at: none yet
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	const flag = () => page.evaluate(() => {
+		const f = document.querySelector('.kifu-t-flag');
+		if (!f || f.getAttribute('display') === 'none') return null;
+		// which stone it stands over: the pole is at the stone's upper right, RAD - 3.5 right of its centre
+		const [, px, py] = /^M([\d.]+) ([\d.]+)/.exec(f.getAttribute('d'));
+		const under = [...document.querySelectorAll('.kifu-t-num')].find((t) => Math.abs(Number(t.getAttribute('x')) - (Number(px) - 5.5)) < 2 && Number(t.getAttribute('y')) > Number(py));
+		return under ? under.textContent : '?';
+	});
+	assert.equal(await flag(), null);
 	await tool(page, 'Previous move').click();
 	await tool(page, 'Open the board at this position').click();
 	assert.equal(await page.locator(start + '.is-active').count(), 1);
+	assert.equal(await flag(), '2'); // over move 2, straight away
 	await tool(page, 'Next move').click();
 	assert.equal(await page.locator(start + '.is-active').count(), 0);
+	assert.equal(await flag(), '2'); // (stepping on does not move the flag: it marks the choice, not the cursor)
 	await lockBtn(page).click();
 	await sleep(300);
 	assert.match(await doc(page), /```kifu\nmove: 2\n\(;SZ\[9\];B\[dd\];W\[ee\];B\[ff\]\)\n```/);
 	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+	assert.equal(await flag(), '2'); // and still there, locked
+	// the choice taken back: no flag
+	await lockBtn(page).click();
+	await tool(page, 'Open the board at this position').click();
+	await sleep(100);
+	assert.equal(await flag(), null);
 });
 
 await scenario('an SGF file that changes while an edit is pending wins', {

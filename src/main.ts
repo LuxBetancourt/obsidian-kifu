@@ -59,6 +59,8 @@ const KEEP = 24;
 const FRAMES = 40;
 /** While a note is being typed in, how often what is known about its boards is brought up to date. */
 const CARRY_DELAY = 200;
+/** How long a board inserted by a command has to appear and be unlocked, in ms. */
+const UNLOCK_NEW = 3000;
 
 export default class KifuPlugin extends Plugin implements Host {
 	settings: KifuSettings = { ...DEFAULT_SETTINGS };
@@ -131,7 +133,7 @@ export default class KifuPlugin extends Plugin implements Host {
 		this.addCommand({
 			id: 'insert-board',
 			name: 'Insert board',
-			editorCallback: (editor) => insertBlock(editor, ''),
+			editorCallback: (editor, ctx) => this.#insertEmpty(editor, '', ctx.file?.path ?? ''),
 		});
 		this.addCommand({
 			id: 'insert-sgf',
@@ -412,9 +414,15 @@ export default class KifuPlugin extends Plugin implements Host {
 	 * A new board of size `n`. The default size needs no line: that board keeps following
 	 * the setting. (The settings are read first: they may not have been yet.)
 	 */
-	async #insertSized(editor: Editor, n: number): Promise<void> {
+	async #insertSized(editor: Editor, n: number, from: string): Promise<void> {
 		await this.settingsLoaded();
-		insertBlock(editor, n === this.settings.boardSize ? '' : `size: ${n}`);
+		this.#insertEmpty(editor, n === this.settings.boardSize ? '' : `size: ${n}`, from);
+	}
+
+	/** An empty board, inserted where the cursor is and unlocked as soon as it is drawn. */
+	#insertEmpty(editor: Editor, body: string, from: string): void {
+		this.#unlockNew = { path: from, text: normalize(body), until: Date.now() + UNLOCK_NEW };
+		insertBlock(editor, body);
 	}
 
 	#insertSgf(editor: Editor, from: string): void {
@@ -441,7 +449,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			...MENU_SIZES.map((n) => ({
 				title: `Insert ${n} × ${n} board`,
 				flat: `Insert ${n} × ${n} Kifu board`,
-				run: () => void this.#insertSized(editor, n),
+				run: () => void this.#insertSized(editor, n, from),
 			})),
 			{ title: 'Display SGF file…', flat: 'Display SGF file with Kifu…', run: () => this.#insertSgf(editor, from) },
 			// (OGS first: it is the more widely used)
@@ -593,6 +601,13 @@ export default class KifuPlugin extends Plugin implements Host {
 		const known = this.#sessionFor(ctx.sourcePath, text);
 		const s = known ?? this.#newSession(ctx.sourcePath, text);
 		view.attach(s);
+		// A board a command just put in the note: it arrives unlocked, ready to set up.
+		// (Only the first drawing of it; a reading pane beside the editor draws it too.)
+		const fresh = this.#unlockNew;
+		if (!known && fresh && fresh.path === ctx.sourcePath && fresh.text === text && Date.now() < fresh.until) {
+			this.#unlockNew = null;
+			this.toggleLock(s);
+		}
 		if (known) {
 			// The text fits; whether this is that session's block is another matter (a block
 			// further down may read the same). The board has to show where it stands.
@@ -603,6 +618,9 @@ export default class KifuPlugin extends Plugin implements Host {
 		if (s.views.size > 1) queueMicrotask(() => this.#settle(s));
 		if (!s.ready && !s.error) await this.#loadFile(s);
 	}
+
+	/** The empty board a command just inserted, to be unlocked when it is drawn: its note and text, and until when. */
+	#unlockNew: { path: string; text: string; until: number } | null = null;
 
 	#newSession(path: string, text: string): Session {
 		const s = new Session(this, path, text);
