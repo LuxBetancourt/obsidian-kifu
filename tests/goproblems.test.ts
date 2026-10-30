@@ -18,6 +18,11 @@ test('the problem number in what was typed', () => {
 	assert.equal(problemId('goproblems.com/problems/25000?tab=comments'), 25000);
 	assert.equal(problemId('https://goproblems.com/en/problems/77'), 77);
 	assert.equal(problemId('https://www.goproblems.com/prob.php?id=42'), 42);
+	// a time trial, a rush game, a leaderboard: sessions with numbers of their own, not problems
+	// (reading one as a problem would ask the API for a problem that is not there)
+	assert.equal(problemId('https://goproblems.com/time-trials/5599992'), null);
+	assert.equal(problemId('https://www.goproblems.com/time-trials/5599992/result'), null);
+	assert.equal(problemId('https://www.goproblems.com/rush/123'), null);
 	assert.equal(problemId(''), null);
 	assert.equal(problemId('zero'), null);
 	assert.equal(problemId('0'), null);

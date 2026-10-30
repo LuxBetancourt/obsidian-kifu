@@ -237,7 +237,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			{
 				title: 'Import a problem from goproblems.com',
 				desc: 'Its number, or a link to it.',
-				wrong: 'That is not a problem number, or a link to a problem.',
+				wrong: "That is not a problem number, or a link to a problem's page. (A time trial or rush game is a session, not a problem: take the link from the problem's own page.)",
 				parse: (text) => problemId(text),
 			},
 			(id) => void this.#importProblem(editor, id),

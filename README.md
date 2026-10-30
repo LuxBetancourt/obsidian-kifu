@@ -245,7 +245,7 @@ Only public games, reviews and puzzles can be imported (OGS needs no account for
 
 ## Problems from goproblems.com
 
-Run **Kifu: Import a problem from goproblems.com** (or right-click in the editor: **Kifu → Import from goproblems.com…**) and give the problem's number, or paste a link to it. The problem arrives where the cursor is, variations and comments included, as a board of its own with a link back to its page above it:
+Run **Kifu: Import a problem from goproblems.com** (or right-click in the editor: **Kifu → Import from goproblems.com…**) and give the problem's number, or paste a link to it (`https://www.goproblems.com/problems/5`). The problem arrives where the cursor is, variations and comments included, as a board of its own with a link back to its page above it:
 
 ````markdown
 [goproblems.com #5](https://www.goproblems.com/problems/5) · Tesuji, 14 kyu, by adum
@@ -257,6 +257,8 @@ problem: yes
 ````
 
 goproblems.com marks a correct line by ending its comment with RIGHT. On import that becomes a ✓ on the move (and the word leaves the comment), so the problem judges itself the way it does on the site.
+
+Only a problem's own page (`/problems/<number>`) is a board. A **time trial**, a **rush game** or a **leaderboard** on goproblems.com is a timed session that serves one problem after another, with scores: its number is the session's, not a problem's, so a link to one (`/time-trials/…`) has no board behind it and can not be embedded or imported. To keep a problem you met in a trial, open it on the site and take the link from its own page.
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 
