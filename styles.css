@@ -584,6 +584,17 @@ body .kifu-panel button.kifu-btn {
 }
 
 /* a board drawn from a link: what is said while it is fetched, or why it is not there */
+/* A board drawn from a link, inside a selection in Live Preview: tinted as a whole, the
+   way a selected block is, instead of the browser's highlight on its caption alone. */
+.kifu-linked-embed.is-selected {
+	background: var(--text-selection);
+	border-radius: var(--radius-s, 4px);
+}
+
+.kifu-linked-embed ::selection {
+	background: transparent;
+}
+
 .kifu-linked-msg {
 	margin: 0.5em 0;
 	color: var(--text-muted);

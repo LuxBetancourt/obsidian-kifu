@@ -20,21 +20,33 @@ class LinkWidget extends WidgetType {
 		readonly target: LinkTarget,
 		readonly plugin: KifuPlugin,
 		readonly notePath: string,
+		/** Inside a selection: shown tinted as a whole, as a selected block is. */
+		readonly selected: boolean,
 	) {
 		super();
 	}
 
-	// (the same link keeps its board as the note is edited around it)
+	// (the same link keeps its board as the note is edited around it; a change of
+	// selection only toggles the tint, see updateDOM)
 	eq(other: LinkWidget): boolean {
-		return other.target.url === this.target.url && other.notePath === this.notePath;
+		return other.target.url === this.target.url && other.notePath === this.notePath && other.selected === this.selected;
 	}
 
 	toDOM(): HTMLElement {
 		const el = createDiv({ cls: 'kifu-linked-embed' });
+		el.classList.toggle('is-selected', this.selected);
 		const board = new LinkedBoard(el, this.plugin, this.target, this.notePath, null);
 		board.load();
 		LinkWidget.boards.set(el, board);
 		return el;
+	}
+
+	// the same link, selected or not: the board stays, only the tint changes
+	updateDOM(el: HTMLElement): boolean {
+		const was = LinkWidget.boards.get(el);
+		if (!was || was.target.url !== this.target.url) return false;
+		el.classList.toggle('is-selected', this.selected);
+		return true;
 	}
 
 	destroy(el: HTMLElement): void {
@@ -110,9 +122,13 @@ function build(state: EditorState, plugin: KifuPlugin): Links {
 		// inside inline code: an odd number of backticks before it on its line
 		if (((line.text.slice(0, start - line.from).match(/`/g) ?? []).length & 1) === 1) continue;
 		// The cursor inside it: shown as text, to be edited. Only inside: at either end
-		// Obsidian keeps drawing it as an image (a broken one), so the board stays.
-		if (sel.some((r) => r.from < end && r.to > start)) continue;
-		b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath) }));
+		// Obsidian keeps drawing it as an image (a broken one), so the board stays. And
+		// only the cursor, not a selection: for a selection swept over the link Obsidian
+		// draws its (broken) image and no text, so the board would vanish without a trace.
+		if (sel.some((r) => r.empty && r.from > start && r.from < end)) continue;
+		// (a selection swept over it: the board is tinted as a whole, as a selected block is)
+		const selected = sel.some((r) => !r.empty && r.from < end && r.to > start);
+		b.add(start, end, Decoration.replace({ widget: new LinkWidget(t, plugin, notePath, selected) }));
 	}
 	return { deco: b.finish(), any: true };
 }

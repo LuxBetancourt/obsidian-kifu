@@ -46,7 +46,9 @@ function images(state: EditorState): DecorationSet {
 	for (const m of text.matchAll(/!\[[^\]\n]*\]\((https?:\/\/[^\s)]+)\)/g)) {
 		const from = m.index ?? 0;
 		const to = from + m[0].length;
-		if (state.selection.ranges.some((r) => r.from < to && r.to > from)) out.push(Decoration.widget({ widget: new ImageEmbed(m[1]), side: 1 }).range(to));
+		// (as Obsidian: the cursor inside the link shows its text, with the image after it; a
+		// selection swept over it does not — the image takes the link's place as usual)
+		if (state.selection.ranges.some((r) => r.empty && r.from > from && r.from < to)) out.push(Decoration.widget({ widget: new ImageEmbed(m[1]), side: 1 }).range(to));
 		else out.push(Decoration.replace({ widget: new ImageEmbed(m[1]) }).range(from, to));
 	}
 	return Decoration.set(out);
