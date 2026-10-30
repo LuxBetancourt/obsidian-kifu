@@ -12,6 +12,7 @@ import { OgsTarget, ogsPage, ogsTarget } from './ogs';
 import { Session } from './session';
 import { isSgfLink } from './sgflink';
 import { JosekiTarget, josekiTarget } from './josekipedia';
+import { SenseisTarget, senseisPage, senseisTarget } from './senseis';
 import { ServerTarget, serverTarget } from './servers';
 import { BoardView } from './ui/boardview';
 import { composeBlock, moveFragment, parseBlock, setOption } from './options';
@@ -21,7 +22,8 @@ export type LinkTarget =
 	| { site: 'goproblems'; id: number; url: string }
 	| { site: 'server'; server: ServerTarget; url: string }
 	| { site: 'sgf'; url: string; move: string | null }
-	| { site: 'josekipedia'; joseki: JosekiTarget; url: string };
+	| { site: 'josekipedia'; joseki: JosekiTarget; url: string }
+	| { site: 'senseis'; senseis: SenseisTarget; url: string };
 
 /** The game or problem a link is to, when it is one a board can be drawn from. */
 export function linkTarget(href: string): LinkTarget | null {
@@ -43,6 +45,11 @@ export function linkTarget(href: string): LinkTarget | null {
 	if (/^https?:\/\/(www\.)?online-go\.com\//i.test(s)) {
 		const t = ogsTarget(s, 'game');
 		return t ? { site: 'ogs', ogs: t, url: ogsPage(t) } : null;
+	}
+	// (a page of Sensei's Library; a link to one of its diagram files is an SGF file on the web, above)
+	if (/^https?:\/\/(www\.)?senseis\.xmp\.net\/?\?/i.test(s)) {
+		const t = senseisTarget(s);
+		return t ? { site: 'senseis', senseis: t, url: senseisPage(t) } : null;
 	}
 	if (/^https?:\/\/(www\.)?josekipedia\.com\//i.test(s)) {
 		const j = josekiTarget(s);
@@ -118,6 +125,11 @@ export function firstEmbed(text: string): { line: number; target: LinkTarget } |
 export class LinkedBoard extends MarkdownRenderChild {
 	#plugin: KifuPlugin;
 	#target: LinkTarget;
+
+	/** What this board is drawn from. */
+	get target(): LinkTarget {
+		return this.#target;
+	}
 	#notePath: string;
 	#ctx: MarkdownPostProcessorContext | null;
 	#gone = false;

@@ -228,6 +228,7 @@ These links work, besides OGS and goproblems.com:
 | Pandanet | an SGF file it offers, such as a tournament game (ordinary games are kept in its app) |
 | Stone.gs | an OGS game it shows, `https://stone.gs/games/ogs/…` |
 | Josekipedia | a position, `https://www.josekipedia.com/#path:…` (see *Joseki from Josekipedia*) |
+| Sensei's Library | a page, `https://senseis.xmp.net/?Ladder`, for its first diagram; `…?Ladder#3` for its third (see *Diagrams from Sensei's Library*) |
 
 Games on Tygem, WBaduk and PlayGo, and problems on BlackToPlay, 101weiqi, Tsumego Hero (tsumego.com) and Tsumego Dragon, can not be shown: these sites offer no record that can be fetched through a public interface without signing in, or their terms forbid it. Tsumego Hero does offer a **Download SGF** button once you have solved a problem: that file can be opened or embedded like any `.sgf` file in your vault.
 
@@ -259,7 +260,21 @@ goproblems.com marks a correct line by ending its comment with RIGHT. On import 
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 
-**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS, goproblems.com or Josekipedia, or when a note is shown that embeds a link to one (on those sites, the other Go servers listed above, or an SGF file anywhere). Each time it asks one place (the site the link is to, or for a Stone.gs link OGS) for that one game, problem, position or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one). The one other time is after an update, if the *What's new* window is on: it loads its animations from this plugin's page on GitHub.
+**Network use:** the plugin goes online only to fetch a game or problem you asked for: when you import one from OGS, goproblems.com, Josekipedia or Sensei's Library, or when a note is shown that embeds a link to one (on those sites, the other Go servers listed above, or an SGF file anywhere). Each time it asks one place (the site the link is to, or for a Stone.gs link OGS; for a page of Sensei's Library, the page and then the diagram's file) for that one game, problem, position or file, sending nothing but the request itself (and, for goproblems.com, your token if you chose one). The one other time is after an update, if the *What's new* window is on: it loads its animations from this plugin's page on GitHub.
+
+## Diagrams from Sensei's Library
+
+[Sensei's Library](https://senseis.xmp.net) is the Go wiki. Its pages carry diagrams, and each diagram is kept as an SGF file of its own: the setup, the moves, the marks and letters, and the caption. Embed a link to a page, with the diagram you want after a `#` (none, or `#1`, for the first), or run **Kifu: Import a diagram from Sensei's Library** (right-click in the editor: **Kifu → Import from Sensei's Library…**) and paste one:
+
+```markdown
+![](https://senseis.xmp.net/?Ladder)
+![](https://senseis.xmp.net/?Ladder#3)
+```
+
+The board shows the diagram's caption, and an import puts a link back to the page above it. Two things to know:
+
+- The number counts the diagrams on the page in order, so if the page is edited and a diagram added above yours, `#3` points at another one. For something you want to keep, link the diagram's own file instead: right-click the diagram on the page, copy the link to its `.sgf` file, and embed that. That address does not change, and an `.sgf` link on the web is drawn as a board anyway.
+- The library's content is under the Open Content License, which allows copying and modifying it. The page is read for its diagram links, the way a browser follows them; nothing is sent but the request.
 
 ## Joseki from Josekipedia
 

@@ -1,7 +1,9 @@
 // Drives the built plugin in Chromium against the Obsidian stand-in and checks behaviour.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
-	chromium, runner, out, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock, doc,
+	chromium, runner, out, here, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock, doc,
 } from './lib.mjs';
 
 const KILL = `(;GM[1]FF[4]SZ[19]AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]C[Black to play and kill.]
@@ -1351,6 +1353,40 @@ await scenario('an SGF file of several games opened by itself: a picker, and onl
 	await clickPoint(page, 0, 'gg');
 	await sleep(700);
 	assert.equal(await text(page, 'c.sgf'), '(;GM[1]SZ[9]AB[aa])\n(;GM[1]SZ[9]AB[bb][cc]AW[gg])\n(;GM[1]SZ[9]AB[dd][ee][ff])\n');
+});
+
+await scenario("an embedded link to a page of Sensei's Library is drawn as one of its diagrams", {
+	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
+	files: { 'S.md': "# Ladders\n\n![](https://senseis.xmp.net/?Ladder)\n\n![](https://senseis.xmp.net/?Ladder#3)\n\n![](https://senseis.xmp.net/?Ladder#99)\n\n![](https://senseis.xmp.net/?NoSuchPage)\n" },
+	panes: [],
+}, async (page) => {
+	const html = readFileSync(path.join(here, '../fixtures/senseis-ladder.html'), 'latin1');
+	await page.evaluate((html) => {
+		const { requestUrl } = window.__obsidian;
+		const bytes = (s) => Array.from(s, (c) => c.charCodeAt(0) & 0xff);
+		requestUrl.answers['https://senseis.xmp.net/?Ladder'] = { status: 200, bytes: bytes(html) };
+		requestUrl.answers['https://senseis.xmp.net/?NoSuchPage'] = { status: 404, bytes: bytes('') };
+		requestUrl.answers['https://senseis.xmp.net/diagrams/1/7b9ae89a223049f1956169bd3d567766.sgf'] = { status: 200, bytes: bytes('(;GM[1]FF[4]SZ[19]GN[Ladder]C[Diagram from http://senseis.xmp.net/?Ladder\n\nLadder]PL[B]AB[ed][ce][de]AW[dd][ee][fe][ge][df][dg][fg]CR[dd];B[dc]C[B1]MN[1])') };
+		requestUrl.answers['https://senseis.xmp.net/diagrams/18/d2790091125b320e0d0ed1100f4c9e42.sgf'] = { status: 200, bytes: bytes('(;GM[1]FF[4]SZ[19]GN[A long ladder]C[Diagram from http://senseis.xmp.net/?Ladder\n\nA long ladder]PL[B]AB[bp][cq][dq]AW[cp];B[co]C[B1]MN[1];W[dp]C[W2]MN[2])') };
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('S.md', 'preview'));
+	}, html);
+	await sleep(500);
+	// the first diagram, and the third: each a board with its caption. (Stones of both colours
+	// set up, then a move: a problem, resting at its start, as a diagram with a 'Black to play' does.)
+	assert.equal(await page.locator('.kifu-linked-embed .kifu-svg').count(), 2);
+	assert.equal(await cap(page, 0), 'Black to playLadder'); // (the board's own hint, then the diagram's caption)
+	assert.deepEqual(await stones(page, 0), { black: 3, white: 7 });
+	assert.equal(await cap(page, 1), 'Black to playA long ladder');
+	assert.deepEqual(await stones(page, 1), { black: 3, white: 1 });
+	// a diagram the page has not got, and a page that is not there: said in place
+	const errors = await page.locator('.kifu-linked-msg.is-error').allTextContents();
+	assert.match(errors[0], /has 8 diagrams, not 99/);
+	assert.match(errors[1], /no page NoSuchPage/);
+	// the page was read once for its three links (and each diagram file once)
+	const asked = await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url));
+	assert.equal(asked.filter((u) => u === 'https://senseis.xmp.net/?Ladder').length, 1);
+	assert.equal(asked.filter((u) => u.endsWith('.sgf')).length, 2);
 });
 
 await scenario('an embedded Josekipedia link is drawn as the position, with what may follow as variations', {

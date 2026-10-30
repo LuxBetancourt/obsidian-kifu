@@ -16,7 +16,7 @@ export default defineConfig(
 	},
 	...obsidianmd.configs.recommended,
 	{
-		// (SGF is the name of a file format, and Josekipedia of a site: not words to put in lower case)
-		rules: { 'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, acronyms: ['SGF'], ignoreWords: ['Josekipedia'] }] },
+		// (SGF is the name of a file format, Josekipedia and Sensei's Library of sites: not words to put in lower case)
+		rules: { 'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, acronyms: ['SGF'], ignoreWords: ['Josekipedia'], ignoreRegex: ["Sensei's Library"] }] },
 	},
 );

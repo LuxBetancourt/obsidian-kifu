@@ -432,6 +432,51 @@ await scenario('the insert command, in the middle of a line and at the very end 
 	assert.equal(await boardCount(page), 2); // the cursor is outside both blocks, so both are drawn
 });
 
+/* A selection swept over an embedded link must not make its board vanish: only the
+   cursor inside the link shows the link's text. (Under a selection Obsidian draws its
+   own, broken, image of the link and no text: the board would go without a trace.) */
+await scenario('a selection over an embedded link keeps its board; only the cursor inside it shows the text', { files: { 'L.md': 'top\n\n![](https://online-go.com/puzzle/2)\n\nend\n' } }, async (page) => {
+	await page.evaluate(() => {
+		const { requestUrl } = window.__obsidian;
+		requestUrl.answers['https://online-go.com/api/v1/puzzles/2'] = { status: 200, json: { name: 'P', owner: { username: 'x' }, puzzle: { width: 9, height: 9, initial_player: 'black', initial_state: { black: 'aaba', white: 'cacb' }, puzzle_description: 'Black to live', move_tree: { x: -1, y: -1, branches: [{ x: 0, y: 1, correct_answer: true }] } } } };
+		window.openLivePreview('L.md');
+	});
+	await sleep(300);
+	const boards = () => page.locator('.kifu-linked-embed .kifu-svg').count();
+	const select = (anchor, head) => page.evaluate(([anchor, head]) => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor, head } }); }, [anchor, head]);
+	const link = '![](https://online-go.com/puzzle/2)';
+	assert.equal(await boards(), 1);
+	// select all, a selection from above into the link, one from inside it to below, the link exactly: the board
+	// stays, tinted as a whole (as a selected block is), and it is the same board, not drawn afresh
+	const tinted = () => page.evaluate(() => document.querySelector('.kifu-linked-embed')?.classList.contains('is-selected') ?? null);
+	const mark = () => page.evaluate(() => { document.querySelector('.kifu-linked-embed').dataset.same = 'yes'; });
+	const same = () => page.evaluate(() => document.querySelector('.kifu-linked-embed')?.dataset.same === 'yes');
+	assert.equal(await tinted(), false);
+	await mark();
+	for (const [a, h] of [[0, 46], [0, 12], [12, 46], [5, 5 + link.length]]) {
+		await select(a, h);
+		await sleep(100);
+		assert.equal(await boards(), 1, `selection ${a}-${h}`);
+		assert.equal(await tinted(), true, `tint for selection ${a}-${h}`);
+		assert.equal(await same(), true, `same board for selection ${a}-${h}`);
+	}
+	// a selection elsewhere in the note: the board, untinted
+	await select(0, 3);
+	await sleep(100);
+	assert.equal(await boards(), 1);
+	assert.equal(await tinted(), false);
+	assert.equal(await same(), true);
+	// the cursor inside: the text, to edit; at its very end: the board
+	await select(8, 8);
+	await sleep(100);
+	assert.equal(await boards(), 0);
+	assert.ok((await page.evaluate(() => document.querySelectorAll('.cm-line')[2].textContent)).includes(link));
+	await select(5 + link.length, 5 + link.length);
+	await sleep(100);
+	assert.equal(await boards(), 1);
+	assert.deepEqual(await notices(page), []);
+});
+
 /* A board writing its block must not scroll the page: the editor's own replaceRange
    scrolls the cursor into view afterwards, and with the cursor below the board that
    pulls the page down to it every time the board saves. */
@@ -517,7 +562,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		out.push(show(flat));
 		return out;
 	});
-	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from online-go.com…', 'Import from goproblems.com…', 'Import from Josekipedia…']]]);
+	assert.deepEqual(res[0], [['Kifu', 'insert', ['Insert 19 × 19 board', 'Insert 13 × 13 board', 'Insert 9 × 9 board', 'Display SGF file…', 'Import from online-go.com…', 'Import from goproblems.com…', 'Import from Josekipedia…', "Import from Sensei's Library…"]]]);
 	assert.equal(res[1], 'first line\n```kifu\n```\n\nlast');
 	assert.equal(res[2], 'first line\n```kifu\nsize: 13\n```\n```kifu\n```\n\nlast');
 	assert.equal(res[3], true);
@@ -530,6 +575,7 @@ await scenario('the editor menu: a Kifu submenu, or plain items where submenus a
 		['Import a game or puzzle from online-go.com…', 'insert', null],
 		['Import a problem from goproblems.com…', 'insert', null],
 		['Import a joseki from Josekipedia…', 'insert', null],
+		["Import a diagram from Sensei's Library…", 'insert', null],
 	]);
 });
 

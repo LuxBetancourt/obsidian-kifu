@@ -32,6 +32,7 @@ import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
 import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
 import { JosekiTarget, fetchJoseki, josekiApi, josekiTarget } from './josekipedia';
+import { SenseisTarget, senseisDiagramUrl, senseisPage, senseisTarget, senseisTitle, tidySenseisSgf } from './senseis';
 import { WhatsNew, newsSince } from './whatsnew';
 import { SGF_VIEW, SgfView } from './sgfview';
 import { registerSgfEmbeds } from './sgfembed';
@@ -149,6 +150,11 @@ export default class KifuPlugin extends Plugin implements Host {
 			id: 'import-ogs',
 			name: 'Import a game or puzzle from online-go.com',
 			editorCallback: (editor) => this.#promptOgs(editor),
+		});
+		this.addCommand({
+			id: 'import-senseis',
+			name: "Import a diagram from Sensei's Library",
+			editorCallback: (editor) => this.#promptSenseis(editor),
 		});
 		this.addCommand({
 			id: 'import-josekipedia',
@@ -315,6 +321,67 @@ export default class KifuPlugin extends Plugin implements Host {
 		});
 	}
 
+	/**
+	 * A diagram of a page on Sensei's Library: the page is read for its diagram links (it
+	 * is in Latin-1, as the site serves it), then the diagram's SGF file is fetched.
+	 */
+	/** Pages of Sensei's Library read lately: several links to one page read it once. */
+	#senseisPages = new Map<string, { at: number; page: Promise<{ status: number; html: string }> }>();
+
+	#readSenseisPage(url: string): Promise<{ status: number; html: string }> {
+		const hit = this.#senseisPages.get(url);
+		if (hit && Date.now() - hit.at < LINK_KEEP) return hit.page;
+		const page = (async () => {
+			let res;
+			try {
+				res = await requestUrl({ url, throw: false });
+			} catch {
+				throw new ImportError("could not reach Sensei's Library. Are you online?");
+			}
+			// (the site serves its pages in Latin-1)
+			return { status: res.status, html: res.status === 200 ? new TextDecoder('iso-8859-1').decode(res.arrayBuffer) : '' };
+		})();
+		this.#senseisPages.set(url, { at: Date.now(), page });
+		page.catch(() => {
+			if (this.#senseisPages.get(url)?.page === page) this.#senseisPages.delete(url);
+		});
+		return page;
+	}
+
+	async #getSenseis(t: SenseisTarget): Promise<Fetched> {
+		const page = await this.#readSenseisPage(t.url);
+		const html = page.html;
+		const file = senseisDiagramUrl(t, page.status, html);
+		const title = senseisTitle(html);
+		const sgf = tidySenseisSgf(await this.#getSgfFile(file), senseisPage(t));
+		return { sgf, about: [title, `diagram ${t.diagram}`].filter(Boolean).join(', ') };
+	}
+
+	/** Ask which page of Sensei's Library (and which of its diagrams) to import, then import it. */
+	#promptSenseis(editor: Editor): void {
+		new ImportPrompt(
+			this,
+			{
+				title: "Import a diagram from Sensei's Library",
+				desc: 'A link to the page, or its name; with #2, #3… for a diagram other than the first.',
+				wrong: "That is not a link to a page on Sensei's Library.",
+				parse: (text) => senseisTarget(text),
+			},
+			(t) => void this.#importSenseis(editor, t),
+		).open();
+	}
+
+	/** Fetch a diagram from Sensei's Library and put it where the cursor is, with a link back to its page. */
+	async #importSenseis(editor: Editor, t: SenseisTarget): Promise<void> {
+		try {
+			const { sgf, about } = await this.#getSenseis(t);
+			insertBlock(editor, sgf, `[Sensei's Library](${senseisPage(t)})${about ? ` · ${about}` : ''}`);
+		} catch (e) {
+			new Notice(`Kifu: ${e instanceof ImportError ? e.message : `importing ${t.url} failed.`}`);
+			if (!(e instanceof ImportError)) console.error("Kifu: import from Sensei's Library", e);
+		}
+	}
+
 	/** Ask which Josekipedia position to import, then import it. */
 	#promptJoseki(editor: Editor): void {
 		new ImportPrompt(
@@ -380,6 +447,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			if (t.site === 'sgf') return this.#getSgfFile(t.url);
 			if (t.site === 'server') return this.#getServerGame(t.server);
 			if (t.site === 'josekipedia') return josekiBody(await this.#getJoseki(t.joseki));
+			if (t.site === 'senseis') return (await this.#getSenseis(t.senseis)).sgf;
 			const { sgf } = await this.#getOgs(t.ogs);
 			return (t.ogs.kind === 'puzzle' ? 'problem: yes\n' : '') + sgf;
 		})();
@@ -456,6 +524,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			{ title: 'Import from online-go.com…', flat: 'Import a game or puzzle from online-go.com…', run: () => this.#promptOgs(editor) },
 			{ title: 'Import from goproblems.com…', flat: 'Import a problem from goproblems.com…', run: () => this.#promptImport(editor) },
 			{ title: 'Import from Josekipedia…', flat: 'Import a joseki from Josekipedia…', run: () => this.#promptJoseki(editor) },
+			{ title: "Import from Sensei's Library…", flat: "Import a diagram from Sensei's Library…", run: () => this.#promptSenseis(editor) },
 		];
 		const problem = this.#problemEntry(editor, from);
 		if (problem) entries.push({ title: 'Problem board', flat: 'Kifu problem board', ...problem });

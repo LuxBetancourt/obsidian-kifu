@@ -1,0 +1,383 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><!-- GoWiki by Arno and Morten, based on PhpWiki -->
+<head><title>Ladder at Sensei's Library</title>
+
+<META http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<META NAME="description" CONTENT="Sensei's Library, page: Ladder, keywords: Tesuji, Go term. SL is a large WikiWikiWeb about the game of Go (Baduk, Weiqi). It's a collaboration and community site. Everyone can add comments or edit pages.">
+
+<script type="text/javascript" src="/templates/main.js"></script>
+<link rel="stylesheet" type="text/css" media="print" href="/templates/print.css">
+<link rel="stylesheet" type="text/css" media="screen" href="/templates/main.css">
+<link rel="stylesheet" type="text/css" media="screen" href="/templates/sl.css">
+<style type="text/css" media="screen">
+body {
+	font-size: 86%;
+	font-family: sans-serif;	}
+div.contentsize { font-size: 100% }
+</style>
+<!--[if IE]><style type="text/css"> #toppane { position: absolute } </style><![endif]-->
+</head>
+
+<body id="browse" class="mainpage">
+
+<div id="contentwrapper" class="left-mainpage">
+<div id="contentpane" class="mainpage">
+<div class="contentsize"><h1 id="pagetitle">Ladder</h1></div>
+<div id="pageheaders">
+  &nbsp; <u>Difficulty</u>: <A HREF="/?header=difficulty&amp;term=Introductory">Introductory</A> &nbsp; <u>Keywords</u>: <A HREF="/?header=keywords&amp;term=Tesuji">Tesuji</A>, <A HREF="/?header=keywords&amp;term=Go%20term">Go term</A></div>
+
+<div class="contentsize">
+<div class='sidebarleft'>
+<p>The term <em>ladder</em> may also refer to a ranking system used within clubs. See <a href="/?ClubLadder">Club Ladder</a> for details.
+</p>
+</div><div class='sidebarright'>
+<p><a href="/?ChineseGoTerms">Chinese</a> 1: &#24449;&#23376; (zh&#275;ng z&#464;) <br>
+Chinese 2: &#24449; (zh&#275;ng); <br>
+Chinese 3: &#25197;&#32650;&#22836; (ni&#468; yáng tóu) <br>
+<a href="/?JapaneseGoTerms">Japanese</a> 1: &#12471;&#12481;&#12519;&#12454; (shich&#333;) <br>
+Japanese 2: &#24449; (shich&#333;) (Rare) <br>
+<a href="/?KoreanGoTerms">Korean</a>: &#52629;/&#36880; (chuk) <br>
+</p>
+</div>
+<p><br> <br> <br> <br> <br>
+A <strong>ladder</strong> is a <a href="/?CapturingTechnique">technique</a> for capturing stones. At each step the attacker plays <a href="/?Atari">atari</a> (threatens capture on their next turn) and then the defender runs away, but can only gain one more <a href="/?LibertyIntroductory">liberty</a>.<a name='r1'></a><SUP>[<A HREF="#1">1</A>]</SUP> The process stops when the defender can run no further (is captured) or gets more than two liberties; in the latter case the ladder fails.
+</p>
+
+<p>The term <em>ladder</em> is often thought of as applying to the well-known staircase of the first example, but is also used for any other sequence where the defender never has more than two liberties.
+</p>
+
+<p>There are plenty of <a href="/?LadderProblemsAndExercises">Ladder problems and exercises</a> in Sensei's Library.
+</p>
+
+<p>
+<table id='toc' cellspacing=3><tr><td><b>Table&nbsp;of&nbsp;contents</b><div class='toc2'><a href='#toc1'>Example </a></div>
+<div class='toc2'><a href='#toc2'>Longer ladder </a></div>
+<div class='toc2'><a href='#toc3'>Ladder breaker </a></div>
+<div class='toc2'><a href='#toc4'>Cost of playing if you lose </a></div>
+<div class='toc2'><a href='#toc5'>Theoretical ladder </a></div>
+<div class='toc2'><a href='#toc6'>Linguistic note on Chinese </a></div>
+<div class='toc2'><a href='#toc7'>Computational complexity of ladders </a></div>
+<div class='toc2'><a href='#toc8'>See also </a></div>
+<div class='toc2'><a href='#toc9'>Homonym </a></div>
+<div class='toc1'><a href='#toc10'>Notes </a></div>
+<div class='toc1'><a href='#toc11'>Other languages </a></div>
+<div class='toc2'><a href='#toc12'>Chinese </a></div></td>
+<td><b>Table&nbsp;of&nbsp;diagrams</b><br><a href='#diag1'>Ladder</a><br>
+<a href='#diag2'>Playing out the ladder</a><br>
+<a href='#diag3'>A long ladder</a><br>
+<a href='#diag4'>A long ladder (cont'd)</a><br>
+<a href='#diag5'>A long ladder with ladder breaker</a><br>
+<a href='#diag6'>A broken ladder</a><br>
+<a href='#diag7'>More complicated ladder</a><br>
+<a href='#diag8'>Straight ladder</a></td>
+</tr></table>
+
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=1' title='Edit section 1'>edit</a>]</div>
+<h2><a name='toc1'></a>Example 
+</h2>
+<div><a name='diag1'></a><div class='diagclear'></div><div class='diagram' style='width:221px'><a href="diagrams/1/7b9ae89a223049f1956169bd3d567766.sgf"><img src="diagrams/1/7b9ae89a223049f1956169bd3d567766.png" alt="[Diagram]"  border=0 width='211' height='211'></a><form method="POST" action="/" style="margin:0.3em 0em">
+Ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="corner">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value=".........???????????.........???????????...X.....???????????...OX....???????????..XXOOO..???????????...O.....???????????...O.O...???????????.........???????????.........???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????">
+</form></div>
+
+<p>Black <img src='/images/stones/b1.gif' alt='B1' class='stone'> starts a ladder to capture the <img src='/images/stones/wc.gif' alt='white+circle' class='stone'> stone.
+</p>
+<div style="clear:both;height:1px"></div></div><div><a name='diag2'></a><div class='diagclear'></div><div class='diagram' style='width:221px'><a href="diagrams/24/b278d3baa6721570b3bb08c7498098fe.sgf"><img src="diagrams/24/b278d3baa6721570b3bb08c7498098fe.png" alt="[Diagram]"  border=0 width='211' height='211'></a><form method="POST" action="/" style="margin:0.3em 0em">
+Playing out the ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="corner">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value=".X.......???????????.OX......???????????XOOX.....???????????.XOOX....???????????..XXOOO..???????????...O.....???????????...O.O...???????????.........???????????.........???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????">
+</form></div>
+
+<p>If White tries to escape, Black can at each time play <a href="/?Atari">atari</a> and White will be captured.
+</p>
+
+<p>Clearly White should see this and not play <img src='/images/stones/w2.gif' alt='W2' class='stone'>.
+<br clear=all>
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=2' title='Edit section 2'>edit</a>]</div>
+<h2><a name='toc2'></a>Longer ladder 
+</h2>
+<div style="clear:both;height:1px"></div></div><div><a name='diag3'></a><div class='diagclear'></div><div class='diagram' style='width:451px'><a href="diagrams/18/d2790091125b320e0d0ed1100f4c9e42.sgf"><img src="diagrams/18/d2790091125b320e0d0ed1100f4c9e42.png" alt="[Diagram]"  border=0 width='441' height='441'></a><form method="POST" action="/" style="margin:0.3em 0em">
+A long ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="fullboard">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value="...................?...................?...................?...,.....,.....,...?...................?...................?...................?...................?...................?...,.....,.....,...?...................?...................?....X..............?...XOO.............?..XOOX.............?.XOOX....,.....,...?..XX...............?...................?...................?">
+</form></div>
+
+<p>Ladders may span a large part of the board. If for example Black captures the white stone in a ladder with <img src='/images/stones/b1.gif' alt='B1' class='stone'>, the ladder will cross the entire board if White tries to escape, resulting in the next diagram.
+</p>
+<div style="clear:both;height:1px"></div></div><div><a name='diag4'></a><div class='diagclear'></div><div class='diagram' style='width:451px'><a href="diagrams/4/34feaba49b0979374fa488126ba4a3b9.sgf"><img src="diagrams/4/34feaba49b0979374fa488126ba4a3b9.png" alt="[Diagram]"  border=0 width='441' height='441'></a><form method="POST" action="/" style="margin:0.3em 0em">
+A long ladder (cont'd) &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="fullboard">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value="................X..?...............XOOX?..............XOOX.?...,.....,...XOOX..?............XOOX...?...........XOOX....?..........XOOX.....?.........XOOX......?........XOOX.......?...,...XOOX....,...?......XOOX.........?.....XOOX..........?....XOOX...........?...XOOX............?..XOOX.............?.XOOX....,.....,...?..XX...............?...................?...................?">
+</form></div>
+
+<p>If White tries to escape, the ladder will continue in this way. This is a disaster for White.
+</p>
+
+<p><br clear=all>
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=3' title='Edit section 3'>edit</a>]</div>
+<h2><a name='toc3'></a>Ladder breaker 
+</h2>
+<div style="clear:both;height:1px"></div></div><div><a name='diag5'></a><div class='diagclear'></div><div class='diagram' style='width:451px'><a href="diagrams/25/598f5ffbeb283b3df0c07d45107be104.sgf"><img src="diagrams/25/598f5ffbeb283b3df0c07d45107be104.png" alt="[Diagram]"  border=0 width='441' height='441'></a><form method="POST" action="/" style="margin:0.3em 0em">
+A long ladder with ladder breaker &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="fullboard">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value="...................?...................?...................?...,.....,.....,...?...................?...................?..............O....?...................?...................?...,.....,.....,...?...................?...................?....X..............?...XOO.............?..XOOX.............?.XOOX....,.....,...?..XX...............?...................?...................?">
+</form></div>
+
+<p>Suppose, however, that there is a stone in the path of the ladder, such as <img src='/images/stones/wc.gif' alt='white+circle' class='stone'> in this diagram,
+</p>
+<div style="clear:both;height:1px"></div></div><div><a name='diag6'></a><div class='diagclear'></div><div class='diagram' style='width:451px'><a href="diagrams/41/660e621c12ee706ed25d76d1bccb07ac.sgf"><img src="diagrams/41/660e621c12ee706ed25d76d1bccb07ac.png" alt="[Diagram]"  border=0 width='441' height='441'></a><form method="POST" action="/" style="margin:0.3em 0em">
+A broken ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="fullboard">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value="...................?...................?...................?...,.....,.....,...?............X......?...........XOO.....?..........XOOXO....?.........XOOX......?........XOOX.......?...,...XOOX....,...?......XOOX.........?.....XOOX..........?....XOOX...........?...XOOX............?..XOOX.............?.XOOX....,.....,...?..XX...............?...................?...................?">
+</form></div>
+
+<p>After <img src='/images/stones/w8.gif' alt='W8' class='stone'>, <img src='/images/stones/b5.gif' alt='B5' class='stone'> is suddenly in atari. Now, black cannot continue with the ladder, because white could simply capture the <img src='/images/stones/b5.gif' alt='B5' class='stone'> stone. The ladder is <a href="/?BrokenLadder">broken</a>. Also, note that black's formation is full of <a href="/?CuttingPoints">cutting points</a> each of which is a <a href="/?DoubleAtari">double atari</a> that White can play. This is therefore a disaster for Black.
+</p>
+
+<p>And so we can plainly see that a ladder is little more than a one-sided fight for one side or the other.  Hence the proverb, &quot;<a href="/?IfYouDontKnowLaddersDontPlayGo">If you don&#039;t know ladders, don&#039;t play go</a>&quot;.
+</p>
+
+<p><br clear=all>
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=4' title='Edit section 4'>edit</a>]</div>
+<h2><a name='toc4'></a>Cost of playing if you lose 
+</h2>
+
+<p>It is expensive to play in a ladder if you are going to lose it. Traditionally people talk of about 7 points per mistaken play (<em><a href="/?PJT">PJT</a>: Just seen that <a href="https://forums.online-go.com/t/go-achievements/46471/20?u=pjtraill"><img src="images/extlink.gif" alt="[ext]" border=0> here</a> — any other views?</em>). <a href="https://online-go.com/game/767796"><img src="images/extlink.gif" alt="[ext]" border=0> Here</a> is a game on <a href="/?OGS">OGS</a> where <a href="/?KataGo">KataGo</a> estimates that the mistaken plays up to resignation cost roughly 10, 8, 6, 6, 6, … 6, 3·5, 5·9, 1·6, 7·7, 1·1.
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=5' title='Edit section 5'>edit</a>]</div>
+<h2><a name='toc5'></a>Theoretical ladder 
+</h2>
+
+<p>Although ladders normally follow a zigzag pattern across the board, and indeed derive their name from this &quot;stairway&quot; like formation, any sequential series of ataris forcing the opponent's stones around is considered a ladder. Thus ladders may go straight, or bend, and still be considered ladders.
+</p>
+<div style="clear:both;height:1px"></div></div><div><a name='diag7'></a><div class='diagclear'></div><div class='diagram' style='width:267px'><a href="diagrams/12/805ff4ee07f373bf7a17b868887d60cf.sgf"><img src="diagrams/12/805ff4ee07f373bf7a17b868887d60cf.png" alt="[Diagram]"  border=0 width='257' height='211'></a><form method="POST" action="/" style="margin:0.3em 0em">
+More complicated ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="corner">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value="...........?????????......O....?????????....OXX....?????????...XXOO..,.?????????..XOOOXXX..?????????.XOOXX.....?????????..XX.......?????????...........?????????...........?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????">
+</form></div>
+
+<p>In this example, there are several white (<img src='/images/stones/wc.gif' alt='white+circle' class='stone'>) and black (<img src='/images/stones/bc.gif' alt='black+circle' class='stone'>) stones in the path of the ladder. The diagram shows that white cannot escape with <img src='/images/stones/w1.gif' alt='W1' class='stone'>. Had black followed the basic zigzag pattern by playing <img src='/images/stones/b4.gif' alt='B4' class='stone'> at <img src='/images/stones/w5.gif' alt='W5' class='stone'>, white would have escaped. But by using his own additional stones for support, black is able to maneuver the ladder past white's stones.
+</p>
+<div style="clear:both;height:1px"></div></div><div><a name='diag8'></a><div class='diagclear'></div><div class='diagram' style='width:267px'><a href="diagrams/38/756125f55690fec958c50cfc192d6523.sgf"><img src="diagrams/38/756125f55690fec958c50cfc192d6523.png" alt="[Diagram]"  border=0 width='257' height='96'></a><form method="POST" action="/" style="margin:0.3em 0em">
+Straight ladder &nbsp; <input type="image" name="img_positionsearch" value="Search" src="/images/edit-find.png" alt="Search position" title="Search position" style="vertical-align:middle">
+<input type="hidden" name="positionsearch" value="Search">
+<input type="hidden" name="mode" value="corner">
+<input type="hidden" name="width" value="19">
+<input type="hidden" name="height" value="19">
+<input type="hidden" name="colorrotate" value="1">
+<input type="hidden" name="boarddata" value=".OOOOOOX...?????????..XXXXX....?????????...........?????????...,.....,.?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????">
+</form></div>
+
+<p>In the same vein, this pattern is also a ladder, though most people might not refer to it as such.
+</p>
+
+<p><br clear=all>
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=6' title='Edit section 6'>edit</a>]</div>
+<h2><a name='toc6'></a>Linguistic note on Chinese 
+</h2>
+
+<p>The Chinese term for &quot;long march&quot;, &#38271;&#24449; (cháng zh&#275;ng), is often used as a metaphor for the Chinese term for &quot;ladder&quot;, &#24449;&#23376; (zh&#275;ng z&#464;). The idea is that if the ladder is played out fully, then it can be a very long sequence, like a long march.
+</p>
+
+<p>According to <a href="/?JohnFairbairn">John Fairbairn</a>, the word &#24449; first appeared in Chapter 2 of Dunhuang Classic in the 6th century, well before Mao Zedong's time, and there is no reference there to marches. In the ancient, &#24449; refers to firmly attacking a rebellious state and had nothing directly to do with marching, but later it developed to another meaning of &quot;(military) expedition&quot;.
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=7' title='Edit section 7'>edit</a>]</div>
+<h2><a name='toc7'></a>Computational complexity of ladders 
+</h2>
+
+<p><a href="/?Crasmarum">Marcel Crasmaru</a> and <a href="/?JohnTromp">John Tromp</a> proved that the <a href="https://tromp.github.io/lad.ps"><img src="images/extlink.gif" alt="[ext]" border=0> problem of computing ladders</a> belongs to the class of <a href="http://en.wikipedia.org/wiki/PSPACE-complete"><img src="images/extlink.gif" alt="[ext]" border=0> PSPACE-complete</a>, due to the possible twists and turns and other complications in the execution of a ladder. However, such complicated cases are quite rare in Go. The majority of the ladders can be easily read out by a beginner with some practice. (A similar comment applies to many such proofs. Indeed, they are &quot;asymptotic&quot; and really only apply to arbitrarily large boards. By themselves they say nothing about our good old 19x19 <a href="/?Goban">goban</a>. Concrete bounds are needed for that.)
+</p>
+<div style="clear:both;height:1px"></div></div>
+<div class="hr"><hr></div>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=8' title='Edit section 8'>edit</a>]</div>
+<h2><a name='toc8'></a>See also 
+</h2>
+
+<ul><li> Terminology
+
+<ul><li> <a href="/?DualLadder">Dual ladder</a> <em>overview of various similar terms (not an established <a href="/?GoTerm">Go term</a> itself)</em>
+<li> <a href="/?BrokenLadder">Broken ladder</a>
+<li> <a href="/?AlternativeLadder">Alternative ladder</a> (<em>not an established <a href="/?GoTerm">Go term</a></em>)
+<li> <a href="/?DoubleLadder">Double ladder</a> (disambiguation, <em>not an established <a href="/?GoTerm">Go term</a></em>)
+<li> <a href="/?IntertwinedLadders">Intertwined Ladders</a> (<em>not an established <a href="/?GoTerm">Go term</a></em>)
+<li> <a href="/?LadderBreaker">Ladder-breaker</a>
+<li> <a href="/?LadderKo">Ladder ko</a>
+<li> <a href="/?ParallelLadders">Parallel ladders</a> (disambiguation, <em>not an established <a href="/?GoTerm">Go term</a></em>)
+<li> <a href="/?TurnaroundLadder">Turnaround ladder</a> (<em>not an established <a href="/?GoTerm">Go term</a></em>)
+</ul>
+<li> Similar techniques
+
+<ul><li> <a href="/?DrivingTesuji">Driving tesuji</a>
+<li> <a href="/?LooseLadder">Loose ladder</a> (<em>yurumi shicho</em>)
+<li> <a href="/?Net">Net</a> (<em>geta</em>)
+<li> <a href="/?Shunt">Shunt</a> (a ‘micro-ladder’)
+<li> <a href="/?SpiralLadder">Spiral ladder</a> (<em>guru-guru mawashi</em>)
+<li> <a href="/?DoubleThreatLadderMaker">Threat to make two ladders</a>
+</ul>
+<li> Practical advice
+
+<ul><li> Proverbs about ladders
+
+<ul><li> <a href="/?IfYouDontKnowLaddersDontPlayGo">If you don&#039;t know ladders, don&#039;t play go</a>
+<li> <a href="/?CaptureStonesCaughtInALadderAtTheEarliestOpportunity">Capture stones caught in a ladder at the earliest opportunity</a>
+</ul>
+<li> <a href="/?Ladder%2FreadingTechniques">Ladder/reading techniques</a> (some controversial)
+</ul>
+<li> <a href="/?LadderProblemsAndExercises">Ladder problems and exercises</a>
+
+<ul><li> <a href="/?LongestLadderProblem">Longest Ladder Problem</a>
+<li> <a href="/?ValentinesDayProblem">Valentine&#039;s day problem</a>
+<li> <a href="/?LadderGadgets">Ladder gadgets</a> (for constructing ladder problems)
+</ul>
+<li> Examples of ladders
+
+<ul><li> <a href="/?LadderJoseki">Joseki involving ladders</a>
+<li> <a href="/?LeeSedolHongChangSikLadderGame">Lee Sedol - Hong Chang Sik - ladder game</a>
+<li> <a href="/?HosaiMasaoTwoLaddersMirrorGo">Hosai Masao - Two Ladders Mirror Go</a>
+<li> <a href="/?LadderOddity">Ladder oddity</a> (Hane vs. Yamashita, 28th Kisei title match, game 6)
+</ul>
+<li> Discussions
+
+<ul><li> <a href="/?NonLocalMoveVersusALocalMove">Non Local Move Versus A Local Move</a> (ladder versus <a href="/?Net">net</a>)
+<li> <a href="/?LadderStrategy%2FDiscussion">Ladder strategy / Discussion</a>
+</ul>
+</ul>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=9' title='Edit section 9'>edit</a>]</div>
+<h2><a name='toc9'></a>Homonym 
+</h2>
+<ul><li> <a href="/?ClubLadder">Club ladder</a>
+</ul>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=10' title='Edit section 10'>edit</a>]</div>
+<h1><a name='toc10'></a>Notes 
+</h1>
+
+<p>[<a name='1'></a><a href='#r1'>1</a>]
+The term, &quot;ladder&quot;, though long in use, is also debatable. The term &quot;stair&quot; is much better to describe this form.  (But... A stair and not a ladder, a thing and not a process?  It's a <a href="/?Reckless">reckless</a> path to disaster, not a trip to the attic.)
+</p>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=11' title='Edit section 11'>edit</a>]</div>
+<h1><a name='toc11'></a>Other languages 
+</h1>
+<div class='editsection'>[<a href='/?edit=Ladder&amp;section=12' title='Edit section 12'>edit</a>]</div>
+<h2><a name='toc12'></a>Chinese 
+</h2>
+
+<p>&#19979;&#23376;&#21518;&#65292;&#25171;&#21507;&#23545;&#26041;&#30340;&#26827;&#23376;&#65292;&#23545;&#26041;&#38271;&#20986;&#26102;&#21482;&#26377;&#20004;&#21475;&#27668;&#65292;&#24049;&#26041;&#20877;&#36814;&#22836;&#22581;&#20303;&#65292;&#19968;&#30452;&#25171;&#21040;&#23545;&#26041;&#27809;&#26377;&#22320;&#26041;&#21487;&#36867;&#65292;&#26368;&#21518;&#25226;&#23545;&#26041;&#30340;&#26827;&#23376;&#21507;&#25481;&#65292;&#36825;&#31181;&#21507;&#23376;&#30340;&#26041;&#27861;&#23601;&#21483;&#20316;“&#24449;&#23376;”&#65292;&#20063;&#21483;“&#24449;&#21507;”&#65292;&#20439;&#31216;“&#25197;&#32650;&#22836;”&#12290;
+&#24449;&#23376;&#26102;&#35201;&#20445;&#25345;&#24049;&#26041;&#30340;&#20840;&#37096;&#26827;&#23376;&#37117;&#26377;&#20004;&#21475;&#25110;&#20004;&#21475;&#20197;&#19978;&#30340;&#27668;&#12290;
+</p>
+</div>
+
+
+
+<br clear="all">
+
+<div id="pgfooter">
+<em>Ladder last edited by <a href="/?Unkx80" title=''>Unkx80</a> on June 7, 2026 - 18:29</em>
+<div style="float:right">
+<A HREF="/?RecentChanges" accesskey="j">RecentChanges</A> &middot;
+<A HREF="/?StartingPoints">StartingPoints</a> &middot;
+<a href="/?SenseisLibrary">About</a>
+</div>
+<div>
+<a href="/?edit=Ladder" title="Edit the page [alt+e]">Edit page</a> &middot;<a href="/?FindPage">Search</a> &middot;
+<a href="/?related=Ladder" accesskey="r" title="Find related pages [alt+r]">Related</a> &middot;
+<a href="/?info=Ladder" accesskey="h" title="Show page info and history [alt+h]">Page info</a> &middot;
+<a href="/?diff=Ladder" accesskey="d" title="Show latest diff [alt+d]">Latest diff</a>
+</div>
+</div>
+
+</div>
+</div>
+
+
+<div id="leftpane" class="left-mainpage">
+<a href="/"><img src="images/stone-hello.png" width=80 height=100 border=0 ALT="[Welcome to Sensei's Library!]" title="Sensei's Library"></a>
+<div id="bookmarks"><a accesskey='1' title='[alt+1]' href="/?RecentChanges">RecentChanges</a><br><a accesskey='2' title='[alt+2]' href="/?StartingPoints">StartingPoints</a><br><a accesskey='3' title='[alt+3]' href="/?About">About</a><br><a accesskey='4' title='[alt+4]' href="/?random=1">RandomPage</a><br><a accesskey='5' title='[alt+5]' href="/?positionsearch=1">Search position</a><br><a accesskey='6' title='[alt+6]' href="/?info=Ladder">Page history</a><br><a accesskey='7' title='[alt+7]' href="/?diff=Ladder">Latest page diff</a></div>
+<div id="related"><p><b>Aliases (info)</b><br><a href="/?info=Ladders">Ladders</a>
+<br><a href="/?info=Shicho">Shicho</a>
+</p><p><b>Paths</b><br><a href="/?Tesuji">Tesuji</a><br><a href="/?Net">Net</a><br><a href="/?LadderProblemsAndExercises">LadderProblemsAnd...</a><br><a href="/?3464Enclosure">3464Enclosure</a><br><a href="/?44Point33InvasionJoseki">44Point33Invasion...</a><br><a href="/?34PointHighApproachTwoSpaceHighPincer">34PointHighApproa...</a><br><a href="/?44Point33InvasionDoubleHane">44Point33Invasion...</a><br><a href="/?44Point33InvasionDoubleHaneAtariUp">44Point33Invasion...</a><br><a href="/?44Point33Invasion3StoneHaneSwitchSidesSmallKnightLooseNet">44Point33Invasion...</a><br><a href="/?44Point33Invasion3StoneHane">44Point33Invasion...</a><br><a href="/?44Point33InvasionExtension">44Point33Invasion...</a><br><a href="/?44Point33InvasionHaneExtend">44Point33Invasion...</a><br><a href="/?44Point33InvasionHane">44Point33Invasion...</a></p><p><b>Sub-pages</b><br><a href="/?Ladder%2FExample">Example</a><br><a href="/?Ladder%2FReadingTechniques">ReadingTechniques</a></p><p><b>Referenced by</b><br><a href="/?JapaneseGoTerms">JapaneseGoTerms</a><br><a href="/?ShortageOfLiberties">ShortageOfLiberties</a><br><a href="/?Aji">Aji</a><br><a href="/?Capture">Capture</a><br><a href="/?Cut">Cut</a><br><a href="/?CuttingPoint">CuttingPoint</a><br><a href="/?LadderBreaker">LadderBreaker</a><br><a href="/?GoGoDCD">GoGoDCD</a><br><a href="/?Peep">Peep</a><br><a href="/?FujisawaHosai">FujisawaHosai</a><br><a href="/?CuttingStones">CuttingStones</a><br><a href="/?SegoeTesujiDictionary">SegoeTesujiDictio...</a><br><a href="/?LooseLadder">LooseLadder</a><br><a href="/?TsumegoConventions">TsumegoConventions</a><br><a href="/?HangingConnection">HangingConnection</a><br><a href="/?AtariAtari">AtariAtari</a><br><a href="/?TwoLiberties">TwoLiberties</a><br><a href="/?HaneAtTheHeadOfTwoStones">HaneAtTheHeadOfTw...</a><br><a href="/?CallingOutAtari">CallingOutAtari</a><br><a href="/?LessonsInTheFundamentalsOfGo">LessonsInTheFunda...</a></p><p><b>Homepages</b><br><a href="/?Catch22">Catch22</a><br><a href="/?CraigDaniel">CraigDaniel</a><br><a href="/?Gtwade">Gtwade</a><br><a href="/?Minue">Minue</a><br><a href="/?Warder05">Warder05</a></p></div><div id="partner">
+<b>Partner sites<a href="/?blockme=Ladder"></a>:</b>
+<br><a href="http://gtl.xmp.net/">Go&nbsp;Teaching&nbsp;Ladder</a>
+<br><a href="http://goproblems.com/">Goproblems.com</a>
+</div>
+</div>
+
+
+<div id="toppane">
+<div id="searchboxdiv"><form action="/">
+<input name="searchstring" size=12 id="searchbox" accesskey="s" title="Search [alt+s]">
+<input type="image" src="/images/search.png" title="Full text search in pages" name="fullsearch" value="full" alt="[Search]">
+<input type="image" src="/images/titlesearch.png" title="Search in page titles" name="pagesearch" value="page" alt="[in Titles]">
+<input type="hidden" name="searchtype" value="either">
+</form></div>
+
+<div class="toolmenu" id="toolbox">
+<a href="/?UserPreferences">Login / Prefs</a>
+</div>
+
+<div class="toolmenu" id="toolbox2">
+<span>Tools</span>
+<ul class="tools">
+<li><a href="/?FindPage">Search</a></li>
+<li><a href="/?AdvancedFindPage">Advanced search</a></li>
+<li><a href="/?positionsearch=1">Position search</a></li>
+<li><a href="/?related=Ladder" title="Find related pages [alt+r]">Related pages</a></li>
+<li><a href="/?info=Ladder" title="Show page info and history [alt+h]">Info &amp; history</a></li>
+<li><a href="/?diff=Ladder" title="Show latest diff [alt+d]">Latest diff</a></li>
+<li><a href="/?relatedchanges=Ladder" title="Find related changes [alt+c]">Related changes</a></li></ul>
+</div>
+
+<div class="toolmenu" id="toolbox3">
+<span>Sensei's Library</span>
+<ul class="tools">
+<li><a href="/?About">About</a></li>
+<li><a href="/?RecentChanges">RecentChanges</a></li>
+<li><a href="/?StartingPoints">Starting points</a></li>
+<li class="separator"><a href="/?HowToUseWiki">Help</a></li>
+<li><a href="/?WikiEtiquette">Etiquette</a></li>
+<li><a href="/?TextFormattingRules">Text formatting</a></li>
+<li class="separator"><a href="/?SLSnapshot">Download copy</a></li></ul>
+</div>
+
+
+<div id="editmenu">
+<ul class="editmenu"><li class="editmenu"><a href="/?edit=Ladder" accesskey="e" tabindex=150 title="Edit the page [alt+e]">Edit page</a><li class="editmenu"><a href='/?forum=Ladder' accesskey='t' tabindex=200 title='Go to discussion page [alt+t]'>Discuss page <small>(3)</small></a></ul>
+</div>
+
+</div>
+
+</body>
+</html>
+<!-- TIME: 0.091 -->
