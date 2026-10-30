@@ -229,7 +229,7 @@ These links work, besides OGS and goproblems.com:
 | Stone.gs | an OGS game it shows, `https://stone.gs/games/ogs/…` |
 | Josekipedia | a position, `https://www.josekipedia.com/#path:…` (see *Joseki from Josekipedia*) |
 
-Games on Tygem, WBaduk and PlayGo, and problems on BlackToPlay and 101weiqi, can not be shown: these sites offer no record that can be fetched without signing in, or their terms forbid it.
+Games on Tygem, WBaduk and PlayGo, and problems on BlackToPlay, 101weiqi, Tsumego Hero (tsumego.com) and Tsumego Dragon, can not be shown: these sites offer no record that can be fetched through a public interface without signing in, or their terms forbid it. Tsumego Hero does offer a **Download SGF** button once you have solved a problem: that file can be opened or embedded like any `.sgf` file in your vault.
 
 An SGF file can be on a server of your own: any `http` or `https` link whose path ends in `.sgf` works (a query after it, such as an access key, is fine). It is treated like an SGF file in your vault: a problem is judged as one, a game record opens at its last move, and a file in an older charset (`CA`, such as Shift_JIS) is read in it. A server that asks you to sign in can not be used, since the plugin has no way to sign in.
 
