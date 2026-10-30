@@ -25,6 +25,44 @@ export function problemUrl(id: number): string {
 }
 
 /**
+ * The site's sessions: things with numbers of their own that serve problems to the
+ * account that started them, as its routes name them. A link to one is not a link to a
+ * problem, and there is no problem behind it that a board could show.
+ */
+const SESSIONS: Record<string, string> = {
+	'time-trials': 'time trial',
+	rushes: 'rush',
+	rush: 'rush',
+	'collection-tests': 'collection test',
+	tournaments: 'tournament',
+	invasions: 'invasion',
+	leaderboard: 'leaderboard',
+	'daily-leaderboard': 'leaderboard',
+};
+
+/**
+ * A link to a session on goproblems.com rather than to a problem (a time trial, a rush,
+ * a collection test, a tournament, an invasion, or a leaderboard; their results pages
+ * too): what kind it is, or null. The path's first part says; a leaderboard of a kind
+ * of session (`/rushes/leaderboard`) is a leaderboard.
+ */
+export function sessionKind(href: string): string | null {
+	const m = /goproblems\.com\/(?:[a-z]{2}\/)?([a-z-]+)(?:\/([a-z-]+))?/i.exec(href.trim());
+	if (!m) return null;
+	const first = m[1].toLowerCase();
+	const second = (m[2] ?? '').toLowerCase();
+	const kind = SESSIONS[first];
+	if (!kind) return null;
+	return second === 'leaderboard' ? 'leaderboard' : kind;
+}
+
+/** Why such a link is drawn as a line and not a board. */
+export function sessionMessage(kind: string): string {
+	const what = kind === 'leaderboard' ? 'a leaderboard' : `a ${kind}, a session that serves one problem after another`;
+	return `this is a goproblems.com ${kind}: ${what}, not a problem. Its number is the session's, so there is no problem to show here. To keep a problem from it, open the problem on the site and embed the link to its own page (goproblems.com/problems/…).`;
+}
+
+/**
  * The problem's SGF, ready for a note. goproblems.com marks a correct line by ending its
  * comment with RIGHT (often run on, as in "snapbackRIGHT"): that becomes a ✓ (TE) and
  * leaves the comment. The game gets the problem's number for a name and its page as the

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ImportError, problemId, problemUrl, readProblem, tidyProblem } from '../src/goproblems';
+import { ImportError, problemId, problemUrl, readProblem, sessionKind, sessionMessage, tidyProblem } from '../src/goproblems';
 import { getText, parseSgf } from '../src/sgf';
 import { nodeMark } from '../src/session';
 
@@ -23,6 +23,35 @@ test('the problem number in what was typed', () => {
 	assert.equal(problemId('https://goproblems.com/time-trials/5599992'), null);
 	assert.equal(problemId('https://www.goproblems.com/time-trials/5599992/result'), null);
 	assert.equal(problemId('https://www.goproblems.com/rush/123'), null);
+});
+
+test('goproblems.com timed sessions are told from problems, and named', () => {
+	// (the paths as the site's own routes have them)
+	assert.equal(sessionKind('https://goproblems.com/time-trials/5599992'), 'time trial');
+	assert.equal(sessionKind('https://www.goproblems.com/time-trials/5599992/result'), 'time trial');
+	assert.equal(sessionKind('https://www.goproblems.com/time-trials'), 'time trial');
+	assert.equal(sessionKind('https://goproblems.com/rushes/345405'), 'rush');
+	assert.equal(sessionKind('https://www.goproblems.com/rushes/345405/result'), 'rush');
+	assert.equal(sessionKind('https://www.goproblems.com/rush'), 'rush'); // (the lobby)
+	assert.equal(sessionKind('https://www.goproblems.com/en/rushes/9?x=1'), 'rush');
+	assert.equal(sessionKind('https://www.goproblems.com/collection-tests/77'), 'collection test');
+	assert.equal(sessionKind('https://www.goproblems.com/tournaments/12/play'), 'tournament');
+	assert.equal(sessionKind('https://www.goproblems.com/invasions/3'), 'invasion');
+	// a leaderboard, of any kind of session or of the day: a leaderboard
+	assert.equal(sessionKind('https://www.goproblems.com/time-trials/leaderboard'), 'leaderboard');
+	assert.equal(sessionKind('https://www.goproblems.com/rushes/leaderboard'), 'leaderboard');
+	assert.equal(sessionKind('https://www.goproblems.com/daily-leaderboard'), 'leaderboard');
+	assert.equal(sessionKind('https://www.goproblems.com/leaderboard'), 'leaderboard');
+	// problems, and anything else, are not sessions
+	assert.equal(sessionKind('https://www.goproblems.com/problems/5'), null);
+	assert.equal(sessionKind('https://www.goproblems.com/problems/5599992'), null);
+	assert.equal(sessionKind('https://www.goproblems.com/problems/collections/abc'), null);
+	assert.equal(sessionKind('https://online-go.com/time-trials/1'), null);
+	assert.equal(sessionKind('https://www.goproblems.com/time-trialsx/1'), null);
+	assert.equal(sessionKind('https://www.goproblems.com/rushesx/1'), null);
+	assert.match(sessionMessage('time trial'), /^this is a goproblems\.com time trial: a time trial, a session that serves one problem after another, not a problem/);
+	assert.match(sessionMessage('rush'), /goproblems\.com rush: a rush, a session/);
+	assert.match(sessionMessage('leaderboard'), /goproblems\.com leaderboard: a leaderboard, not a problem/);
 	assert.equal(problemId(''), null);
 	assert.equal(problemId('zero'), null);
 	assert.equal(problemId('0'), null);

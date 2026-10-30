@@ -6,7 +6,7 @@
 
 import { Component, MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
 import type KifuPlugin from './main';
-import { problemId, problemUrl } from './goproblems';
+import { problemId, problemUrl, sessionKind } from './goproblems';
 import { ImportError } from './importing';
 import { OgsTarget, ogsPage, ogsTarget } from './ogs';
 import { Session } from './session';
@@ -20,6 +20,8 @@ import { composeBlock, moveFragment, parseBlock, setOption } from './options';
 export type LinkTarget =
 	| { site: 'ogs'; ogs: OgsTarget; url: string }
 	| { site: 'goproblems'; id: number; url: string }
+	/** A time trial or other timed session there: no problem behind it; the board says so. */
+	| { site: 'goproblems-session'; kind: string; url: string }
 	| { site: 'server'; server: ServerTarget; url: string }
 	| { site: 'sgf'; url: string; move: string | null }
 	| { site: 'josekipedia'; joseki: JosekiTarget; url: string }
@@ -56,6 +58,9 @@ export function linkTarget(href: string): LinkTarget | null {
 		return j ? { site: 'josekipedia', joseki: j, url: j.url } : null;
 	}
 	if (/^https?:\/\/(www\.)?goproblems\.com\//i.test(s)) {
+		// (a time trial or other timed session there: recognised, so that a line can say what it is)
+		const kind = sessionKind(s);
+		if (kind) return { site: 'goproblems-session', kind, url: s };
 		const id = problemId(s);
 		return id ? { site: 'goproblems', id, url: problemUrl(id) } : null;
 	}

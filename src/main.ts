@@ -20,7 +20,7 @@ import {
 import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from './config';
 import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
 import { Host, Session } from './session';
-import { problemApi, problemId, problemUrl, readProblem } from './goproblems';
+import { problemApi, problemId, problemUrl, readProblem, sessionMessage } from './goproblems';
 import { Fetched, ImportError } from './importing';
 import { LinkTarget, LinkedBoard, linkTarget } from './linked';
 import { linkedBoards } from './livelinks';
@@ -237,7 +237,7 @@ export default class KifuPlugin extends Plugin implements Host {
 			{
 				title: 'Import a problem from goproblems.com',
 				desc: 'Its number, or a link to it.',
-				wrong: "That is not a problem number, or a link to a problem's page. (A time trial or rush game is a session, not a problem: take the link from the problem's own page.)",
+				wrong: "That is not a problem number, or a link to a problem's page. (A time trial, a rush, a collection test, a tournament or an invasion is a session, not a problem: take the link from the problem's own page.)",
 				parse: (text) => problemId(text),
 			},
 			(id) => void this.#importProblem(editor, id),
@@ -444,6 +444,8 @@ export default class KifuPlugin extends Plugin implements Host {
 		if (hit && Date.now() - hit.at < LINK_KEEP) return hit.body;
 		const body = (async () => {
 			if (t.site === 'goproblems') return 'problem: yes\n' + (await this.#getProblem(t.id)).sgf;
+			// (a timed session there: nothing to fetch; the line in the board's place says why)
+			if (t.site === 'goproblems-session') throw new ImportError(sessionMessage(t.kind));
 			if (t.site === 'sgf') return this.#getSgfFile(t.url);
 			if (t.site === 'server') return this.#getServerGame(t.server);
 			if (t.site === 'josekipedia') return josekiBody(await this.#getJoseki(t.joseki));

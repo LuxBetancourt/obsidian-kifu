@@ -258,7 +258,7 @@ problem: yes
 
 goproblems.com marks a correct line by ending its comment with RIGHT. On import that becomes a ✓ on the move (and the word leaves the comment), so the problem judges itself the way it does on the site.
 
-Only a problem's own page (`/problems/<number>`) is a board. A **time trial**, a **rush game** or a **leaderboard** on goproblems.com is a timed session that serves one problem after another, with scores: its number is the session's, not a problem's, so a link to one (`/time-trials/…`) has no board behind it and can not be embedded or imported. To keep a problem you met in a trial, open it on the site and take the link from its own page.
+Only a problem's own page (`/problems/<number>`) is a board. A **time trial**, a **rush**, a **collection test**, a **tournament** or an **invasion** on goproblems.com is a session that serves one problem after another, with scores, and a **leaderboard** lists them: the number in such a link (`/time-trials/…`, `/rushes/…`) is the session's, not a problem's, so there is no board behind it. Embedded, the link shows a line saying what it is in the board's place; it can not be imported. To keep a problem you met in a session, open it on the site and take the link from its own page.
 
 Public problems need nothing more. To import problems that are not public, create an API token in your goproblems.com account and choose it under **Settings → Kifu → Importing from goproblems.com**. It is kept in Obsidian's secret storage, not in the plugin's settings file, and is sent only to goproblems.com, only with an import.
 

@@ -1355,6 +1355,30 @@ await scenario('an SGF file of several games opened by itself: a picker, and onl
 	assert.equal(await text(page, 'c.sgf'), '(;GM[1]SZ[9]AB[aa])\n(;GM[1]SZ[9]AB[bb][cc]AW[gg])\n(;GM[1]SZ[9]AB[dd][ee][ff])\n');
 });
 
+/* A link to a goproblems.com time trial: a timed session, not a problem. Nothing to fetch;
+   a line in the board's place says what it is, instead of Obsidian's broken image. */
+await scenario('an embedded link to a goproblems.com time trial shows what it is, in the board\'s place', {
+	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
+	files: { 'T.md': '# Trials\n\n![](https://goproblems.com/time-trials/5599992)\n\n![](https://goproblems.com/rushes/345405)\n\n![](https://www.goproblems.com/problems/5)\n' },
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		window.__obsidian.requestUrl.answers['https://goproblems.com/api/v2/problems/5'] = { status: 200, json: { sgf: '(;AB[aa][ba]AW[ca][cb]C[Black to live]SZ[9](;B[ab];W[bb];B[ac]C[RIGHT]))' } };
+		const h = window.harness;
+		h.views.push(h.app.workspace._open('T.md', 'preview'));
+	});
+	await sleep(400);
+	// the trial and the rush: a line each, naming what it is, no broken image; the problem link: a board as ever
+	const lines = await page.locator('.kifu-linked-msg.is-error').allTextContents();
+	assert.equal(lines.length, 2);
+	assert.match(lines[0], /goproblems\.com time trial: a time trial, a session that serves one problem after another, not a problem\. .* embed the link to its own page/);
+	assert.match(lines[1], /goproblems\.com rush: a rush, a session that serves one problem after another, not a problem\./);
+	assert.equal(await page.locator('img[src*="time-trials"], img[src*="rushes"]').count(), 0);
+	assert.equal(await page.locator('.kifu-linked-embed .kifu-svg').count(), 1);
+	// and nothing was asked of goproblems for the trials: only the problem was fetched
+	assert.deepEqual(await page.evaluate(() => window.__obsidian.requestUrl.log.map((q) => q.url)), ['https://goproblems.com/api/v2/problems/5']);
+});
+
 await scenario("an embedded link to a page of Sensei's Library is drawn as one of its diagrams", {
 	allowErrors: /Failed to load resource: net::ERR_NAME_NOT_RESOLVED/,
 	files: { 'S.md': "# Ladders\n\n![](https://senseis.xmp.net/?Ladder)\n\n![](https://senseis.xmp.net/?Ladder#3)\n\n![](https://senseis.xmp.net/?Ladder#99)\n\n![](https://senseis.xmp.net/?NoSuchPage)\n" },

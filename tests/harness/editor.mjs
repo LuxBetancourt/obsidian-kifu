@@ -432,6 +432,23 @@ await scenario('the insert command, in the middle of a line and at the very end 
 	assert.equal(await boardCount(page), 2); // the cursor is outside both blocks, so both are drawn
 });
 
+/* In Live Preview too, a goproblems.com time-trial link is a line saying what it is, and the
+   cursor inside it shows the link's text as with any embedded link. */
+await scenario('a goproblems.com time-trial link in Live Preview: a line in the board\'s place, the text under the cursor', { files: { 'T.md': 'top\n\n![](https://goproblems.com/time-trials/5599992)\n\nend\n' } }, async (page) => {
+	await page.evaluate(() => window.openLivePreview('T.md'));
+	await sleep(300);
+	const line = page.locator('.kifu-linked-embed .kifu-linked-msg.is-error');
+	assert.equal(await line.count(), 1);
+	assert.match(await line.textContent(), /time trial: a time trial, a session that serves one problem after another/);
+	assert.equal(await page.locator('.lp-image-embed[src*="time-trials"]').count(), 0);
+	// the cursor inside the link: its text, to edit
+	await page.evaluate(() => { const v = window.harness.views[window.harness.views.length - 1]; v.cm.dispatch({ selection: { anchor: 8 } }); });
+	await sleep(100);
+	assert.equal(await line.count(), 0);
+	assert.ok((await page.evaluate(() => document.querySelectorAll('.cm-line')[2].textContent)).includes('time-trials/5599992'));
+	assert.deepEqual(await page.evaluate(() => window.__obsidian.requestUrl.log), []);
+});
+
 /* A selection swept over an embedded link must not make its board vanish: only the
    cursor inside the link shows the link's text. (Under a selection Obsidian draws its
    own, broken, image of the link and no text: the board would go without a trace.) */
