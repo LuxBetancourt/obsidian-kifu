@@ -284,6 +284,23 @@ await scenario('a locked game record has a play button that plays it through a m
 	assert.equal(await text(page, 'N.md'), '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n\n```kifu\n' + KILL + '\n```\n');
 });
 
+/* A record whose resting point sits partway along the main line (here move: 2) still
+   plays through from the very first move, not onward from where it rests. */
+await scenario('the play button starts from the first move even when the board rests mid-line', {
+	files: { 'N.md': '# Game\n\n```kifu\nmove: 2\n(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg])\n```\n' }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	const play = page.locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
+	// at rest the board shows move 2: one black (ee) and one white (cc)
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 });
+	await play.click();
+	// it restarts from the beginning, not onward from the resting point
+	assert.deepEqual(await stones(page, 0), { black: 0, white: 0 });
+	await sleep(1150);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 0 }); // move 1: B ee
+	await sleep(1000);
+	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 }); // move 2: W cc
+});
+
 await scenario('the play button is gone while the board is unlocked', {
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {

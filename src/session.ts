@@ -852,8 +852,10 @@ export class Session {
 	}
 
 	/**
-	 * Play the main line through, a move every `PLAY_STEP` ms, from where the board is (from
-	 * the beginning when there is nothing left to play from there); or (`on` false) stop.
+	 * Play the main line through, a move every `PLAY_STEP` ms; or (`on` false) stop.
+	 * From the board's resting position it starts at the first node and plays the whole
+	 * line, so a resting point set partway along (a flag, a `move:` line) does not make it
+	 * play only the rest. Started again after a pause, it carries on from where it stopped.
 	 */
 	playThrough(on: boolean): void {
 		if (!on || !this.playable) {
@@ -864,7 +866,9 @@ export class Session {
 			return;
 		}
 		if (this.playing) return;
-		this.goto(this.mainNext(this.cur) ? this.cur : this.start);
+		// At rest: play the whole line from the start. Paused partway: carry on from there.
+		const resume = this.cur !== this.home && this.mainNext(this.cur) !== null;
+		this.goto(resume ? this.cur : this.start);
 		const step = (): void => {
 			const n = this.mainNext(this.cur);
 			if (!n) {
