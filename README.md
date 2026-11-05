@@ -165,6 +165,7 @@ game: 12
 - A board that could not show its file (not found, no such game in it) looks again when a file appears, moves or changes.
 - A file that is not UTF-8, or whose game is cut short (no closing parenthesis), is shown but cannot be edited from here.
 - A game record shows its last position; add `move:` or `numbers:` to show another.
+- To pull a board's inline game out into its own file, click the board and run the command **Kifu: Move the focused board to an SGF file**. A new `.sgf` file appears beside the note and the block is pointed at it, keeping its other options.
 
 ### Embedding an SGF file
 

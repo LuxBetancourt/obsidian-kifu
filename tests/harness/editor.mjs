@@ -544,6 +544,31 @@ await scenario('a board inserted by the command is unlocked when it appears; typ
 	assert.deepEqual(await notices(page), []);
 });
 
+/* The "Move the focused board to an SGF file" command: the game of the board the panel
+   follows is written to a new .sgf file beside the note, and its block is pointed at that
+   file, losing its inline game. */
+await scenario('migrate the focused board to an SGF file', { files: { 'N.md': '# Study\n\n```kifu\n(;GM[1]FF[4]CA[UTF-8]SZ[9];B[cc];W[gg])\n```\n\nend\n' }, live: ['N.md'], autosave: 150 }, async (page) => {
+	await sleep(200);
+	assert.ok((await doc(page)).includes('(;'), 'the block starts with an inline game');
+	// focus the board (so the plugin follows it), then run the command
+	await page.evaluate(() => {
+		document.querySelector('.kifu').dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+		window.harness.app._commands.find((c) => c.id === 'migrate-to-sgf').callback();
+	});
+	await sleep(300);
+	// a new SGF file holds the game
+	const sgf = await page.evaluate(() => window.harness.app.vault.files.get('N.sgf')?.data ?? null);
+	assert.ok(sgf, 'an N.sgf file was created');
+	assert.match(sgf, /SZ\[9\]/);
+	assert.match(sgf, /B\[cc\]/);
+	assert.match(sgf, /W\[gg\]/);
+	// the block now reads from the file, with no inline game left
+	const after = await doc(page);
+	assert.ok(after.includes('sgf: [[N.sgf]]'), `the block points at the file (was: ${after})`);
+	assert.ok(!after.includes('(;'), 'the inline game is gone');
+	assert.ok((await notices(page)).some((n) => n.includes('N.sgf')), 'a notice names the file');
+});
+
 await scenario('the editor menu: a Kifu submenu, or plain items where submenus are missing', { files: { 'N.md': 'first line\n\nlast' }, live: ['N.md'], autosave: 150 }, async (page) => {
 	const res = await page.evaluate(async () => {
 		const h = window.harness;

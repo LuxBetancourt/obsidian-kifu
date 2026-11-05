@@ -18,7 +18,7 @@ import {
 	requestUrl,
 } from 'obsidian';
 import { BLOCK_LANG, DEFAULT_SETTINGS, HANDBACK, KifuSettings, VIEW_TYPE } from './config';
-import { Note, Place, alike, follow, normalize, reading, sameText, squash } from './blocks';
+import { FoundBlock, Note, Place, alike, bodyLines, follow, normalize, reading, replaceBody, sameText, squash } from './blocks';
 import { Host, Session } from './session';
 import { problemApi, problemId, problemUrl, readProblem, sessionMessage } from './goproblems';
 import { Fetched, ImportError } from './importing';
@@ -160,6 +160,11 @@ export default class KifuPlugin extends Plugin implements Host {
 			id: 'import-josekipedia',
 			name: 'Import a joseki from Josekipedia',
 			editorCallback: (editor) => this.#promptJoseki(editor),
+		});
+		this.addCommand({
+			id: 'migrate-to-sgf',
+			name: 'Move the focused board to an SGF file',
+			callback: () => void this.#migrateToSgf(),
 		});
 		this.addCommand({
 			id: 'show-tree',
@@ -499,6 +504,162 @@ export default class KifuPlugin extends Plugin implements Host {
 		new SgfPicker(this, (file) => {
 			insertBlock(editor, `sgf: [[${this.app.metadataCache.fileToLinktext(file, from, false)}]]`);
 		}).open();
+	}
+
+	/**
+	 * Pull the game of the focused board (the one the move tree panel follows) out into
+	 * a new SGF file, and point its block at that file instead of holding the game inline.
+	 * The board keeps its option lines, so it looks the same; only where the game lives
+	 * changes. Nothing is changed unless both the file is made and the block is rewritten:
+	 * if the note can not be changed, the new file is removed again.
+	 */
+	async #migrateToSgf(): Promise<void> {
+		const s = this.activeSession;
+		if (!s) {
+			new Notice('Kifu: no board is in focus. Click a board first, then run this command.');
+			return;
+		}
+		const why = this.#cantMigrate(s);
+		if (why) {
+			new Notice('Kifu: ' + why);
+			return;
+		}
+		const file = this.app.vault.getAbstractFileByPath(s.notePath);
+		if (!(file instanceof TFile)) {
+			new Notice("Kifu: can't find this board's note.");
+			return;
+		}
+		if (file.extension.toLowerCase() !== 'md') {
+			new Notice('Kifu: this board is not in a note, so its game can not be moved to a file.');
+			return;
+		}
+
+		// The game is copied out as it stands, so write any pending edits into the block
+		// first. A board that can not be saved can not be migrated either.
+		if (s.dirtyTree || s.dirtyHeader) {
+			const out = await saveSession(this.app, s, this.#hooks);
+			if (out !== 'ok') {
+				new Notice("Kifu: couldn't save this board, so it was not moved to a file.");
+				return;
+			}
+		}
+
+		const game = s.gameText();
+		let sgfFile: TFile;
+		try {
+			sgfFile = await this.#createSgfNear(s.notePath, game.endsWith('\n') ? game : game + '\n');
+		} catch (e) {
+			new Notice('Kifu: could not create the SGF file.');
+			console.error('Kifu: migrate, create file', e);
+			return;
+		}
+
+		const link = this.app.metadataCache.fileToLinktext(sgfFile, s.notePath, false);
+		// The block loses its inline game and its "game:" line (the file holds one game),
+		// and gains an "sgf:" line. Everything else written in the block is kept.
+		const rewrite = (blockBody: string): string => {
+			const parsed = parseBlock(blockBody);
+			const header = setOption(setOption(parsed.header, 'sgf', `[[${link}]]`), 'game', null);
+			const range = parsed.games[s.gameNumber() - 1] ?? null;
+			return composeBlock(header, parsed.rest, null, range);
+		};
+		const undo = async (): Promise<void> => {
+			try {
+				await this.app.fileManager.trashFile(sgfFile);
+			} catch {
+				// leave the file: better an extra file than a thrown error on top of one
+			}
+		};
+
+		try {
+			const editor = this.#editorFor(s.notePath);
+			if (editor) {
+				// through the editor, so its cursor, folds and undo history are kept
+				const note = read(editor.editor.getValue());
+				const found = this.#ourBlock(note, s);
+				if (!found) {
+					await undo();
+					new Notice("Kifu: couldn't tell which block this board is. Click the board again, then retry.");
+					return;
+				}
+				const body = bodyLines(found.block, rewrite(found.block.body));
+				editor.editor.replaceRange(
+					body.length ? body.join('\n') + '\n' : '',
+					{ line: found.block.open + 1, ch: 0 },
+					{ line: found.block.close, ch: 0 },
+				);
+			} else {
+				// no editor open on the note: change the file itself, but only if the block
+				// still reads as the board's does
+				let changed = false;
+				await this.app.vault.process(file, (data) => {
+					const found = this.#ourBlock(read(data), s);
+					if (!found) return data;
+					changed = true;
+					return replaceBody(data, found.block, rewrite(found.block.body));
+				});
+				if (!changed) {
+					await undo();
+					new Notice("Kifu: couldn't tell which block this board is. Open its note, then retry.");
+					return;
+				}
+			}
+		} catch (e) {
+			await undo();
+			new Notice('Kifu: the note could not be changed, so nothing was moved.');
+			console.error('Kifu: migrate, rewrite block', e);
+			return;
+		}
+		new Notice(`Kifu: this board now reads from ${sgfFile.path}.`);
+	}
+
+	/** Why the focused board can not be moved to a file ('' reason, or null when it can). */
+	#cantMigrate(s: Session): string | null {
+		if (s.gone) return 'this board is no longer in its note.';
+		if (s.link) return 'this board was brought in from a link, so it is not part of a note.';
+		if (s.fileView || s.fileRef) return 'this board already reads its game from an SGF file.';
+		if (!s.ready || s.error) return 'this board has no game to move yet.';
+		if (s.fixed) return s.fixed;
+		return null;
+	}
+
+	/** An open Markdown editor showing the note at `path`, if there is one. */
+	#editorFor(path: string): MarkdownView | null {
+		for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
+			const view = leaf.view;
+			if (view instanceof MarkdownView && view.file?.path === path) return view;
+		}
+		return null;
+	}
+
+	/**
+	 * Which block of the note is the focused board's. Its text and, where blocks read
+	 * the same, its carried place tell them apart; null when that can not be settled.
+	 */
+	#ourBlock(note: Note, s: Session): { block: FoundBlock; ord: number } | null {
+		const alikeOnes = note.blocks.filter((b) => alike(b.body, s.body));
+		if (alikeOnes.length === 1) {
+			const block = alikeOnes[0];
+			return { block, ord: note.blocks.indexOf(block) };
+		}
+		if (alikeOnes.length === 0) return null;
+		// blocks read the same: go by where ours was last known to stand
+		if (s.place && s.known !== null) {
+			const place = follow(read(s.known), s.place, note);
+			const block = place ? note.blocks[place.ord] : undefined;
+			if (place && block && alike(block.body, s.body)) return { block, ord: place.ord };
+		}
+		return null;
+	}
+
+	/** A new, uniquely named SGF file beside the note at `notePath`, holding `text`. */
+	async #createSgfNear(notePath: string, text: string): Promise<TFile> {
+		const slash = notePath.lastIndexOf('/');
+		const dir = slash < 0 ? '' : notePath.slice(0, slash + 1);
+		const base = (slash < 0 ? notePath : notePath.slice(slash + 1)).replace(/\.md$/i, '') || 'Game';
+		let path = `${dir}${base}.sgf`;
+		for (let n = 1; this.app.vault.getAbstractFileByPath(path); n++) path = `${dir}${base} ${n}.sgf`;
+		return await this.app.vault.create(path, text);
 	}
 
 	/** The board that was right-clicked last, and when: the editor menu that follows is about it. */

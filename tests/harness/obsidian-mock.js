@@ -85,6 +85,7 @@
 		async read(f) { return this.cachedRead(f); }
 		async readBinary(f) { await 0; return this.binary.get(f.path) ?? new TextEncoder().encode(this.files.get(f.path).data).buffer; }
 		async modify(f, data) { await 0; this._set(f, data); }
+		async delete(f) { await 0; this.files.delete(f.path); this.binary.delete(f.path); this.trigger('delete', f); }
 		async create(path, data) {
 			await 0;
 			if (this.files.has(path)) throw new Error('File already exists.');
@@ -494,6 +495,7 @@
 			const secrets = new Map();
 			this.secretStorage = { setSecret: (id, v) => secrets.set(id, v), getSecret: (id) => secrets.get(id) ?? null, listSecrets: () => [...secrets.keys()] };
 			this.metadataCache = new MetadataCache(this.vault);
+			this.fileManager = { trashFile: (f) => this.vault.delete(f) };
 			this.workspace = new Workspace(this);
 			this.vault.on('modify', (f) => {
 				for (const v of this.workspace._markdownViews(f.path)) if (!v._saving) v._external(this.vault.files.get(f.path).data);
