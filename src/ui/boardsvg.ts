@@ -43,6 +43,17 @@ export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
 const circle = (cx: number, cy: number, r: number): string =>
 	`M${+(cx - r).toFixed(1)} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
 
+/** The outline a mark draws at a point: TR triangle, SQ square, CR circle, anything else a cross. */
+function markPath(kind: string, cx: number, cy: number): string {
+	if (kind === 'TR') return `M${cx} ${cy - 30}L${cx + 28.6} ${cy + 19.5}H${cx - 28.6}z`;
+	if (kind === 'SQ') return `M${cx - 21} ${cy - 21}h42v42h-42z`;
+	if (kind === 'CR') return circle(cx, cy, 24);
+	return `M${cx - 19} ${cy - 19}l38 38M${cx + 19} ${cy - 19}l-38 38`;
+}
+
+/** What a hovering tool previews: a mark kind, a label, or nothing. */
+export type MarkGhost = 'TR' | 'SQ' | 'CR' | 'MA' | 'label' | null;
+
 /** Font size for a label of a given length. */
 const FONT = [0, 62, 54, 46, 38, 32];
 
@@ -55,6 +66,7 @@ export class BoardSvg {
 	private dim: SVGPathElement;
 	private frame: SVGPathElement;
 	private ghost: SVGCircleElement;
+	private markGhost: SVGGElement;
 	private fixedKey = '';
 	private vx = 0;
 	private vy = 0;
@@ -73,6 +85,7 @@ export class BoardSvg {
 		this.dim = svg(this.el, 'path', { class: 'kifu-dim', 'fill-rule': 'evenodd' });
 		this.frame = svg(this.el, 'path', { class: 'kifu-crop' });
 		this.ghost = svg(this.el, 'circle', { class: 'kifu-ghost', r: R });
+		this.markGhost = svg(this.el, 'g', { class: 'kifu-mark-ghost' });
 	}
 
 	draw(m: Model, look: Look): void {
@@ -135,15 +148,8 @@ export class BoardSvg {
 			if (!inView(x, y)) return;
 			const cx = x * U + HALF;
 			const cy = y * U + HALF;
-			let d: string;
-			if (kind === 'TR') d = `M${cx} ${cy - 30}L${cx + 28.6} ${cy + 19.5}H${cx - 28.6}z`;
-			else if (kind === 'SQ') d = `M${cx - 21} ${cy - 21}h42v42h-42z`;
-			else if (kind === 'CR') d = circle(cx, cy, 24);
-			else {
-				d = `M${cx - 19} ${cy - 19}l38 38M${cx + 19} ${cy - 19}l-38 38`;
-				if (!m.grid[i]) svg(this.over, 'circle', { cx, cy, r: 27, class: 'kifu-blank' });
-			}
-			svg(this.over, 'path', { d, class: `kifu-mark ${on(i)}`, 'stroke-width': stroke });
+			if (kind === 'MA' && !m.grid[i]) svg(this.over, 'circle', { cx, cy, r: 27, class: 'kifu-blank' });
+			svg(this.over, 'path', { d: markPath(kind, cx, cy), class: `kifu-mark ${on(i)}`, 'stroke-width': stroke });
 		});
 		m.labels.forEach((text, i) => {
 			const x = i % w;
@@ -270,6 +276,33 @@ export class BoardSvg {
 		g.setAttribute('cy', String(y * U + HALF));
 		g.setAttribute('class', `kifu-ghost ${color === 1 ? 'kifu-ghost-b' : 'kifu-ghost-w'}`);
 		g.removeAttribute('display');
+	}
+
+	/**
+	 * A faint preview of the mark or label a tool would place under the mouse, drawn like
+	 * the real one so it sits exactly where it would land. `kind` null hides it; `stone`
+	 * is the colour shown at the point (0 empty), so the preview takes a contrasting ink.
+	 */
+	setMarkGhost(x: number, y: number, kind: MarkGhost, text: string, stone: number): void {
+		clear(this.markGhost);
+		if (!kind || x < 0) return;
+		const cx = x * U + HALF;
+		const cy = y * U + HALF;
+		const on = stone === 1 ? 'kifu-on-b' : stone === 2 ? 'kifu-on-w' : 'kifu-on-e';
+		if (kind === 'label') {
+			if (!text) return;
+			const n = Math.min(text.length, FONT.length - 1);
+			const fs = FONT[n];
+			const t = svg(this.markGhost, 'text', { x: cx, y: +(cy + fs * 0.355).toFixed(1), 'font-size': fs, class: `kifu-text kifu-ghost-mark ${on}` });
+			if (n >= 3 && /^\d+$/.test(text)) {
+				t.setAttribute('textLength', n === 3 ? '70' : '80');
+				t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+			}
+			t.textContent = text;
+			return;
+		}
+		const stroke = Math.max(6, 1.5 * this.px).toFixed(1);
+		svg(this.markGhost, 'path', { d: markPath(kind, cx, cy), class: `kifu-mark kifu-ghost-mark ${on}`, 'stroke-width': stroke });
 	}
 
 	/** Board point under a mouse position, or null when it is outside the drawn part. */

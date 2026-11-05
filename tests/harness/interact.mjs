@@ -316,6 +316,34 @@ await scenario('the play button is gone while the board is unlocked', {
 	assert.equal(await play.getAttribute('aria-label'), 'Play through the game');
 });
 
+/* While editing, a mark or label tool shows a faint preview under the mouse of what it
+   would place, and the preview clears when the mouse leaves the board. */
+await scenario('hovering a mark or label tool previews what it would place', {
+	files: { 'N.md': '# Marks\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await toggleLock(page); // edit mode: the tools appear
+	assert.deepEqual(await isEditing(page), [true]);
+	const ghost = page.locator('.kifu-mark-ghost');
+	assert.equal(await ghost.locator('path, text').count(), 0); // nothing yet
+	// the triangle tool, over an empty point: one faint triangle where it would land
+	await tool(page, 'Triangle').click();
+	let p = await pointXY(page, 0, 'cc');
+	await page.mouse.move(p.x, p.y);
+	await sleep(60);
+	assert.equal(await ghost.locator('path').count(), 1);
+	// the character tool previews the next label
+	await tool(page, 'Letter or number').click();
+	p = await pointXY(page, 0, 'gg');
+	await page.mouse.move(p.x, p.y);
+	await sleep(60);
+	assert.equal(await ghost.locator('text').count(), 1);
+	assert.equal(await ghost.locator('text').textContent(), 'a');
+	// leaving the board clears it
+	await page.mouse.move(2, 2);
+	await sleep(60);
+	assert.equal(await ghost.locator('path, text').count(), 0);
+});
+
 await scenario('while editing, the stone of the current move can be dragged to another point', {
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {

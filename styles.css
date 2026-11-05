@@ -176,6 +176,14 @@ body .kifu-panel button.kifu-btn[hidden] {
 	pointer-events: none;
 }
 
+/* the faint preview of a mark or label the hovering tool would place */
+.kifu-mark-ghost {
+	pointer-events: none;
+}
+.kifu-ghost-mark {
+	opacity: 0.4;
+}
+
 .kifu-ghost-b {
 	fill: var(--kifu-black);
 	opacity: 0.3;

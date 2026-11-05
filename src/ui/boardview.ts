@@ -6,7 +6,7 @@ import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
 import { getMove } from '../sgf';
-import { BoardSvg, bandPixels } from './boardsvg';
+import { BoardSvg, MarkGhost, bandPixels } from './boardsvg';
 import { clear, el, icon, iconButton, setIcon } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
 
@@ -196,6 +196,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		svgEl.addEventListener('pointerleave', () => {
 			this.#hover = '';
 			this.#board.setGhost(-1, -1, 0);
+			this.#board.setMarkGhost(-1, -1, null, '', 0);
 		});
 	}
 
@@ -340,6 +341,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#solutionBtn.hidden = true;
 		this.#playBtn.hidden = true;
 		this.#board.setGhost(-1, -1, 0);
+		this.#board.setMarkGhost(-1, -1, null, '', 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
 	}
 
@@ -768,14 +770,22 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		if (key === this.#hover) return;
 		this.#hover = key;
 		let color = 0;
+		let mark: MarkGhost = null;
+		let markText = '';
+		let under = 0;
 		if (p) {
 			const [x, y] = this.#toGame(s, p);
+			under = s.position().board.g[p[1] * s.w + p[0]];
 			if (!s.edit || s.tool === 'play') color = s.canPlay(x, y) ? shownColor(s.orientation, s.toPlay()) : 0;
-			else if (s.tool === 'black' || s.tool === 'white') {
-				color = s.position().board.g[p[1] * s.w + p[0]] ? 0 : s.tool === 'black' ? 1 : 2;
+			else if (s.tool === 'black' || s.tool === 'white') color = under ? 0 : s.tool === 'black' ? 1 : 2;
+			else if (s.tool === 'TR' || s.tool === 'SQ' || s.tool === 'CR' || s.tool === 'MA') mark = s.tool;
+			else if (s.tool === 'label') {
+				mark = 'label';
+				markText = s.nextLabel;
 			}
 		}
 		this.#board.setGhost(p ? p[0] : -1, p ? p[1] : -1, color);
+		this.#board.setMarkGhost(p ? p[0] : -1, p ? p[1] : -1, mark, markText, under);
 	}
 
 	#onUp(ev: PointerEvent): void {

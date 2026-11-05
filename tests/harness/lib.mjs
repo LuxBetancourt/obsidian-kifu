@@ -88,7 +88,8 @@ export const stones = (page, i = 0) =>
 		return { black: n('.kifu-b'), white: n('.kifu-w') };
 	}, i);
 export const labels = (page, i = 0) =>
-	page.evaluate((i) => [...document.querySelectorAll('.kifu-svg')[i].querySelectorAll('.kifu-text')].map((t) => t.textContent).sort().join(','), i);
+	// (.kifu-ghost-mark is the faint hover preview of a tool, not a placed label)
+	page.evaluate((i) => [...document.querySelectorAll('.kifu-svg')[i].querySelectorAll('.kifu-text:not(.kifu-ghost-mark)')].map((t) => t.textContent).sort().join(','), i);
 export const lockBtn = (page, i = 0) => page.locator('.kifu-ctl .kifu-btn[aria-label*="nlock"], .kifu-ctl .kifu-btn[aria-label^="Lock"]').nth(i);
 export const tool = (page, title, i = 0) => page.locator(`.kifu-tools .kifu-btn[aria-label^="${title}"]`).nth(i);
 export const boardCount = (page) => page.locator('.kifu-svg').count();
