@@ -662,6 +662,24 @@ await scenario('two panes where the reading pane only follows the editor once th
 	assert.deepEqual(await page.evaluate(() => window.harness.notices()), []);
 });
 
+/* The move tree panel shows a move's comment as rendered markdown (bold, italics, inline
+   code), not as the raw text it is stored as. */
+await scenario('the move tree panel renders markdown in a comment', {
+	files: { 'M.md': '# Study\n\n```kifu\n(;GM[1]SZ[9];B[ee]C[The **vital** point, a *key* shape, and `A1`.])\n```\n' }, panes: [{ path: 'M.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());
+	await sleep(50);
+	// focus the board so the panel follows it; at rest it sits on the commented move
+	await page.evaluate(() => document.querySelector('.kifu').dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+	await sleep(300);
+	const textEl = page.locator('.kifu-p-text');
+	assert.equal(await textEl.locator('strong').textContent(), 'vital');
+	assert.equal(await textEl.locator('em').textContent(), 'key');
+	assert.equal(await textEl.locator('code').textContent(), 'A1');
+	// the plain reading is intact, without the markdown punctuation
+	assert.equal((await textEl.textContent()).replace(/\s+/g, ' ').trim(), 'The vital point, a key shape, and A1.');
+});
+
 await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	// the command creates the panel; it starts empty
 	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());

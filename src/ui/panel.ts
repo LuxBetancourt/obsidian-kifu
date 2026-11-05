@@ -1,6 +1,6 @@
 /** The sidebar panel: the move tree of the board in use, and the comment on the current move. */
 
-import { ItemView, Menu, WorkspaceLeaf } from 'obsidian';
+import { Component, ItemView, Menu, WorkspaceLeaf } from 'obsidian';
 import type KifuPlugin from '../main';
 import { VIEW_TYPE } from '../config';
 import { pointName } from '../options';
@@ -9,7 +9,7 @@ import type { Session } from '../session';
 import { nodeMark } from '../session';
 import { SgfNode, getMove, getText, pathTo } from '../sgf';
 import { STRIDE, TreeLayout, layoutLine, layoutTree } from '../tree';
-import { clear, el, icon, iconButton, setIcon, svg } from './dom';
+import { clear, el, icon, iconButton, renderComment, setIcon, svg } from './dom';
 import { GameInfoPrompt } from './gameinfo';
 
 /** Size of one tree cell, and of the stones in it. */
@@ -43,6 +43,9 @@ export class TreePanel extends ItemView {
 	#layout: TreeLayout | null = null;
 	#layoutKey = '';
 	#commentNode: SgfNode | null = null;
+	/** The rendered-comment child (markdown), and the text it was last rendered from. */
+	#textComp: Component | null = null;
+	#shownMd: string | null = null;
 	#onChange = (): void => this.#update();
 
 	constructor(leaf: WorkspaceLeaf, plugin: KifuPlugin) {
@@ -465,9 +468,22 @@ export class TreePanel extends ItemView {
 			const active = this.#comment.ownerDocument.activeElement === this.#comment;
 			if (this.#commentNode !== n || (!active && this.#comment.value !== text)) this.#comment.value = text;
 			this.#commentNode = n;
+			this.#showComment(null, '');
 		} else {
-			this.#text.textContent = swapWords(o, text);
 			this.#commentNode = null;
+			this.#showComment(swapWords(o, text), s.notePath);
 		}
+	}
+
+	/** Show the comment as rendered markdown ('' or null clears it); re-renders only on change. */
+	#showComment(md: string | null, path: string): void {
+		if (md === this.#shownMd) return;
+		this.#shownMd = md;
+		if (this.#textComp) {
+			this.removeChild(this.#textComp);
+			this.#textComp = null;
+		}
+		clear(this.#text);
+		if (md) this.#textComp = renderComment(this.app, this, this.#text, md, path);
 	}
 }

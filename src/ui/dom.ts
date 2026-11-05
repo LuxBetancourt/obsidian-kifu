@@ -1,5 +1,7 @@
 /** Tiny DOM helpers and the handful of line icons the plugin draws itself. */
 
+import { App, Component, MarkdownRenderer } from 'obsidian';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
@@ -27,6 +29,19 @@ export function svg<K extends keyof SVGElementTagNameMap>(
 
 export function clear(node: Node): void {
 	while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+/**
+ * Render a move comment as markdown into `host` (emptied first), under `owner`'s
+ * lifecycle, with links resolved against `path`. Picture and file embeds are turned into
+ * plain links first, so a comment can not pull a whole file or image into the panel.
+ * Returns the child component; remove it from `owner` before rendering again.
+ */
+export function renderComment(app: App, owner: Component, host: HTMLElement, md: string, path: string): Component {
+	clear(host);
+	const comp = owner.addChild(new Component());
+	void MarkdownRenderer.render(app, md.replace(/!(?=\[)/g, ''), host, path, comp);
+	return comp;
 }
 
 const CIRCLE = 'M12 3.75a8.25 8.25 0 1 0 0 16.5a8.25 8.25 0 1 0 0-16.5z';

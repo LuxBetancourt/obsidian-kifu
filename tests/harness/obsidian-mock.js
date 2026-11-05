@@ -63,6 +63,21 @@
 		constructor(containerEl) { super(); this.containerEl = containerEl; }
 	}
 
+	/** A small stand-in for Obsidian's renderer: just the inline markdown Kifu comments use. */
+	const MarkdownRenderer = {
+		render(_app, md, el, _path, _comp) {
+			const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			let h = esc(String(md));
+			h = h.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+			h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+			h = h.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+			h = h.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, link, label) => `<a class="internal-link" href="${link}">${label ?? link}</a>`);
+			h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+			el.innerHTML = `<p>${h}</p>`;
+			return Promise.resolve();
+		},
+	};
+
 	class TAbstractFile { constructor(path) { this.path = path; this.name = path.split('/').pop(); } }
 	class TFile extends TAbstractFile {
 		constructor(path) { super(path); const i = this.name.lastIndexOf('.'); this.extension = i < 0 ? '' : this.name.slice(i + 1); this.basename = i < 0 ? this.name : this.name.slice(0, i); this.stat = { mtime: Date.now(), size: 0 }; }
@@ -691,7 +706,7 @@
 	const icons = new Map();
 
 	window.__obsidian = {
-		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownView, ItemView, FileView, View, WorkspaceLeaf, Editor,
+		App, Plugin, Component, Events, MarkdownRenderChild, MarkdownRenderer, MarkdownView, ItemView, FileView, View, WorkspaceLeaf, Editor,
 		TFile, TFolder, TAbstractFile, Vault, PluginSettingTab, Setting, Notice, Modal, SuggestModal, FuzzySuggestModal, Menu, MenuItem, SecretComponent, requestUrl, BasesView, Keymap,
 		normalizePath,
 		addIcon: (id, content) => icons.set(id, content),

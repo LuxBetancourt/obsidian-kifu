@@ -297,7 +297,7 @@ The panel lives in the right sidebar (command **Kifu: Show move tree**; on a com
 
 - the tree, moves running downwards and variations branching to the right — click any move to go there, or right-click it for a menu: go there; mark its line ✓ or ✗, move its variation up, open the board there (⚑), edit its comment, or delete it and what follows (these are greyed out while the board is locked); dashed stones are ones you played on a locked board and are not saved;
 - ✓ / ✗ on lines that carry a verdict, a dot on moves that have a comment, and a small ⚑ over the position a `move:` line opens the board at;
-- the comment of the current move — a text box while the board is unlocked;
+- the comment of the current move, with any markdown rendered (bold, italics, links, Obsidian wikilinks) while the board is locked, and a plain text box to edit it while unlocked;
 - above the tree, the game's name, players and result; while the board is unlocked, the ⓘ button beside them opens **Game info**, a form for the game name, event, round, date, place, the players and their ranks, komi, handicap, rules, result and source (the SGF properties GN, EV, RO, DT, PC, PB, BR, PW, WR, KM, HA, RU, RE, SO). An empty field takes the property away; one undo puts it all back.
 
 While a **problem** is locked the panel keeps the answers to itself: it shows only the moves that are on the board. The eye button shows all the saved lines; starting over hides them again. (There is a setting for this. Stepping forward with `→` walks along a saved line, so that shows the answer too.)
