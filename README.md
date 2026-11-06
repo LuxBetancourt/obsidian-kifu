@@ -362,9 +362,10 @@ The drawing is plain SVG coloured by CSS variables, so a snippet can restyle it:
 
 ## Speed
 
-- The whole plugin is one small file (about 75 kB) with no libraries in it.
-- Starting Obsidian only *registers* things: nothing is read, parsed or drawn, and no settings file is opened, until a board is actually on screen. In the test page, loading the file takes about 3 ms and starting the plugin well under 1 ms.
-- A board is around fifteen SVG nodes however many stones it has (all stones of one colour share a path), plus one per label. Drawing one takes a millisecond or so; a full board with 180 numbered stones, about 5 ms.
+- The whole plugin is one file of about 140 kB with no libraries in it.
+- Starting Obsidian only *registers* things: nothing is read, parsed or drawn, and no settings file is opened, until a board is actually on screen. In the test page, loading the file takes about 4 ms and starting the plugin under half a millisecond; in Obsidian itself, with its caches warm, loading and starting it again takes 20–50 ms.
+- A board is around fifteen SVG nodes however many stones it has (all stones of one colour share a path), plus one per label; its buttons are not made until the pointer comes over it. Drawing one takes under a millisecond, a full board with 180 numbered stones about 2 ms, and a step through such a game a quarter of a millisecond. A note of 320 problems opens in under 100 ms.
+- In Live Preview, the plugin's editor extension costs nothing measurable per keystroke or cursor move, with or without links in the note.
 
 ## Good to know
 
