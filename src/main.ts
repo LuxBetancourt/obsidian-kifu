@@ -62,6 +62,8 @@ const FRAMES = 40;
 const CARRY_DELAY = 200;
 /** How long a board inserted by a command has to appear and be unlocked, in ms. */
 const UNLOCK_NEW = 3000;
+/** How long after the last change the settings are written (a slider being dragged changes them many times a second). */
+const SETTINGS_DELAY = 400;
 
 export default class KifuPlugin extends Plugin implements Host {
 	settings: KifuSettings = { ...DEFAULT_SETTINGS };
@@ -759,6 +761,12 @@ export default class KifuPlugin extends Plugin implements Host {
 	onunload(): void {
 		this.#unloaded = true;
 		window.clearTimeout(this.#retry);
+		// (settings changed a moment ago and not written yet: written now)
+		if (this.#writeTimer) {
+			window.clearTimeout(this.#writeTimer);
+			this.#writeTimer = 0;
+			void this.#writeSettings().catch((e: unknown) => console.error('Kifu: could not write settings', e));
+		}
 		for (const t of this.#timers.values()) window.clearTimeout(t.id);
 		this.#timers.clear();
 		for (const id of [...this.#carrying.values(), ...this.#late.values()]) window.clearTimeout(id);
@@ -800,9 +808,30 @@ export default class KifuPlugin extends Plugin implements Host {
 		})());
 	}
 
-	async saveSettings(): Promise<void> {
-		this.#refreshAll();
-		await this.#writeSettings();
+	/** A redraw of every board that a settings change asked for, until it has been done. */
+	#refresh: Promise<void> | null = null;
+	/** The write of the settings that a change asked for, while it waits for the changes to pause. */
+	#writeTimer = 0;
+
+	/**
+	 * The settings changed: draw every board again, and write them. A run of changes (a
+	 * slider being dragged changes them many times a second) redraws once a frame and
+	 * writes once it pauses. The promise is the redraw's.
+	 */
+	saveSettings(): Promise<void> {
+		this.#refresh ??= new Promise((resolve) =>
+			window.requestAnimationFrame(() => {
+				this.#refresh = null;
+				this.#refreshAll();
+				resolve();
+			}),
+		);
+		window.clearTimeout(this.#writeTimer);
+		this.#writeTimer = window.setTimeout(() => {
+			this.#writeTimer = 0;
+			void this.#writeSettings().catch((e: unknown) => console.error('Kifu: could not write settings', e));
+		}, SETTINGS_DELAY);
+		return this.#refresh;
 	}
 
 	/** Write the settings, and only that (the boards are not drawn again). */
@@ -1347,8 +1376,23 @@ export default class KifuPlugin extends Plugin implements Host {
 		}
 	}
 
-	/** Forget sessions nobody is looking at, unless there is something to come back to. */
+	#pruning = false;
+
+	/**
+	 * Forget sessions nobody is looking at, unless there is something to come back to.
+	 * (A moment later: boards leave in bunches, a whole note's worth at once, and this
+	 * sorts every session each time it runs.)
+	 */
 	#prune(): void {
+		if (this.#pruning) return;
+		this.#pruning = true;
+		queueMicrotask(() => {
+			this.#pruning = false;
+			if (!this.#unloaded) this.#pruneNow();
+		});
+	}
+
+	#pruneNow(): void {
 		const now = Date.now();
 		const idle = (s: Session) => s.views.size === 0 && s !== this.activeSession;
 		const unfinished = (s: Session) => s.dirtyTree || s.dirtyHeader || s.saving;
@@ -1530,15 +1574,19 @@ export default class KifuPlugin extends Plugin implements Host {
 	}
 
 	async #onModify(file: TAbstractFile): Promise<void> {
-		// A note was written. What is known about its blocks goes along with it...
-		this.#catchUp(file);
-		// ...and none of its boards must be left waiting for a drawing that will not come,
-		// or on another block than its own (now, and once every pane has had its turn to
-		// follow).
-		this.#sweep(file.path);
-		window.setTimeout(() => this.#sweep(file.path), 0);
+		const path = file.path;
+		// (most files written are no board's note: nothing to do, now or a moment later)
+		if (this.#sessions.some((s) => s.notePath === path)) {
+			// A note was written. What is known about its blocks goes along with it...
+			this.#catchUp(file);
+			// ...and none of its boards must be left waiting for a drawing that will not come,
+			// or on another block than its own (now, and once every pane has had its turn to
+			// follow).
+			this.#sweep(path);
+			window.setTimeout(() => this.#sweep(path), 0);
+		}
 		for (const s of this.#sessions.slice()) {
-			if (s.filePath !== file.path) continue;
+			if (s.filePath !== path) continue;
 			if (!s.ready) {
 				// (a board that could not show the file as it was: the file is different now)
 				if (s.error) {

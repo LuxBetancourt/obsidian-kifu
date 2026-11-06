@@ -16,6 +16,8 @@ export interface FoundBlock {
 	/** What goes in front of each body line: indentation, or "> " inside a callout. */
 	prefix: string;
 	body: string;
+	/** `body` with its white space removed, worked out the first time it is asked for (see reading). */
+	loose?: string;
 }
 
 export interface LineRange {
@@ -228,11 +230,14 @@ export const alike = (a: string, b: string): boolean => squash(a) === squash(b);
  * may hand us a block's text with its tabs or trailing blanks changed, and two blocks
  * that differ in nothing else are best treated as the look-alikes they are.
  */
+/** A block's body with its white space removed: asked for every block of a note each time a board is placed, so kept with the block. */
+const looseOf = (b: FoundBlock): string => (b.loose ??= squash(b.body));
+
 export function reading(blocks: FoundBlock[], body: string): number[] {
 	const want = squash(body);
 	const out: number[] = [];
 	blocks.forEach((b, i) => {
-		if (squash(b.body) === want) out.push(i);
+		if (looseOf(b) === want) out.push(i);
 	});
 	return out;
 }
@@ -249,7 +254,7 @@ export function blockOn(blocks: FoundBlock[], body: string, range: LineRange): n
 	for (let i = 0; i < blocks.length; i++) {
 		const b = blocks[i];
 		// (a section is at least as big as the block in it; an editor may only name one of its lines)
-		if (b.open > range.lineEnd || b.close < range.lineStart || squash(b.body) !== want) continue;
+		if (b.open > range.lineEnd || b.close < range.lineStart || looseOf(b) !== want) continue;
 		if (hit >= 0) return null;
 		hit = i;
 	}

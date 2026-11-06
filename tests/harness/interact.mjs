@@ -936,7 +936,7 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 		input.value = 'gp-token';
 		input.dispatchEvent(new Event('change'));
 	});
-	await sleep(50);
+	await sleep(500); // (the settings are written once nothing has changed for a moment)
 	assert.equal(await page.evaluate(() => JSON.parse(window.harness.plugin._data).goproblemsKey), 'gp-token');
 	assert.doesNotMatch(await page.evaluate(() => window.harness.plugin._data), /s3cret/);
 	assert.equal(await page.locator('.kifu-sample .kifu-svg').count(), 1);
@@ -950,6 +950,9 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	});
 	await sleep(50);
 	assert.equal(await page.evaluate(() => document.querySelector('.cm-content .kifu-svg').getAttribute('width')), String(9 * 36));
+	// drawn again at once, but written only once the changes pause (a slider being dragged)
+	assert.notEqual(await page.evaluate(() => JSON.parse(window.harness.plugin._data).scale), 1.5);
+	await sleep(500);
 	assert.equal(await page.evaluate(() => JSON.parse(window.harness.plugin._data).scale), 1.5);
 	// coordinates on, theme colours
 	await page.evaluate(() => {

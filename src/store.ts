@@ -164,13 +164,25 @@ async function writeGame(app: App, s: Session): Promise<GameWrite> {
 	return done ? 'ok' : 'changed';
 }
 
-/** The panes that have the note open for editing. */
+/** The last answer of editors(), good for the rest of the task that asked (a sweep asks for every board of a note). */
+let editorsSeen: { app: App; path: string; views: MarkdownView[] } | null = null;
+
+/** The panes that have the note open for editing. (Not to be changed by the caller.) */
 function editors(app: App, path: string): MarkdownView[] {
+	const seen = editorsSeen;
+	if (seen && seen.app === app && seen.path === path) return seen.views;
 	const out: MarkdownView[] = [];
 	app.workspace.iterateAllLeaves((leaf) => {
 		const v = leaf.view;
 		if (v instanceof MarkdownView && v.file?.path === path && v.getMode() === 'source') out.push(v);
 	});
+	// (the workspace does not change under the task that asked; by the next one it may have)
+	if (!editorsSeen) {
+		queueMicrotask(() => {
+			editorsSeen = null;
+		});
+	}
+	editorsSeen = { app, path, views: out };
 	return out;
 }
 
