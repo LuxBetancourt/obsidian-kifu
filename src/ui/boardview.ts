@@ -38,6 +38,25 @@ const CONTAINED = [
 	'compositionend',
 ];
 
+/** The lock and the buttons under it, once they are built. */
+interface Ctl {
+	el: HTMLElement;
+	lock: HTMLButtonElement;
+	back: HTMLButtonElement;
+	forward: HTMLButtonElement;
+	solution: HTMLButtonElement;
+	play: HTMLButtonElement;
+	reset: HTMLButtonElement;
+	problem: HTMLButtonElement;
+	random: HTMLButtonElement;
+}
+
+/** Is this a touch screen, with nothing to hover? (Asked once: the screen does not change.) */
+let hoverless: boolean | null = null;
+function noHover(win: Window): boolean {
+	return (hoverless ??= win.matchMedia('(hover: none)').matches);
+}
+
 // Members are #private throughout: this class extends one of Obsidian's, and a
 // plain property could silently shadow something the app keeps there.
 export class BoardView extends MarkdownRenderChild implements SessionView {
@@ -49,14 +68,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#root: HTMLElement;
 	#frame: HTMLElement;
 	#board: BoardSvg;
-	#lockBtn: HTMLButtonElement;
-	#resetBtn: HTMLButtonElement;
-	#problemBtn: HTMLButtonElement;
-	#randomBtn: HTMLButtonElement;
-	#backBtn: HTMLButtonElement;
-	#forwardBtn: HTMLButtonElement;
-	#solutionBtn: HTMLButtonElement;
-	#playBtn: HTMLButtonElement;
+	/**
+	 * The lock and the buttons under it. Not built with the board but when they are first
+	 * wanted (see #ensureCtl): a note of hundreds of boards shows hundreds of boards, and
+	 * at most a few of their buttons.
+	 */
+	#ctl: Ctl | null = null;
 	#cap: HTMLElement;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
@@ -96,31 +113,6 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#msg.hidden = true;
 		this.#frame = el(root, 'div', 'kifu-frame');
 		this.#board = new BoardSvg(this.#frame);
-		const ctl = el(this.#frame, 'div', 'kifu-ctl');
-		this.#lockBtn = iconButton(ctl, 'lock', 'Unlock to edit', () => this.#toggleLock());
-		// On a locked board: take back the moves played on it, and make them again. Never
-		// a step into the record itself, before the resting position or after it (that
-		// would give a problem's answer away). Unlocked, the toolbar has its own buttons.
-		this.#backBtn = iconButton(ctl, 'prev', 'Take back your last move', () => this.session?.stepBack());
-		this.#forwardBtn = iconButton(ctl, 'next', 'Play it again', () => this.session?.stepForth());
-		this.#solutionBtn = iconButton(ctl, 'eye', 'Show the solution', () => this.session?.showSolution());
-		// a locked board that is not a problem: play its record through, a move at a time
-		this.#playBtn = iconButton(ctl, 'play', 'Play through the game', () => {
-			const s = this.session;
-			if (s) s.playThrough(!s.playing);
-		});
-		this.#playBtn.hidden = true;
-		this.#resetBtn = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
-		this.#problemBtn = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
-			const s = this.session;
-			if (s) s.setProblem(!s.problem);
-		});
-		this.#problemBtn.hidden = true;
-		this.#randomBtn = iconButton(ctl, 'shuffle', 'Shuffle: each time the note is opened, show this board turned or mirrored, and perhaps with the colors swapped', () => {
-			const s = this.session;
-			if (s) s.setRandomize(!s.randomized);
-		});
-		this.#randomBtn.hidden = true;
 		this.#cap = el(root, 'div', 'kifu-cap');
 
 		const svgEl = this.#board.el;
@@ -145,27 +137,40 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// meant for the board. In Live Preview the board sits inside the editor's own
 		// element, so none of it may travel on to the editor.
 		for (const type of CONTAINED) root.addEventListener(type, (ev) => ev.stopPropagation());
+		// The lock and its buttons are made the moment they could be seen or reached: the
+		// pointer comes over the board, it gets the keyboard, or it is pressed. (While
+		// editing, and on a touch screen where nothing hovers, #render makes them.)
+		root.addEventListener('pointerenter', () => this.#ensureCtl());
+		// Let go anywhere, even off the board. Listened for on the document only while a
+		// press lasts: a note full of boards must not leave hundreds of listeners there.
+		const release = (): void => {
+			this.#pressed = false;
+			const doc = root.ownerDocument;
+			doc.removeEventListener('pointerup', release, true);
+			doc.removeEventListener('pointercancel', release, true);
+		};
 		root.addEventListener('pointerdown', () => {
+			this.#ensureCtl();
 			this.#activate();
 			if (this.session && this.readOnlyPane()) this.#plugin.lockIfOnlyRead(this.session);
-			this.#pressed = true;
+			if (!this.#pressed) {
+				this.#pressed = true;
+				const doc = root.ownerDocument;
+				doc.addEventListener('pointerup', release, true);
+				doc.addEventListener('pointercancel', release, true);
+			}
 			// (a press is work going on: the write waits for a pause after it)
 			if (this.session) this.#plugin.stillBusy(this.session);
 		});
-		// let go anywhere, even off the board
-		const release = (): void => {
-			this.#pressed = false;
-		};
-		root.ownerDocument.addEventListener('pointerup', release, true);
-		root.ownerDocument.addEventListener('pointercancel', release, true);
-		this.register(() => {
-			root.ownerDocument.removeEventListener('pointerup', release, true);
-			root.ownerDocument.removeEventListener('pointercancel', release, true);
-		});
+		// (taken off the page in the middle of a press: nothing is left listening)
+		this.register(release);
 		root.addEventListener('contextmenu', () => {
 			if (this.session) this.#plugin.menuOn(this.session);
 		});
-		root.addEventListener('focusin', () => this.#activate());
+		root.addEventListener('focusin', () => {
+			this.#ensureCtl();
+			this.#activate();
+		});
 		root.addEventListener('focusout', () => this.#setKeyFocus(false));
 		root.addEventListener('keyup', (ev) => {
 			if (ev.key === 'Tab' && ev.target === root) this.#setKeyFocus(true);
@@ -300,12 +305,15 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				if (tries-- > 0) win.requestAnimationFrame(look);
 				return;
 			}
+			// (on a touch screen the buttons are always faintly shown: now that the pane is
+			// known, those that are due can be made)
+			if (noHover(win)) this.#ctlIfDue(s);
 			if (!this.readOnlyPane()) return;
 			// All the reading view changes about a locked board is that it has no lock: that
 			// alone is cheaper than drawing the board again. (One being edited in another
 			// pane is drawn again, without its tools.)
 			if (s.edit) this.#render();
-			else this.#lockBtn.hidden = true;
+			else if (this.#ctl) this.#ctl.lock.hidden = true;
 			win.setTimeout(() => {
 				if (this.session === s) this.#plugin.lockIfOnlyRead(s);
 			}, 500);
@@ -333,13 +341,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#detach();
 		this.#tools?.remove();
 		this.#tools = null;
-		this.#lockBtn.hidden = true;
-		this.#resetBtn.hidden = true;
-		this.#problemBtn.hidden = true;
-		this.#randomBtn.hidden = true;
-		this.#backBtn.hidden = this.#forwardBtn.hidden = true;
-		this.#solutionBtn.hidden = true;
-		this.#playBtn.hidden = true;
+		this.#ctl?.el.remove();
+		this.#ctl = null;
 		this.#board.setGhost(-1, -1, 0);
 		this.#board.setMarkGhost(-1, -1, null, '', 0);
 		this.#root.classList.remove('is-editing', 'is-crop');
@@ -353,6 +356,92 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	/** Tell the plugin this is the board being used. */
 	#activate(): void {
 		if (this.session) this.#plugin.useSession(this);
+	}
+
+	/** The lock and its buttons, built now if they are not yet, and shown as the board stands. */
+	#ensureCtl(): void {
+		if (this.#ctl) return;
+		const c = this.#buildCtl();
+		const s = this.session;
+		if (!s || !s.ready || s.error) return;
+		const readOnly = this.readOnlyPane();
+		const away = s.edit && readOnly;
+		this.#updateCtl(c, s, readOnly, away, s.edit && !away);
+	}
+
+	#buildCtl(): Ctl {
+		const ctl = el(this.#frame, 'div', 'kifu-ctl');
+		const lock = iconButton(ctl, 'lock', 'Unlock to edit', () => this.#toggleLock());
+		// On a locked board: take back the moves played on it, and make them again. Never
+		// a step into the record itself, before the resting position or after it (that
+		// would give a problem's answer away). Unlocked, the toolbar has its own buttons.
+		const back = iconButton(ctl, 'prev', 'Take back your last move', () => this.session?.stepBack());
+		const forward = iconButton(ctl, 'next', 'Play it again', () => this.session?.stepForth());
+		const solution = iconButton(ctl, 'eye', 'Show the solution', () => this.session?.showSolution());
+		// a locked board that is not a problem: play its record through, a move at a time
+		const play = iconButton(ctl, 'play', 'Play through the game', () => {
+			const s = this.session;
+			if (s) s.playThrough(!s.playing);
+		});
+		play.hidden = true;
+		const reset = iconButton(ctl, 'reset', 'Back to the starting position', () => this.session?.reset());
+		const problem = iconButton(ctl, 'problem', 'Problem: judge the moves played on this board', () => {
+			const s = this.session;
+			if (s) s.setProblem(!s.problem);
+		});
+		problem.hidden = true;
+		const random = iconButton(ctl, 'shuffle', 'Shuffle: each time the note is opened, show this board turned or mirrored, and perhaps with the colors swapped', () => {
+			const s = this.session;
+			if (s) s.setRandomize(!s.randomized);
+		});
+		random.hidden = true;
+		return (this.#ctl = { el: ctl, lock, back, forward, solution, play, reset, problem, random });
+	}
+
+	/** On a touch screen, where the buttons are always faintly shown: make them as soon as one is due. */
+	#ctlIfDue(s: Session): void {
+		if (this.#ctl || !s.ready || s.error) return;
+		const readOnly = this.readOnlyPane();
+		const away = s.edit && readOnly;
+		const editing = s.edit && !away;
+		if (this.#buttonDue(s, readOnly, away, editing)) this.#updateCtl(this.#buildCtl(), s, readOnly, away, editing);
+	}
+
+	/** Would any of the buttons be shown, as the board stands? (Asked before they are built.) */
+	#buttonDue(s: Session, readOnly: boolean, away: boolean, editing: boolean): boolean {
+		if (!readOnly) return true; // the lock
+		if (!s.edit && (s.moved || s.canStepBack || s.canStepForth || s.solution() !== null)) return true;
+		if (!away && s.playable) return true;
+		return editing && !s.fileView;
+	}
+
+	/** Show the buttons as the board stands: which are there, which are lit, what they say. */
+	#updateCtl(c: Ctl, s: Session, readOnly: boolean, away: boolean, editing: boolean): void {
+		setIcon(c.lock.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
+		c.lock.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
+		c.lock.classList.toggle('is-active', s.edit);
+		// (in the reading view a board is only played, never edited)
+		c.lock.hidden = readOnly;
+		c.reset.hidden = s.edit || !s.moved;
+		// (shown once something has been played, like the reset button)
+		c.back.hidden = c.forward.hidden = s.edit || !(s.canStepBack || s.canStepForth);
+		c.back.disabled = !s.canStepBack;
+		c.forward.disabled = !s.canStepForth;
+		// a locked problem that has an answer saved can show it
+		const answer = s.edit ? null : s.solution();
+		c.solution.hidden = !answer;
+		c.solution.disabled = !!answer && s.cur === answer;
+		c.play.hidden = away || !s.playable;
+		setIcon(c.play.firstChild as SVGSVGElement, s.playing ? 'pause' : 'play');
+		c.play.setAttribute('aria-label', s.playing ? 'Pause' : 'Play through the game');
+		c.play.classList.toggle('is-active', s.playing);
+		// (while editing, under the lock: is this board a problem?)
+		c.problem.hidden = !editing || s.fileView;
+		c.problem.classList.toggle('is-active', s.problem);
+		c.problem.setAttribute('aria-pressed', String(s.problem));
+		c.random.hidden = !editing || s.fileView;
+		c.random.classList.toggle('is-active', s.randomized);
+		c.random.setAttribute('aria-pressed', String(s.randomized));
 	}
 
 	/* ----------------------------------------------------------------- render */
@@ -386,7 +475,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const coords = parseBool(s.opts.coords) ?? set.coords;
 		const style = /^(paper|theme)$/.test(s.opts.style ?? '') ? s.opts.style : set.style;
 		const align = /^(left|center|right)$/.test(s.opts.align ?? '') ? s.opts.align : set.align;
-		const away = this.#away(s);
+		const readOnly = this.readOnlyPane();
+		const away = s.edit && readOnly;
 		const editing = s.edit && !away;
 		root.className =
 			`kifu kifu-${style} kifu-${align}` +
@@ -406,32 +496,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#board.draw(m, this.#look);
 		this.#hover = '';
 
-		setIcon(this.#lockBtn.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
-		this.#lockBtn.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
-		this.#lockBtn.classList.toggle('is-active', s.edit);
-		// (in the reading view a board is only played, never edited)
-		this.#lockBtn.hidden = this.readOnlyPane();
-		this.#resetBtn.hidden = s.edit || !s.moved;
-		if (away) this.#problemBtn.hidden = this.#randomBtn.hidden = true;
-		// (shown once something has been played, like the reset button)
-		this.#backBtn.hidden = this.#forwardBtn.hidden = s.edit || !(s.canStepBack || s.canStepForth);
-		this.#backBtn.disabled = !s.canStepBack;
-		this.#forwardBtn.disabled = !s.canStepForth;
-		// a locked problem that has an answer saved can show it
-		const answer = s.edit ? null : s.solution();
-		this.#solutionBtn.hidden = !answer;
-		this.#solutionBtn.disabled = !!answer && s.cur === answer;
-		this.#playBtn.hidden = away || !s.playable;
-		setIcon(this.#playBtn.firstChild as SVGSVGElement, s.playing ? 'pause' : 'play');
-		this.#playBtn.setAttribute('aria-label', s.playing ? 'Pause' : 'Play through the game');
-		this.#playBtn.classList.toggle('is-active', s.playing);
-		// (while editing, under the lock: is this board a problem?)
-		this.#problemBtn.hidden = !editing || s.fileView;
-		this.#problemBtn.classList.toggle('is-active', s.problem);
-		this.#problemBtn.setAttribute('aria-pressed', String(s.problem));
-		this.#randomBtn.hidden = !editing || s.fileView;
-		this.#randomBtn.classList.toggle('is-active', s.randomized);
-		this.#randomBtn.setAttribute('aria-pressed', String(s.randomized));
+		// The lock and its buttons: while editing they are in plain sight, and on a touch
+		// screen (nothing hovers; they are always faintly shown) as soon as one is due, once
+		// the board is on the page and which pane it is in can be told. Otherwise they wait
+		// for the pointer or the keyboard to come to the board.
+		if (!this.#ctl && (editing || (root.isConnected && noHover(root.ownerDocument.defaultView ?? window) && this.#buttonDue(s, readOnly, away, editing)))) this.#buildCtl();
+		if (this.#ctl) this.#updateCtl(this.#ctl, s, readOnly, away, editing);
 
 		// (an answer that was shown rather than found gets no stamp: the caption says enough)
 		this.#renderStamp(!s.edit && s.cur !== s.solutionShown ? m.status : null, s.cur);

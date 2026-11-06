@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
-	chromium, runner, out, here, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock, doc,
+	chromium, runner, out, here, pointXY, clickPoint, sleep, text, notices, cap, capHidden, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock, hover, doc,
 } from './lib.mjs';
 
 const KILL = `(;GM[1]FF[4]SZ[19]AB[oa][ob][oc][pc][qc][rc][sc]AW[pa][pb][qb][rb][sb]C[Black to play and kill.]
@@ -259,7 +259,10 @@ await scenario('a locked game record has a play button that plays it through a m
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n\n```kifu\n' + KILL + '\n```\n' }, panes: [{ path: 'N.md', mode: 'preview' }], autosave: 100, height: 1400,
 }, async (page) => {
 	const play = (i) => page.locator('.kifu').nth(i).locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
-	// (also in the reading view: it is a way of looking at the board)
+	// (also in the reading view: it is a way of looking at the board. The buttons are made
+	// as the mouse comes over a board: look at each first.)
+	await hover(page, 0);
+	await hover(page, 1);
 	assert.equal(await play(0).isHidden(), false);
 	assert.equal(await play(1).isHidden(), true); // the problem: that would give its answer away
 	assert.deepEqual(await stones(page, 0), { black: 2, white: 1 }); // a record rests at its end
@@ -292,6 +295,7 @@ await scenario('the play button starts from the first move even when the board r
 	const play = page.locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
 	// at rest the board shows move 2: one black (ee) and one white (cc)
 	assert.deepEqual(await stones(page, 0), { black: 1, white: 1 });
+	await hover(page);
 	await play.click();
 	// it restarts from the beginning, not onward from the resting point
 	assert.deepEqual(await stones(page, 0), { black: 0, white: 0 });
@@ -305,6 +309,7 @@ await scenario('the play button is gone while the board is unlocked', {
 	files: { 'N.md': '# Game\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg])\n```\n' }, panes: [{ path: 'N.md', mode: 'source' }], autosave: 100,
 }, async (page) => {
 	const play = page.locator('.kifu-ctl .kifu-btn[aria-label="Play through the game"], .kifu-ctl .kifu-btn[aria-label="Pause"]');
+	await hover(page);
 	await play.click();
 	assert.equal(await play.getAttribute('aria-label'), 'Pause');
 	// unlocking stops it (and there are no moves played to be asked about)
@@ -576,7 +581,8 @@ await scenario('same note in two panes, and twin blocks', {
 	autosave: 100,
 }, async (page) => {
 	assert.equal(await boardCount(page), 4); // two blocks, each shown in both panes
-	// the reading pane (boards 2 and 3) has no lock
+	// the reading pane (boards 2 and 3) has no lock (the buttons are made as the mouse comes over each board)
+	for (let i = 0; i < 4; i++) await hover(page, i);
 	assert.deepEqual(await page.locator('.kifu-ctl .kifu-btn[aria-label="Unlock to edit"]').evaluateAll((bs) => bs.map((b) => b.hidden)), [false, false, true, true]);
 	// unlock the SECOND block in the editor pane
 	const p = await pointXY(page, 1, 'jj');
@@ -1118,6 +1124,7 @@ await scenario('back and forward under the lock step through the moves played, n
 	const back = page.locator('.kifu-ctl .kifu-btn[aria-label^="Take back"]');
 	const forward = page.locator('.kifu-ctl .kifu-btn[aria-label^="Play it again"]');
 	// nothing played yet: nothing to step through, so no buttons
+	await hover(page);
 	assert.equal(await back.isVisible(), false);
 	assert.equal(await forward.isVisible(), false);
 	assert.deepEqual(await stones(page), { black: 1, white: 0 });
@@ -1150,6 +1157,8 @@ await scenario('a locked problem shows its solution on request, without a stamp'
 	panes: [{ path: 'P.md', mode: 'source' }, { path: 'G.md', mode: 'source' }],
 }, async (page) => {
 	const show = page.locator('.kifu-ctl .kifu-btn[aria-label="Show the solution"]');
+	await hover(page, 0);
+	await hover(page, 1);
 	assert.equal(await show.count(), 2); // (one per board, shown only where there is an answer)
 	assert.equal(await show.nth(0).isVisible(), true);
 	assert.equal(await show.nth(1).isVisible(), false); // not a problem
@@ -1642,6 +1651,7 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	await page.evaluate(() => { window.__base.config.values.playable = false; window.__base.view.onDataUpdated(); });
 	await sleep(400);
 	assert.equal(await page.locator('.kifu-bases.is-static').count(), 1);
+	await hover(page, 0); // (the buttons a board would have are made now, and kept out of sight)
 	assert.equal(await page.locator('.kifu-bases-card .kifu-ctl').first().evaluate((e) => getComputedStyle(e).display), 'none');
 	await page.locator('.kifu-bases-board').nth(1).click({ force: true });
 	assert.deepEqual((await page.evaluate(() => window.harness.app._opened)).at(-1), ['G.md', false]);

@@ -16,13 +16,19 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 	return e;
 }
 
+/** An SVG element with its attributes, not yet in the tree. */
+export function svgNode<K extends keyof SVGElementTagNameMap>(doc: Document, tag: K, attrs?: Record<string, string | number>): SVGElementTagNameMap[K] {
+	const e = doc.createElementNS(SVG_NS, tag);
+	if (attrs) for (const k in attrs) e.setAttribute(k, String(attrs[k]));
+	return e;
+}
+
 export function svg<K extends keyof SVGElementTagNameMap>(
 	parent: Node,
 	tag: K,
 	attrs?: Record<string, string | number>,
 ): SVGElementTagNameMap[K] {
-	const e = (parent.ownerDocument as Document).createElementNS(SVG_NS, tag);
-	if (attrs) for (const k in attrs) e.setAttribute(k, String(attrs[k]));
+	const e = svgNode(parent.ownerDocument as Document, tag, attrs);
 	parent.appendChild(e);
 	return e;
 }

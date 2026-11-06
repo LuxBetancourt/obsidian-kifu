@@ -111,4 +111,29 @@ await page.context().close();
 	const show = (k) => `${median(costs[true][k]).toFixed(2)} ms with the extension, ${median(costs[false][k]).toFixed(2)} without`;
 	console.log(`500 kB note, no boards: a keystroke ${show('key')}; a cursor move ${show('move')}`);
 }
+
+// The same note with one link in it, so the field holds a board: a keystroke elsewhere
+// moves the link along, one on the link's own line looks for links again, and a cursor
+// move only looks at which link it is in. None of them should read the note through.
+{
+	const line = 'The quick brown fox jumps over the lazy dog, again and again, until the line is long enough.\n';
+	const prose = line.repeat(Math.ceil((500 * 1024) / line.length));
+	const cut = prose.indexOf('\n', prose.length / 2) + 1;
+	const link = '![](https://online-go.com/game/12345)\n';
+	const { page } = await open(browser, { files: { 'K.md': prose.slice(0, cut) + link + prose.slice(cut) }, live: ['K.md'] });
+	await sleep(200);
+	const r = await page.evaluate((linkEnd) => {
+		const cm = window.harness.views[0].cm;
+		const len = cm.state.doc.length;
+		const time = (fn, n) => { const out = []; for (let i = 0; i < n; i++) { const t0 = performance.now(); fn(i); out.push(performance.now() - t0); } return out; };
+		time((i) => cm.dispatch({ selection: { anchor: (i * 991) % len } }), 20); // (warm up)
+		const away = time((i) => cm.dispatch({ changes: { from: len + i, insert: 'x' } }), 40);
+		// (on the link's line, after the link: each "x" goes in right before the line break)
+		const near = time((i) => cm.dispatch({ changes: { from: linkEnd + i, insert: 'x' } }), 40);
+		const move = time((i) => cm.dispatch({ selection: { anchor: (i * 997) % len } }), 80);
+		return { away, near, move };
+	}, cut + link.length - 1);
+	console.log(`500 kB note, one link:  a keystroke elsewhere ${median(r.away).toFixed(2)} ms, on the link's line ${median(r.near).toFixed(2)} ms; a cursor move ${median(r.move).toFixed(2)} ms`);
+	await page.context().close();
+}
 await browser.close();

@@ -6,7 +6,7 @@
 
 import type { Model } from '../session';
 import { Rect, pointName, starPoints } from '../options';
-import { clear, svg } from './dom';
+import { clear, svg, svgNode } from './dom';
 
 /** Drawing units per line spacing. */
 const U = 100;
@@ -43,6 +43,16 @@ export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
 const circle = (cx: number, cy: number, r: number): string =>
 	`M${+(cx - r).toFixed(1)} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
 
+/** What follows the "M x y" of a stone of radius `r`: the same for every stone of a colour. */
+const arc = (r: number): string => `a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
+const BLACK_ARC = arc(R);
+
+/** A child of the overlay: what it shows (its key), and how to make it. */
+interface Keyed {
+	key: string;
+	make: () => Element;
+}
+
 /** The outline a mark draws at a point: TR triangle, SQ square, CR circle, anything else a cross. */
 function markPath(kind: string, cx: number, cy: number): string {
 	if (kind === 'TR') return `M${cx} ${cy - 30}L${cx + 28.6} ${cy + 19.5}H${cx - 28.6}z`;
@@ -75,6 +85,10 @@ export class BoardSvg {
 	private view: Rect = { x0: 0, y0: 0, x1: 0, y1: 0 };
 	private crop: Rect | null = null;
 	private px = 1;
+	/** The start of each stone's path, one per column shown, and the white arc, for the last ring width and view. */
+	private stones: { key: string; black: string[]; white: string[]; whiteArc: string } | null = null;
+	/** The key of each child of the overlay, in order (see reconcile). */
+	private overKeys: string[] = [];
 
 	constructor(parent: HTMLElement) {
 		this.el = svg(parent, 'svg', { class: 'kifu-svg', role: 'img', 'aria-label': 'Go board' });
@@ -122,23 +136,41 @@ export class BoardSvg {
 			this.drawFixed(w, h, view, line, border, k, band, cell, lc);
 		}
 
-		// stones
+		// Stones: every one of a colour in one path. The start of each ("M x y") and the arc
+		// after it are the same few strings over and over, so they are made once per column
+		// and once per colour, not for every stone at every redraw.
+		const rw = +(R - ring / 2).toFixed(1);
+		const stoneKey = `${rw} ${view.x0} ${view.x1}`;
+		let st = this.stones;
+		if (!st || st.key !== stoneKey) {
+			const black: string[] = [];
+			const white: string[] = [];
+			for (let x = view.x0; x <= view.x1; x++) {
+				const cx = x * U + HALF;
+				black.push(`M${+(cx - R).toFixed(1)}`);
+				white.push(`M${+(cx - rw).toFixed(1)}`);
+			}
+			st = this.stones = { key: stoneKey, black, white, whiteArc: arc(rw) };
+		}
 		let bd = '';
 		let wd = '';
-		const rw = +(R - ring / 2).toFixed(1);
 		for (let y = view.y0; y <= view.y1; y++) {
+			const cy = ` ${y * U + HALF}`;
+			const row = y * w;
 			for (let x = view.x0; x <= view.x1; x++) {
-				const c = m.grid[y * w + x];
-				if (c === 1) bd += circle(x * U + HALF, y * U + HALF, R);
-				else if (c === 2) wd += circle(x * U + HALF, y * U + HALF, rw);
+				const c = m.grid[row + x];
+				if (c === 1) bd += st.black[x - view.x0] + cy + BLACK_ARC;
+				else if (c === 2) wd += st.white[x - view.x0] + cy + st.whiteArc;
 			}
 		}
 		this.black.setAttribute('d', bd);
 		this.white.setAttribute('d', wd);
 		this.white.setAttribute('stroke-width', ring.toFixed(1));
 
-		// marks, labels, the last-move dot
-		clear(this.over);
+		// Marks, labels, the last-move dot: an element each, keyed by what it shows, so that
+		// a redraw touches only those that changed (a step through a game changes one or two).
+		const want: Keyed[] = [];
+		const doc = this.el.ownerDocument;
 		const inView = (x: number, y: number) => x >= view.x0 && x <= view.x1 && y >= view.y0 && y <= view.y1;
 		const stroke = Math.max(6, 1.5 * k).toFixed(1);
 		const on = (i: number) => (m.grid[i] === 1 ? 'kifu-on-b' : m.grid[i] === 2 ? 'kifu-on-w' : 'kifu-on-e');
@@ -148,8 +180,9 @@ export class BoardSvg {
 			if (!inView(x, y)) return;
 			const cx = x * U + HALF;
 			const cy = y * U + HALF;
-			if (kind === 'MA' && !m.grid[i]) svg(this.over, 'circle', { cx, cy, r: 27, class: 'kifu-blank' });
-			svg(this.over, 'path', { d: markPath(kind, cx, cy), class: `kifu-mark ${on(i)}`, 'stroke-width': stroke });
+			if (kind === 'MA' && !m.grid[i]) want.push({ key: `b${i}`, make: () => svgNode(doc, 'circle', { cx, cy, r: 27, class: 'kifu-blank' }) });
+			const cls = `kifu-mark ${on(i)}`;
+			want.push({ key: `m${i} ${kind} ${cls} ${stroke}`, make: () => svgNode(doc, 'path', { d: markPath(kind, cx, cy), class: cls, 'stroke-width': stroke }) });
 		});
 		m.labels.forEach((text, i) => {
 			const x = i % w;
@@ -162,25 +195,71 @@ export class BoardSvg {
 			if (!m.grid[i]) {
 				// hide the lines behind a label on an empty point
 				const half = Math.max(30, n * 17 + 8);
-				svg(this.over, 'rect', { x: cx - half, y: cy - 31, width: half * 2, height: 62, rx: 14, class: 'kifu-blank' });
+				want.push({ key: `r${i} ${n}`, make: () => svgNode(doc, 'rect', { x: cx - half, y: cy - 31, width: half * 2, height: 62, rx: 14, class: 'kifu-blank' }) });
 			}
-			const t = svg(this.over, 'text', { x: cx, y: +(cy + fs * 0.355).toFixed(1), 'font-size': fs, class: `kifu-text ${on(i)}` });
-			if (n >= 3 && /^\d+$/.test(text)) {
-				// three figures have to fit on a stone: squeeze them like a condensed face
-				t.setAttribute('textLength', n === 3 ? '70' : '80');
-				t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
-			}
-			t.textContent = text;
+			const cls = `kifu-text ${on(i)}`;
+			want.push({
+				key: `t${i} ${cls} ${text}`,
+				make: () => {
+					const t = svgNode(doc, 'text', { x: cx, y: +(cy + fs * 0.355).toFixed(1), 'font-size': fs, class: cls });
+					if (n >= 3 && /^\d+$/.test(text)) {
+						// three figures have to fit on a stone: squeeze them like a condensed face
+						t.setAttribute('textLength', n === 3 ? '70' : '80');
+						t.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+					}
+					t.textContent = text;
+					return t;
+				},
+			});
 		});
 		if (m.last >= 0 && !m.marks.has(m.last) && !m.labels.has(m.last) && m.grid[m.last]) {
 			const x = m.last % w;
 			const y = Math.floor(m.last / w);
-			if (inView(x, y)) svg(this.over, 'circle', { cx: x * U + HALF, cy: y * U + HALF, r: 13, class: `kifu-last ${on(m.last)}` });
+			const cls = `kifu-last ${on(m.last)}`;
+			if (inView(x, y)) want.push({ key: `c${m.last} ${cls}`, make: () => svgNode(doc, 'circle', { cx: x * U + HALF, cy: y * U + HALF, r: 13, class: cls }) });
 		}
+		this.reconcile(this.over, want);
 
 		this.crop = m.crop;
 		this.drawCrop(m.crop);
 		this.setGhost(-1, -1, 0);
+	}
+
+	/**
+	 * Make the overlay hold `want`, in that order, keeping every child whose key it already
+	 * holds (a child never changes: what it shows is in its key). Only what came or went is
+	 * added or removed, so a redraw that changes little costs little.
+	 */
+	private reconcile(parent: SVGGElement, want: Keyed[]): void {
+		const keys = this.overKeys;
+		const wanted = new Set<string>();
+		for (const w of want) wanted.add(w.key);
+		const next: string[] = [];
+		let node: ChildNode | null = parent.firstChild;
+		let k = 0;
+		for (const w of want) {
+			// what stands here and is not wanted any more goes
+			while (node && !wanted.has(keys[k])) {
+				const gone = node;
+				node = node.nextSibling;
+				k++;
+				parent.removeChild(gone);
+			}
+			if (node && keys[k] === w.key) {
+				node = node.nextSibling;
+				k++;
+			} else {
+				// (what stands here is wanted further on: ours goes in front of it)
+				parent.insertBefore(w.make(), node);
+			}
+			next.push(w.key);
+		}
+		while (node) {
+			const gone = node;
+			node = node.nextSibling;
+			parent.removeChild(gone);
+		}
+		this.overKeys = next;
 	}
 
 	/** Lines, border, star points and coordinates: redrawn only when the geometry changes. */

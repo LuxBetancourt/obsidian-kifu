@@ -90,7 +90,8 @@ export const stones = (page, i = 0) =>
 export const labels = (page, i = 0) =>
 	// (.kifu-ghost-mark is the faint hover preview of a tool, not a placed label)
 	page.evaluate((i) => [...document.querySelectorAll('.kifu-svg')[i].querySelectorAll('.kifu-text:not(.kifu-ghost-mark)')].map((t) => t.textContent).sort().join(','), i);
-export const lockBtn = (page, i = 0) => page.locator('.kifu-ctl .kifu-btn[aria-label*="nlock"], .kifu-ctl .kifu-btn[aria-label^="Lock"]').nth(i);
+/** The lock of the nth board. (The buttons under a board are made when the mouse first comes over it: see hover.) */
+export const lockBtn = (page, i = 0) => page.locator('.kifu').nth(i).locator('.kifu-ctl .kifu-btn[aria-label*="nlock"], .kifu-ctl .kifu-btn[aria-label^="Lock"]');
 export const tool = (page, title, i = 0) => page.locator(`.kifu-tools .kifu-btn[aria-label^="${title}"]`).nth(i);
 export const boardCount = (page) => page.locator('.kifu-svg').count();
 export const isEditing = (page) => page.evaluate(() => [...document.querySelectorAll('.kifu')].map((k) => k.classList.contains('is-editing')));
@@ -100,10 +101,15 @@ export const active = (page) =>
 		const a = document.activeElement;
 		return a ? (typeof a.className === 'string' && a.className ? a.tagName + '.' + a.className.split(' ')[0] : a.tagName) : null;
 	});
-/** Unlock (or lock) the nth board, the way a user does: move the mouse over it, click the lock. */
-export async function toggleLock(page, i = 0) {
+/** Move the mouse over the nth board, as a user does before reaching for its buttons (which are made then). */
+export async function hover(page, i = 0) {
 	const box = await page.locator('.kifu-svg').nth(i).boundingBox();
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/** Unlock (or lock) the nth board, the way a user does: move the mouse over it, click the lock. */
+export async function toggleLock(page, i = 0) {
+	await hover(page, i);
 	await lockBtn(page, i).click();
 }
 
