@@ -46,7 +46,16 @@ export function clear(node: Node): void {
 export function renderComment(app: App, owner: Component, host: HTMLElement, md: string, path: string): Component {
 	clear(host);
 	const comp = owner.addChild(new Component());
-	void MarkdownRenderer.render(app, md.replace(/!(?=\[)/g, ''), host, path, comp);
+	const done = MarkdownRenderer.render(app, md.replace(/!(?=\[)/g, ''), host, path, comp);
+	// A comment is usually one paragraph; unwrap it so the text flows inline, next to a
+	// verdict in the caption or along the panel's line, rather than as a block of its own.
+	void Promise.resolve(done).then(() => {
+		const only = host.childElementCount === 1 ? host.firstElementChild : null;
+		if (only && only.tagName === 'P') {
+			while (only.firstChild) host.insertBefore(only.firstChild, only);
+			only.remove();
+		}
+	});
 	return comp;
 }
 

@@ -365,6 +365,13 @@ body .kifu-panel button.kifu-btn {
 	white-space: pre-wrap;
 }
 
+/* the comment sits on its own line below the verdict, hint or notes */
+.kifu-cap > .kifu-comment {
+	display: block;
+	margin-top: 0.3em;
+	margin-left: 0;
+}
+
 /* (the word sits on the baseline of the text around it; the tick or cross is centred beside it) */
 .kifu-verdict {
 	display: inline-flex;

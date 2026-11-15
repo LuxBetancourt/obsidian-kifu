@@ -84,7 +84,7 @@ A problem is a starting position plus the lines you saved from it.
 2. Switch to **Play** and play the answer; the plugin alternates colours. Go back (‹) and play other tries to add them as variations.
 3. Mark lines with ✓ and ✗ if you like, add comments in the panel, lock.
 
-On the locked board the solver's move is looked up in the tree. If it is there, a saved reply is played after a short pause (where you saved several, one of them at random, so the problem does not always answer the same way; the settings can make it always the first); if it is not, the move is simply *incorrect*. When a line ends a large ✓ or ✗ appears over the board for a moment, and the verdict and the line's comment stay underneath.
+On the locked board the solver's move is looked up in the tree. If it is there, a saved reply is played after a short pause (where you saved several, one of them at random, so the problem does not always answer the same way; the settings can make it always the first); if it is not, the move is simply *incorrect*. When a line ends a large ✓ or ✗ appears over the board for a moment, and the verdict and the line's comment stay underneath, the comment on its own line with any markdown rendered (bold, italics, links, Obsidian wikilinks).
 
 Stuck? The eye button under the lock shows the solution: the board starts over and plays out the first saved line judged correct, with the moves numbered, and the move tree panel shows all the saved lines. Step back through it with ‹ ›, or start over with ↺. (No ✓ appears for an answer that was shown rather than found.)
 

@@ -686,6 +686,18 @@ await scenario('the move tree panel renders markdown in a comment', {
 	assert.equal((await textEl.textContent()).replace(/\s+/g, ' ').trim(), 'The vital point, a key shape, and A1.');
 });
 
+/* The board caption renders a comment's markdown, and sits the comment on its own line
+   (a block) so it falls below the verdict, hint or notes rather than beside them. */
+await scenario('the board caption renders markdown and puts the comment on its own line', {
+	files: { 'C.md': '# Note\n\n```kifu\n(;GM[1]SZ[9];B[ee]C[A **bold** note.])\n```\n' }, panes: [{ path: 'C.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	await sleep(300);
+	const comment = page.locator('.kifu-comment');
+	assert.equal(await comment.locator('strong').textContent(), 'bold'); // markdown rendered
+	assert.equal(await comment.evaluate((e) => getComputedStyle(e).display), 'block'); // its own line
+	assert.equal((await comment.textContent()).trim(), 'A bold note.');
+});
+
 await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	// the command creates the panel; it starts empty
 	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());

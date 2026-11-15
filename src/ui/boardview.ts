@@ -1,13 +1,13 @@
 /** One rendered board block: the drawing, the lock, the caption and (while editing) the tools. */
 
-import { MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
+import { Component, MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
 import type KifuPlugin from '../main';
 import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
 import type { Model, Session, SessionView, Tool } from '../session';
 import { getMove } from '../sgf';
 import { BoardSvg, MarkGhost, bandPixels } from './boardsvg';
-import { clear, el, icon, iconButton, setIcon } from './dom';
+import { clear, el, icon, iconButton, renderComment, setIcon } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
 
 const TOOLS: [Tool, string, string][] = [
@@ -75,6 +75,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	 */
 	#ctl: Ctl | null = null;
 	#cap: HTMLElement;
+	/** The caption's rendered-markdown comment, its element and the text it was rendered from. */
+	#capComment: Component | null = null;
+	#capCommentEl: HTMLElement | null = null;
+	#capText: string | null = null;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
 	#toolBtns = new Map<string, HTMLButtonElement>();
@@ -586,7 +590,24 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (n.atColor) stone(s, n.atColor, n.at);
 			else s.appendChild(doc.createTextNode(n.at));
 		}
-		if (m.text) el(cap, 'span', 'kifu-comment', m.text);
+		// the comment: on its own line below the verdict, with any markdown rendered. The
+		// rendered node is kept and re-used while the text is unchanged (a board is redrawn
+		// often), so the markdown is only rendered again when the comment itself changes.
+		if (m.text && m.text === this.#capText && this.#capCommentEl) {
+			cap.appendChild(this.#capCommentEl);
+		} else {
+			if (this.#capComment) {
+				this.removeChild(this.#capComment);
+				this.#capComment = null;
+			}
+			this.#capCommentEl = null;
+			this.#capText = m.text || null;
+			if (m.text) {
+				const span = el(cap, 'span', 'kifu-comment');
+				this.#capCommentEl = span;
+				this.#capComment = renderComment(this.#plugin.app, this, span, m.text, this.session?.notePath ?? '');
+			}
+		}
 		cap.hidden = !cap.firstChild;
 	}
 
