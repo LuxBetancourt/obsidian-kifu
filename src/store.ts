@@ -298,6 +298,45 @@ export function editorTexts(app: App, path: string): string[] {
 	return editors(app, path).map((v) => v.editor.getValue());
 }
 
+/**
+ * Rewrite some of a note's blocks: `fix` gives a block's new body, or null to leave it.
+ * Written the way a board writes its own block: through an editor that has the note open
+ * (its text, which may be ahead of the file, is the one to change, and the page must not
+ * move), straight into the file otherwise. Blocks go from the bottom up, so the lines of
+ * those above stay where they are. Returns whether anything was written.
+ */
+export async function rewriteBlocks(app: App, file: TFile, fix: (body: string) => string | null): Promise<boolean> {
+	const view = editors(app, file.path)[0];
+	if (view) {
+		const note = read(view.editor.getValue());
+		let changed = false;
+		for (let k = note.blocks.length - 1; k >= 0; k--) {
+			const b = note.blocks[k];
+			const next = fix(b.body);
+			if (next === null || next === b.body) continue;
+			const body = bodyLines(b, next);
+			replaceLines(view, b.open + 1, b.close, body.length ? body.join('\n') + '\n' : '');
+			changed = true;
+		}
+		return changed;
+	}
+	const apply = (text: string): string => {
+		const note = read(text);
+		let out = text;
+		for (let k = note.blocks.length - 1; k >= 0; k--) {
+			const b = note.blocks[k];
+			const next = fix(b.body);
+			if (next !== null && next !== b.body) out = replaceBody(out, b, next);
+		}
+		return out;
+	};
+	// (a look first: a file is only written when something in it changes)
+	const now = await app.vault.cachedRead(file);
+	if (apply(now) === now) return false;
+	await app.vault.process(file, apply);
+	return true;
+}
+
 /** The text of the one block a board stands on in an open editor; null when no editor can tell. */
 export function blockUnder(app: App, path: string, el: Element): string | null {
 	for (const view of editors(app, path)) {

@@ -76,7 +76,7 @@ Two things worth knowing:
 - If you have been playing on a locked board and then unlock it, you are asked what to do with the moves you played: **Save** them (the line on the board becomes part of the tree; undo takes it out again), or **Discard** them and edit the board as it was. Close the prompt to leave the board locked.
 - Locking puts the board back to the position the note shows.
 
-Comments are written in the **move tree** panel (see below).
+Comments are written in the **move tree** panel (see below). A link in one, like `[[a note]]`, follows that note when it is renamed or moved: Obsidian does not reach into code blocks, so the plugin does, in every note and `.sgf` file. (Not when **Settings → Files and links → Automatically update internal links** is off.)
 
 ## Problems
 
@@ -160,7 +160,7 @@ game: 12
 ```
 ````
 
-- `sgf:` takes a wikilink, a file name, or a path from the vault root or the note's folder. The command **Kifu: Insert board from an SGF file**, or **Kifu → Display SGF file…** in the editor's right-click menu, lets you pick one. Only `.sgf` files are ever used: a note that happens to have the same name is left alone.
+- `sgf:` takes a wikilink, a file name, or a path from the vault root or the note's folder. The command **Kifu: Insert board from an SGF file**, or **Kifu → Display SGF file…** in the editor's right-click menu, lets you pick one. Only `.sgf` files are ever used: a note that happens to have the same name is left alone. Renaming or moving the file updates the line.
 - `game:` picks a game from a file that holds several (problem collections usually do). The first is 1.
 - Every other option works as usual, so several boards can show different moves or corners of one file.
 - Unlocking and editing such a board changes **the file**; the note keeps pointing at it. Other boards on the same file follow. If the file changes on disk (sync, another program) open boards reload.

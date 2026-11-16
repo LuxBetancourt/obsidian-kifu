@@ -666,6 +666,25 @@ test('edit: deleting the position the board opens at takes its "move:" line alon
 	assert.equal(u.hasStart, true);
 });
 
+test('relink: links in comments follow a renamed file, in the game and in what undo would bring back', () => {
+	const s = make('(;GM[1]SZ[9]C[see [[Old\\]\\]];B[ee]C[and [[Old\\]\\] again])');
+	s.setEdit(true);
+	click(s, 'cc'); // an edit, kept for undo while the link still read [[Old]]
+	const fix = (c: string) => c.replace(/\[\[Old\]\]/g, '[[New]]');
+	assert.equal(s.relink(fix, () => null), true);
+	assert.ok(s.blockBody().includes('C[see [[New\\]\\]]'));
+	assert.ok(s.blockBody().includes('C[and [[New\\]\\] again]'));
+	assert.equal(s.dirtyTree, true);
+	s.undo(); // a step back keeps the new name
+	assert.ok(!s.blockBody().includes('Old'));
+	assert.equal(s.relink(fix, () => null), false); // nothing left to change
+	// the "sgf:" line of a board whose game is kept in a file, and what a reload goes by
+	const f = make('sgf: [[old.sgf]]\nscale: 0.8');
+	assert.equal(f.relink((c) => c, (v) => (v === '[[old.sgf]]' ? '[[new.sgf]]' : null)), true);
+	assert.deepEqual(f.header, ['sgf: [[new.sgf]]', 'scale: 0.8']);
+	assert.equal(f.fileRef, '[[new.sgf]]');
+});
+
 test('"move:" can name a point: the first move of the main line played there', () => {
 	const game = '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg](;B[cc]))';
 	assert.equal(moveOf(make('move: G3\n' + game).home), 'Bgg');

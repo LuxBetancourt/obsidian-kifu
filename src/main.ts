@@ -30,7 +30,8 @@ import { ServerTarget, readDgs, readFox, readGoQuest } from './servers';
 import { OgsKind, OgsTarget, ogsApi, ogsPage, ogsTarget, readOgsGame, readOgsPuzzle } from './ogs';
 import { composeBlock, parseBlock, setOption } from './options';
 import { KifuSettingTab, sanitize } from './settings';
-import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, saveSession } from './store';
+import { Outcome, RETRY_WAITS, SaveHooks, Seen, blockUnder, editorTexts, editorsHold, evidence, loadGame, read, refreshGame, rewriteBlocks, saveSession } from './store';
+import { LinkWorld, makeRetarget, relinkBody, rewriteComments, rewriteLinks, sgfRef } from './links';
 import { JosekiTarget, fetchJoseki, josekiApi, josekiTarget } from './josekipedia';
 import { SenseisTarget, senseisDiagramUrl, senseisPage, senseisTarget, senseisTitle, tidySenseisSgf } from './senseis';
 import { WhatsNew, newsSince } from './whatsnew';
@@ -78,6 +79,9 @@ export default class KifuPlugin extends Plugin implements Host {
 	#loads = new Map<Session, Promise<void>>();
 	#watching = false;
 	#retry = 0;
+	/** Files renamed a moment ago (old path → new path): their links are seen to once the renames stop coming. */
+	#renamed = new Map<string, string>();
+	#relinkTimer = 0;
 	/** Notes that were typed in a moment ago, each with the timer that will bring its boards up to date. */
 	#carrying = new Map<string, number>();
 	/** Notes that were written to a while ago, each with the timer for one more look at their boards. */
@@ -174,6 +178,19 @@ export default class KifuPlugin extends Plugin implements Host {
 			callback: () => void this.showPanel(true),
 		});
 		this.registerEvent(this.app.workspace.on('editor-menu', (menu, editor, info) => this.#editorMenu(menu, editor, info.file?.path ?? '')));
+		// A renamed file may be linked to from inside code blocks (the comments of games, "sgf:"
+		// lines), which Obsidian does not rewrite: whether or not a board has been shown yet,
+		// those links follow it. Renames come in bursts (a folder's files one after another),
+		// so they are gathered and seen to in one go once they stop coming.
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (!(file instanceof TFile)) return;
+				this.#renamed.set(oldPath, file.path);
+				window.clearTimeout(this.#relinkTimer);
+				this.#relinkTimer = window.setTimeout(() => void this.#relink(), 300);
+			}),
+		);
+		this.register(() => window.clearTimeout(this.#relinkTimer));
 		// a folder in the file explorer: "New SGF", under "New base"
 		this.registerEvent(
 			this.app.workspace.on('file-menu', (menu, file, source) => {
@@ -1571,6 +1588,82 @@ export default class KifuPlugin extends Plugin implements Host {
 				void this.#loadFile(s);
 			}
 		}, 300);
+	}
+
+	/**
+	 * Files were renamed: point the links Obsidian does not see at their new names — in the
+	 * comments of games (in kifu blocks and .sgf files) and in "sgf:" lines, all of them
+	 * inside code blocks. Open boards are put right in memory and save the way they save
+	 * any edit; every other note and file is rewritten directly. Obsidian's own setting
+	 * holds here too: when it does not update links by itself, these are left alone.
+	 */
+	async #relink(): Promise<void> {
+		const pairs = this.#renamed;
+		this.#renamed = new Map();
+		const config = (this.app.vault as unknown as { getConfig?: (key: string) => unknown }).getConfig?.('alwaysUpdateLinks');
+		if (config === false) return;
+		const vault = this.app.vault;
+		const meta = this.app.metadataCache;
+		const renamed = new Map<string, string>();
+		for (const [from, first] of pairs) {
+			// (renamed again within the same burst: where it ended up)
+			let to = first;
+			for (let k = 0; k < pairs.size && pairs.has(to); k++) to = pairs.get(to) as string;
+			if (to !== from && vault.getAbstractFileByPath(to) instanceof TFile) renamed.set(from, to);
+		}
+		if (!renamed.size) return;
+		const world: LinkWorld = {
+			reaches: (target, source) => meta.getFirstLinkpathDest(target, source)?.path ?? null,
+			name: (path, source, keepMd) => {
+				const f = vault.getAbstractFileByPath(path);
+				return f instanceof TFile ? meta.fileToLinktext(f, source, !keepMd) : path;
+			},
+		};
+		const comments = (source: string): ((text: string) => string) => {
+			const retarget = makeRetarget(world, renamed, source);
+			return (text) => rewriteLinks(text, retarget);
+		};
+		const ref = (notePath: string): ((value: string) => string | null) => {
+			const retarget = makeRetarget(world, renamed, notePath);
+			return (value) => sgfRef(value, retarget);
+		};
+		// 1. Open boards. What they write is theirs: the direct rewriting below leaves it alone.
+		const ownFiles = new Set<string>();
+		const ownBlocks = new Map<string, string[]>();
+		for (const s of this.#sessions) {
+			if (s.gone || !s.ready) continue;
+			if (s.filePath) ownFiles.add(s.filePath);
+			ownBlocks.set(s.notePath, [...(ownBlocks.get(s.notePath) ?? []), s.body]);
+			// (a file the board will not write to, it does not get written to here either)
+			if (!s.readOnly) s.relink(comments(s.filePath ?? s.notePath), ref(s.notePath));
+		}
+		// 2. Every other note and .sgf file. A link to a renamed file has the old name in it
+		//    (spaces perhaps written %20): a file with none of them is read no further.
+		const olds = [...renamed.keys()].flatMap((p) => {
+			const name = (p.split('/').pop() ?? p).replace(/\.[^.]+$/, '').toLowerCase();
+			return [name, name.replace(/ /g, '%20')];
+		});
+		for (const file of vault.getFiles()) {
+			const ext = file.extension.toLowerCase();
+			if (ext === 'sgf' ? ownFiles.has(file.path) : ext !== 'md') continue;
+			// (a note without a code block has no kifu block in it)
+			if (ext === 'md' && meta.getFileCache(file)?.sections?.every((sec) => sec.type !== 'code')) continue;
+			try {
+				const data = await vault.cachedRead(file);
+				const low = data.toLowerCase();
+				if (!olds.some((o) => low.includes(o))) continue;
+				const fix = comments(file.path);
+				if (ext === 'sgf') {
+					if (rewriteComments(data, fix) !== data) await vault.process(file, (now) => rewriteComments(now, fix));
+				} else {
+					const mine = ownBlocks.get(file.path) ?? [];
+					const fixRef = ref(file.path);
+					await rewriteBlocks(this.app, file, (body) => (mine.includes(body) ? null : relinkBody(body, fix, fixRef)));
+				}
+			} catch (e) {
+				console.error(`Kifu: the links in ${file.path} could not be brought up to date`, e);
+			}
+		}
 	}
 
 	async #onModify(file: TAbstractFile): Promise<void> {

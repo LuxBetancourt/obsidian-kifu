@@ -1521,5 +1521,24 @@ await scenario('the caption comment is plain while editing and markdown when loc
 	assert.deepEqual(await notices(page), []);
 });
 
+/* A renamed note, linked from a note open in the editor: the board in sight puts its own comment
+   right; one far below, which nothing has drawn, is put right through the editor (not the file). */
+await scenario('links in comments follow a renamed note in a note open in the editor, a board out of sight too', {
+	files: {
+		'Target.md': '# T\n',
+		'L.md': 'intro\n\n```kifu\n(;GM[1]SZ[9]C[see [[Target\\]\\]])\n```\n\n' + filler(300) + '\n\n```kifu\n(;GM[1]SZ[9]C[far [[Target\\]\\]])\n```\n\nend\n',
+	},
+	live: ['L.md'], autosave: 150,
+}, async (page) => {
+	assert.equal(await boardCount(page), 1); // the other board is far below
+	await page.evaluate(() => { const v = window.harness.app.vault; v._rename(v.getAbstractFileByPath('Target.md'), 'Renamed.md'); });
+	await sleep(1000);
+	const d = await doc(page);
+	assert.ok(d.includes('C[see [[Renamed\\]\\]]')); // the board in sight
+	assert.ok(d.includes('C[far [[Renamed\\]\\]]')); // the one out of sight
+	assert.ok(!d.includes('Target'));
+	assert.deepEqual(await notices(page), []);
+});
+
 await browser.close();
 process.exit(report() ? 1 : 0);

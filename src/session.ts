@@ -46,6 +46,7 @@ import {
 	parsePoint,
 } from './options';
 import { Place, squash } from './blocks';
+import { relinkOptionLine, rewriteComments } from './links';
 import type { KifuSettings } from './config';
 
 export type Tool = 'play' | 'black' | 'white' | 'TR' | 'SQ' | 'CR' | 'MA' | 'label' | 'erase' | 'crop';
@@ -1524,6 +1525,41 @@ export class Session {
 			delete this.opts.move;
 		}
 		this.changed(true, dropsStart);
+	}
+
+	/**
+	 * Point the links in this game's comments, and the "sgf:" line naming the file the game
+	 * is kept in, at files that were renamed: `fix` gives a comment's new text, `ref` the
+	 * "sgf:" value's new form (null: unchanged). The steps kept for undo and redo are mended
+	 * the same way, so a step back never brings a broken link back; this is no undo step of
+	 * its own. Returns whether anything changed, which is then saved like any edit.
+	 */
+	relink(fix: (comment: string) => string, ref: (value: string) => string | null): boolean {
+		let tree = false;
+		eachNode(this.root, (n) => {
+			const v = n.props.C;
+			if (!v?.length) return;
+			const plain = unescapeText(v[0]);
+			const next = fix(plain);
+			if (next === plain) return;
+			setText(n, 'C', next);
+			tree = true;
+		});
+		const was = this.opts.sgf;
+		const now = was ? ref(was) : null;
+		const header = now !== null && now !== was;
+		if (header) {
+			this.header = this.header.map((line) => relinkOptionLine(line, ref));
+			this.opts.sgf = now;
+			this.fileRef = now; // (what a reload goes by to find the file)
+		}
+		if (!tree && !header) return false;
+		for (const s of [...this.undoStack, ...this.redoStack]) {
+			if (s.sgf !== null) s.sgf = rewriteComments(s.sgf, fix);
+			s.header = s.header.map((line) => relinkOptionLine(line, ref));
+		}
+		this.changed(tree, header, false);
+		return true;
 	}
 
 	/** Can the current variation move up a place? */

@@ -732,6 +732,72 @@ await scenario('on a touch tablet that claims it can hover, the board controls s
 	assert.equal(await back.evaluate((e) => !e.hidden), true); // the step-back control is there
 });
 
+/* A note that comments link to is renamed. Obsidian does not rewrite links inside code blocks,
+   so the plugin does: in a board that is open (put right in memory, saved like any edit), in a
+   note that is not open, and in an .sgf file. Text outside kifu blocks is Obsidian's, not ours. */
+const rename = (page, from, to) => page.evaluate(([from, to]) => { const v = window.harness.app.vault; v._rename(v.getAbstractFileByPath(from), to); }, [from, to]);
+await scenario('links in comments follow a renamed note: an open board, a closed note and an .sgf file', {
+	files: {
+		'Target.md': '# Target\n',
+		'Open.md': '# Open\n\n```kifu\n(;GM[1]SZ[9]C[see [[Target\\]\\]];B[ee])\n```\n',
+		'Closed.md': '# Closed\n\n```kifu\n(;GM[1]SZ[9];B[cc]C[also [[Target#Ladder\\]\\]])\n```\n\nprose [[Target]]\n',
+		'game.sgf': '(;GM[1]SZ[9]C[more [[Target\\]\\]];W[dd])',
+		'Other.md': '# Other\n\n```kifu\n(;GM[1]SZ[9]C[[[Elsewhere\\]\\]])\n```\n',
+	},
+	panes: [{ path: 'Open.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	await sleep(300);
+	await rename(page, 'Target.md', 'Studies/Renamed.md');
+	await sleep(900);
+	assert.ok((await text(page, 'Open.md')).includes('C[see [[Renamed\\]\\]]')); // the open board
+	const closed = await text(page, 'Closed.md');
+	assert.ok(closed.includes('C[also [[Renamed#Ladder\\]\\]]')); // a closed note, heading kept
+	assert.ok(closed.includes('prose [[Target]]')); // (outside the block: Obsidian's to rewrite)
+	assert.equal(await text(page, 'game.sgf'), '(;GM[1]SZ[9]C[more [[Renamed\\]\\]];W[dd])');
+	assert.ok((await text(page, 'Other.md')).includes('[[Elsewhere\\]\\]')); // another link, untouched
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('a board still finds its .sgf file after the file is renamed: its "sgf:" line follows', {
+	files: { 'Note.md': '# Note\n\n```kifu\nsgf: [[game.sgf]]\n```\n', 'game.sgf': '(;GM[1]SZ[9];B[ee];W[cc])' },
+	panes: [{ path: 'Note.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	await sleep(400);
+	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+	await rename(page, 'game.sgf', 'games/match.sgf');
+	await sleep(900);
+	assert.ok((await text(page, 'Note.md')).includes('sgf: [[match.sgf]]'));
+	assert.deepEqual(await stones(page), { black: 1, white: 1 });
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('with "Automatically update internal links" off, links in comments are left alone', {
+	files: { 'Target.md': '# T\n', 'Closed.md': '```kifu\n(;GM[1]C[see [[Target\\]\\]])\n```\n', 'Open.md': '# Open\n' },
+	panes: [{ path: 'Open.md', mode: 'preview' }],
+}, async (page) => {
+	await page.evaluate(() => { window.harness.app.vault._config.alwaysUpdateLinks = false; });
+	await rename(page, 'Target.md', 'Renamed.md');
+	await sleep(800);
+	assert.ok((await text(page, 'Closed.md')).includes('[[Target\\]\\]'));
+});
+
+await scenario('a folder renamed is a burst of renames, one per file: seen to in one go, one write per note', {
+	files: {
+		'Old/A.md': '# A\n', 'Old/B.md': '# B\n', 'Open.md': '# Open\n',
+		'Refs.md': '```kifu\n(;GM[1]C[[[Old/A\\]\\] and [[Old/B\\]\\] and [[A\\]\\]])\n```\n',
+	},
+	panes: [{ path: 'Open.md', mode: 'preview' }],
+}, async (page) => {
+	await page.evaluate(() => {
+		const v = window.harness.app.vault;
+		for (const n of ['A', 'B']) v._rename(v.getAbstractFileByPath(`Old/${n}.md`), `New/${n}.md`);
+	});
+	await sleep(800);
+	// (a short link that still finds its note is left as it is)
+	assert.ok((await text(page, 'Refs.md')).includes('C[[[A\\]\\] and [[B\\]\\] and [[A\\]\\]]'));
+	assert.equal(await page.evaluate(() => window.harness.app.vault.writes.filter((w) => w.path === 'Refs.md').length), 1);
+});
+
 await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	// the command creates the panel; it starts empty
 	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());
@@ -2292,7 +2358,8 @@ await scenario('the note and its SGF file are renamed while edits are waiting to
 	});
 	await sleep(900);
 	assert.equal(await text(page, 'games/h.sgf'), '(;GM[1]SZ[9]AB[cc][ee])');
-	assert.equal(await text(page, 'Z.md'), '```kifu\nsgf: g.sgf\n```\n\n```kifu\n(;SZ[9]AB[dd][ee])\n```\n');
+	// (the "sgf:" line follows its file, so the board finds it again when the note is next opened)
+	assert.equal(await text(page, 'Z.md'), '```kifu\nsgf: h.sgf\n```\n\n```kifu\n(;SZ[9]AB[dd][ee])\n```\n');
 	assert.deepEqual(await notices(page), []);
 });
 

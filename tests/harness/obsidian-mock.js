@@ -91,7 +91,10 @@
 			super(); this.files = new Map(); this.binary = new Map(); this.writes = [];
 			// (files outside the vault's notes, such as a plugin's data.json, are answered by _outside)
 			this.adapter = { exists: async (path) => this._outside?.(path) ?? this.files.has(path) };
+			// (the app's own settings, as Obsidian keeps them; a scenario may change them)
+			this._config = { alwaysUpdateLinks: true };
 		}
+		getConfig(key) { return this._config[key]; }
 		_add(path, data, bytes) { const f = new TFile(path); this.files.set(path, { file: f, data }); if (bytes) this.binary.set(path, bytes); return f; }
 		getAbstractFileByPath(p) { return this.files.get(p)?.file ?? null; }
 		getFileByPath(p) { return this.getAbstractFileByPath(p); }
@@ -124,6 +127,7 @@
 		_rename(f, to) {
 			const old = f.path; const e = this.files.get(old); this.files.delete(old);
 			f.path = to; f.name = to.split('/').pop(); this.files.set(to, e);
+			const i = f.name.lastIndexOf('.'); f.extension = i < 0 ? '' : f.name.slice(i + 1); f.basename = i < 0 ? f.name : f.name.slice(0, i);
 			this.trigger('rename', f, old);
 		}
 	}
@@ -133,13 +137,21 @@
 		getFirstLinkpathDest(link, _source) {
 			const want = normalizePath(link);
 			const all = this.vault.getFiles();
+			const low = want.toLowerCase();
 			return all.find((f) => f.path === want) ?? all.find((f) => f.path === want + '.md')
-				?? all.find((f) => f.name === want) ?? all.find((f) => f.path.endsWith('/' + want)) ?? null;
+				?? all.find((f) => f.name === want) ?? all.find((f) => f.path.endsWith('/' + want))
+				// (as Obsidian does: case does not matter, and a note's bare name finds it in any folder)
+				?? all.find((f) => f.path.toLowerCase() === low || f.path.toLowerCase() === low + '.md')
+				?? all.find((f) => f.extension === 'md' && (f.basename.toLowerCase() === low || f.path.toLowerCase().endsWith('/' + low + '.md')))
+				?? null;
 		}
-		fileToLinktext(file) {
+		fileToLinktext(file, _source, omitMdExtension = true) {
 			const same = this.vault.getFiles().filter((f) => f.name === file.name);
-			return same.length > 1 ? file.path : file.name;
+			const text = same.length > 1 ? file.path : file.name;
+			return omitMdExtension && file.extension === 'md' ? text.replace(/\.md$/, '') : text;
 		}
+		// (no cached sections here: whoever asks reads the file itself)
+		getFileCache(_file) { return null; }
 	}
 
 	/* ---------------------------------------------------------------- markdown */
