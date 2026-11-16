@@ -614,6 +614,58 @@ test('edit: after passes, the stone that can be moved is the last one played bef
 	assert.equal(p.moveCurrent(0, 0), false);
 });
 
+test('edit: underStone reports a stone set up under the draggable move', () => {
+	// the root sets white on dd; a later move claims the same point (as an imported file can).
+	// The white stone is what shows when the move's stone is dragged away.
+	const s = make('(;GM[1]SZ[9]AW[dd];B[dd])');
+	s.goto(s.root.children[0]);
+	assert.equal(moveOf(s.cur), 'Bdd');
+	assert.equal(s.underStone(), 2); // white, under the move
+	// an ordinary move on an empty point has nothing under it
+	const n = make('(;GM[1]SZ[9];B[ee])');
+	n.goto(n.root.children[0]);
+	assert.equal(n.underStone(), 0);
+});
+
+test('edit: deleting the position the board opens at takes its "move:" line along', () => {
+	const game = '(;GM[1]SZ[9];B[cc];W[dd];B[ee];W[ff])';
+	const noMove = (s: Session) => !s.header.some((l) => /^move:/i.test(l));
+	const s = make('move: 2\n' + game);
+	s.setEdit(true);
+	assert.equal(moveOf(s.home), 'Wdd'); // the flag: the board opens at move 2
+	s.goto(s.home);
+	s.deleteNode(); // the trash button, at the start
+	assert.equal(s.hasStart, false);
+	assert.ok(noMove(s));
+	// one undo step brings the moves and the flag back together
+	s.undo();
+	assert.equal(s.hasStart, true);
+	assert.equal(moveOf(s.home), 'Wdd');
+	// deleting from before the start takes it along too, and a sequence built afterwards
+	// is not picked out by a leftover move number
+	s.goto(s.root.children[0]); // B[cc]
+	s.deleteNode();
+	assert.equal(s.hasStart, false);
+	click(s, 'gg');
+	click(s, 'hh');
+	click(s, 'ee');
+	assert.equal(s.hasStart, false);
+	assert.ok(noMove(s));
+	// deleting a move after the start keeps the flag where it was
+	const t = make('move: 2\n' + game);
+	t.setEdit(true);
+	t.goto(t.home.children[0]); // B[ee], after the start
+	t.deleteNode();
+	assert.equal(t.hasStart, true);
+	assert.equal(moveOf(t.home), 'Wdd');
+	// and "move: end" names no position, so it stays
+	const u = make('move: end\n' + game);
+	u.setEdit(true);
+	u.goto(u.home);
+	u.deleteNode();
+	assert.equal(u.hasStart, true);
+});
+
 test('"move:" can name a point: the first move of the main line played there', () => {
 	const game = '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[cg](;B[cc]))';
 	assert.equal(moveOf(make('move: G3\n' + game).home), 'Bgg');

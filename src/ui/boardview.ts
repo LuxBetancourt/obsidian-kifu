@@ -18,10 +18,13 @@ const TOOLS: [Tool, string, string][] = [
 	['SQ', 'SQ', 'Square'],
 	['CR', 'CR', 'Circle'],
 	['MA', 'MA', 'Cross'],
-	['label', 'label', 'Letter or number'],
+	['label', 'label', 'Letter or number (click the tool again to switch a / A / 1)'],
 	['erase', 'erase', 'Eraser'],
 	['crop', 'crop', 'Choose the part of the board to show (drag; double-click or double-tap for the default)'],
 ];
+
+/** The tools a click-drag paints a run of points with: play alternates and crop drags out a box, so not those. */
+const PAINT_TOOLS = new Set<Tool>(['black', 'white', 'TR', 'SQ', 'CR', 'MA', 'label', 'erase']);
 
 /** Events that stay inside a board (see the constructor). */
 const CONTAINED = [
@@ -54,7 +57,9 @@ interface Ctl {
 /** Is this a touch screen, with nothing to hover? (Asked once: the screen does not change.) */
 let hoverless: boolean | null = null;
 function noHover(win: Window): boolean {
-	return (hoverless ??= win.matchMedia('(hover: none)').matches);
+	// (hover: none) catches phones and most tablets; (pointer: coarse) also catches an iPad whose
+	// Safari, in its desktop-class mode, claims it can hover though a finger is all there is.
+	return (hoverless ??= win.matchMedia('(hover: none)').matches || win.matchMedia('(pointer: coarse)').matches);
 }
 
 // Members are #private throughout: this class extends one of Obsidian's, and a
@@ -79,15 +84,19 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#capComment: Component | null = null;
 	#capCommentEl: HTMLElement | null = null;
 	#capText: string | null = null;
+	/** Whether the cached caption comment was built plain (editing) rather than as markdown (locked). */
+	#capEditing = false;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
 	#toolBtns = new Map<string, HTMLButtonElement>();
 	#labelInput: HTMLInputElement | null = null;
 	#drag: [number, number] | null = null;
 	/** The current move's stone being dragged to another point: where from, where to, and whether it has left its point. */
-	#stoneDrag: { from: [number, number]; to: [number, number]; color: number; moved: boolean; touch: boolean } | null = null;
+	#stoneDrag: { from: [number, number]; to: [number, number]; color: number; moved: boolean; touch: boolean; under: number } | null = null;
 	/** A click that follows a drag of the stone is part of the drag, not a click of its own. */
 	#noClickUntil = 0;
+	/** A press with an edit tool that may grow into a drag that paints: where it began, the last point painted, and whether it has become a drag. */
+	#paint: { down: [number, number]; last: [number, number]; began: boolean } | null = null;
 	/** When the last plain tap with the crop tool ended, and when a double tap last reset the crop. */
 	#lastTap = 0;
 	#tapReset = 0;
@@ -191,6 +200,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		svgEl.addEventListener('pointercancel', () => {
 			this.#endDrag();
 			this.#endStoneDrag();
+			if (this.#paint) {
+				this.session?.endStroke();
+				this.#paint = null;
+			}
 		});
 		// On a touch screen a finger that starts on the stone that can be dragged drags it
 		// rather than scrolling the note (anywhere else, it scrolls as usual).
@@ -482,10 +495,13 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const readOnly = this.readOnlyPane();
 		const away = s.edit && readOnly;
 		const editing = s.edit && !away;
+		// on a touch screen the lock and its buttons are always faintly shown (see noHover and the CSS)
+		const touch = noHover(root.ownerDocument.defaultView ?? window);
 		root.className =
 			`kifu kifu-${style} kifu-${align}` +
 			(editing ? ' is-editing' : '') +
 			(editing && s.tool === 'crop' ? ' is-crop' : '') +
+			(touch ? ' kifu-touch' : '') +
 			(this.#keyFocus ? ' is-keyfocus' : '');
 
 		// (a randomized board is drawn turned and recoloured; the session itself knows nothing of it)
@@ -504,7 +520,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// screen (nothing hovers; they are always faintly shown) as soon as one is due, once
 		// the board is on the page and which pane it is in can be told. Otherwise they wait
 		// for the pointer or the keyboard to come to the board.
-		if (!this.#ctl && (editing || (root.isConnected && noHover(root.ownerDocument.defaultView ?? window) && this.#buttonDue(s, readOnly, away, editing)))) this.#buildCtl();
+		if (!this.#ctl && (editing || (root.isConnected && touch && this.#buttonDue(s, readOnly, away, editing)))) this.#buildCtl();
 		if (this.#ctl) this.#updateCtl(this.#ctl, s, readOnly, away, editing);
 
 		// (an answer that was shown rather than found gets no stamp: the caption says enough)
@@ -590,10 +606,14 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (n.atColor) stone(s, n.atColor, n.at);
 			else s.appendChild(doc.createTextNode(n.at));
 		}
-		// the comment: on its own line below the verdict, with any markdown rendered. The
-		// rendered node is kept and re-used while the text is unchanged (a board is redrawn
-		// often), so the markdown is only rendered again when the comment itself changes.
-		if (m.text && m.text === this.#capText && this.#capCommentEl) {
+		// the comment: on its own line below the verdict. When the board is locked its markdown
+		// is rendered; while editing it is plain text, because the comment is set on every
+		// keystroke as you type in the panel, and rendering markdown each time cleared and
+		// refilled the caption, jittering the board's height (the panel's edit box is plain for
+		// the same reason). The rendered node is kept and re-used while the text and the
+		// edit/locked state are unchanged (a board is redrawn often).
+		const editing = this.session?.edit ?? false;
+		if (m.text && m.text === this.#capText && this.#capEditing === editing && this.#capCommentEl) {
 			cap.appendChild(this.#capCommentEl);
 		} else {
 			if (this.#capComment) {
@@ -602,10 +622,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			}
 			this.#capCommentEl = null;
 			this.#capText = m.text || null;
+			this.#capEditing = editing;
 			if (m.text) {
 				const span = el(cap, 'span', 'kifu-comment');
 				this.#capCommentEl = span;
-				this.#capComment = renderComment(this.#plugin.app, this, span, m.text, this.session?.notePath ?? '');
+				if (editing) span.textContent = m.text;
+				else this.#capComment = renderComment(this.#plugin.app, this, span, m.text, this.session?.notePath ?? '');
 			}
 		}
 		cap.hidden = !cap.firstChild;
@@ -619,6 +641,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (tool === 'TR' || tool === 'crop') group = el(bar, 'div', 'kifu-group');
 			const b = iconButton(group, ic, title, () => {
 				if (tool === 'play' && s.tool === 'play') s.togglePlayer();
+				else if (tool === 'label' && s.tool === 'label') s.cycleLabelStyle();
 				else s.setTool(tool);
 			});
 			this.#toolBtns.set(tool, b);
@@ -796,7 +819,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		}
 		const grid = m.grid.slice();
 		grid[b] = grid[a];
-		grid[a] = 0;
+		// reveal whatever sits under the lifted stone in the SGF (usually nothing)
+		grid[a] = this.#stoneDrag?.under ?? 0;
 		const labels = new Map(m.labels);
 		const text = labels.get(a);
 		if (text !== undefined) {
@@ -824,9 +848,18 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#onDown(ev: PointerEvent): void {
 		if (ev.button === 0 && !this.#cropping() && this.#onCurrentStone(ev.clientX, ev.clientY)) {
 			const st = this.#currentStone() as { x: number; y: number; color: number };
-			this.#stoneDrag = { from: [st.x, st.y], to: [st.x, st.y], color: st.color, moved: false, touch: ev.pointerType !== 'mouse' };
+			this.#stoneDrag = { from: [st.x, st.y], to: [st.x, st.y], color: st.color, moved: false, touch: ev.pointerType !== 'mouse', under: this.session?.underStone() ?? 0 };
 			this.#board.el.setPointerCapture(ev.pointerId);
 			return;
+		}
+		// an edit tool (not play, not crop): the press may stay a click or grow into a drag that paints
+		const s = this.session;
+		if (s && s.edit && ev.button === 0 && PAINT_TOOLS.has(s.tool)) {
+			const p = this.#board.pointAt(ev.clientX, ev.clientY);
+			if (p) {
+				this.#paint = { down: p, last: p, began: false };
+				return;
+			}
 		}
 		if (!this.#cropping() || ev.button !== 0) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
@@ -839,6 +872,21 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#onMove(ev: PointerEvent): void {
 		const s = this.session;
 		if (!s || !s.ready) return;
+		if (this.#paint) {
+			const p = this.#board.pointAt(ev.clientX, ev.clientY);
+			if (p && (p[0] !== this.#paint.last[0] || p[1] !== this.#paint.last[1])) {
+				if (!this.#paint.began) {
+					// the press has become a drag: take over the pointer, open one undo step, paint where it began
+					this.#paint.began = true;
+					this.#board.el.setPointerCapture(ev.pointerId);
+					s.startStroke();
+					this.#paintAt(s, this.#paint.down);
+				}
+				this.#paintAt(s, p);
+				this.#paint.last = p;
+			}
+			return;
+		}
 		const sd = this.#stoneDrag;
 		if (sd) {
 			const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
@@ -881,6 +929,21 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#onUp(ev: PointerEvent): void {
 		const s = this.session;
+		if (this.#paint) {
+			const began = this.#paint.began;
+			this.#paint = null;
+			if (began) {
+				s?.endStroke();
+				this.#noClickUntil = Date.now() + 400;
+				try {
+					this.#board.el.releasePointerCapture(ev.pointerId);
+				} catch {
+					// the pointer was not captured
+				}
+			}
+			// a plain press that never became a drag falls through to the click event, which toggles
+			return;
+		}
 		const sd = this.#stoneDrag;
 		if (sd) {
 			this.#endStoneDrag();
@@ -925,5 +988,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#endDrag(): void {
 		this.#drag = null;
 		this.#board.setSelection(null);
+	}
+
+	#paintAt(s: Session, p: [number, number]): void {
+		s.paint(...this.#toGame(s, p));
 	}
 }

@@ -231,16 +231,16 @@ body .kifu-panel button.kifu-btn[hidden] {
 	transition: opacity 0.12s ease;
 }
 
+/* a touch screen (nothing to hover): the buttons are always faintly shown. The class is set
+   from script (see noHover), so an iPad whose Safari claims it can hover is covered too. */
+.kifu-touch .kifu-ctl {
+	opacity: 0.5;
+}
+
 .kifu:hover .kifu-ctl,
 .kifu-ctl:focus-within,
 .kifu.is-editing .kifu-ctl {
 	opacity: 1;
-}
-
-@media (hover: none) {
-	.kifu-ctl {
-		opacity: 0.5;
-	}
 }
 
 /* (body and button: more specific than Obsidian's own button rules, which on a
@@ -335,9 +335,7 @@ body .kifu-panel button.kifu-btn {
 
 .kifu-cap {
 	max-width: 100%;
-	max-height: 9em;
 	margin-top: 6px;
-	overflow-y: auto;
 	color: var(--text-muted);
 	font-size: var(--font-smaller, 0.875em);
 	line-height: 1.45;
@@ -850,7 +848,9 @@ body .kifu-panel button.kifu-btn {
 .kifu-p-foot {
 	flex: none;
 	max-height: 50%;
-	padding: 8px 12px 12px;
+	/* the extra bottom room keeps the comment box clear of the desktop status bar, which
+	   overlaps the bottom of the right sidebar (there is no status bar on mobile) */
+	padding: 8px 12px 30px;
 	overflow-y: auto;
 	border-top: 1px solid var(--background-modifier-border);
 }

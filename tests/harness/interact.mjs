@@ -698,6 +698,40 @@ await scenario('the board caption renders markdown and puts the comment on its o
 	assert.equal((await comment.textContent()).trim(), 'A bold note.');
 });
 
+/* A long comment under the board is shown in full. The caption used to be a short scroll box
+   (max-height), which clipped a long comment; now it grows to fit and the note scrolls instead. */
+const LONG =
+	'Black correctly pushes through and cuts, then captures one stone to make a good combination with the marked stones. ' +
+	'The cut can also start a running fight if Black plays elsewhere first. After White defends, White has a strong shape ' +
+	'with no immediate targets, since Black has neither a ladder nor a net available, and the whole left side has quietly ' +
+	"become Black's sphere of influence in exchange for the single captured stone.";
+await scenario('a long comment under the board is shown in full, not cut off', {
+	files: { 'LC.md': '# Note\n\n```kifu\n(;GM[1]SZ[9];B[ee]C[' + LONG + '])\n```\n' }, panes: [{ path: 'LC.md', mode: 'preview' }], autosave: 100,
+}, async (page) => {
+	await sleep(300);
+	const capEl = page.locator('.kifu-cap');
+	assert.equal((await capEl.textContent()).includes('captured stone.'), true); // the whole comment is there
+	assert.equal(await capEl.evaluate((e) => getComputedStyle(e).maxHeight), 'none'); // not a fixed-height box
+	assert.equal(await capEl.evaluate((e) => e.scrollHeight <= e.clientHeight + 1), true); // nothing clipped or scrolled away
+});
+
+/* An iPad in Safari's desktop-class mode reports that it can hover, though a finger is all it
+   has. The lock and the step controls must still appear on a touch tablet, without a hover. */
+await scenario('on a touch tablet that claims it can hover, the board controls still appear', {
+	files: { 'IPAD.md': '# Note\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[ce])\n```\n' }, panes: [{ path: 'IPAD.md', mode: 'preview' }],
+	media: { '(hover: none)': false, '(pointer: coarse)': true },
+}, async (page) => {
+	await sleep(200);
+	await clickPoint(page, 0, 'gg'); // play a move on the locked board, so stepping back is possible
+	await page.mouse.move(4, 4); // off the board, so it is not a mouse hover that reveals the strip
+	await sleep(300);
+	const ctl = page.locator('.kifu-ctl');
+	assert.equal(await ctl.count(), 1); // the strip was built though nothing hovered
+	assert.equal(await ctl.evaluate((e) => getComputedStyle(e).opacity), '0.5'); // and it is shown
+	const back = page.locator('.kifu-ctl .kifu-btn[aria-label^="Take back"]');
+	assert.equal(await back.evaluate((e) => !e.hidden), true); // the step-back control is there
+});
+
 await scenario('move tree panel', { files: { 'P.md': problemNote }, panes: [{ path: 'P.md', mode: 'source' }], autosave: 100 }, async (page) => {
 	// the command creates the panel; it starts empty
 	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());

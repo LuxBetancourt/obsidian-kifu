@@ -217,6 +217,8 @@ export class Session {
 	edit = false;
 	tool: Tool = 'play';
 	nextLabel = 'a';
+	/** True once a click-drag paint stroke has taken its single undo snapshot (see paint()). */
+	private strokeOpen = false;
 	/** The solver asked to see the saved lines of this problem. */
 	reveal = false;
 	/** The end of the answer, when the solver asked to be shown it (rather than finding it). */
@@ -1191,6 +1193,14 @@ export class Session {
 		this.emit();
 	}
 
+	/** Click the label tool while it is already chosen to cycle its series: a… → A… → 1… → a…. */
+	cycleLabelStyle(): void {
+		if (!this.edit) return;
+		this.nextLabel = /^\d+$/.test(this.nextLabel) ? 'a' : /^[A-Z]$/.test(this.nextLabel) ? '1' : 'A';
+		this.nextLabel = this.freeLabel();
+		this.emit();
+	}
+
 	/** First label of the current series that is not on the board yet. */
 	private freeLabel(): string {
 		const used = new Set((this.cur.props.LB ?? []).map((v) => unescapeText(v.slice(3))));
@@ -1266,6 +1276,76 @@ export class Session {
 		}
 	}
 
+	/**
+	 * Begin a click-drag paint stroke: the run of paint() calls that follows shares one undo
+	 * step. The snapshot is taken on the first point that actually changes, so a stroke that
+	 * paints nothing (every point already as the tool would leave it) adds no undo step.
+	 */
+	startStroke(): void {
+		this.strokeOpen = false;
+	}
+
+	endStroke(): void {
+		this.strokeOpen = false;
+	}
+
+	/**
+	 * While editing: apply the current tool at a point as one dab of a click-drag stroke. Unlike
+	 * a click it places rather than toggles, so a drag paints a run of points (the black tool
+	 * dragged over a black stone leaves it black). Labels fill free points only; play never paints.
+	 */
+	paint(x: number, y: number): void {
+		if (!this.edit) return;
+		if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+		const i = y * this.w + x;
+		const pt = xy2pt(x, y);
+		const cur = this.cur;
+		const board = this.position().board;
+		const commit = (): void => {
+			if (!this.strokeOpen) {
+				this.snapshot();
+				this.strokeOpen = true;
+			}
+		};
+		switch (this.tool) {
+			case 'black':
+			case 'white': {
+				const c = this.tool === 'black' ? BLACK : WHITE;
+				if (board.g[i] === c) return; // already that colour
+				commit();
+				this.setStone(i, pt, c);
+				this.changed(true);
+				return;
+			}
+			case 'TR':
+			case 'SQ':
+			case 'CR':
+			case 'MA': {
+				if (points(cur.props[this.tool]).includes(pt)) return; // already has this mark
+				commit();
+				this.clearMarks(pt);
+				addPoint(cur, this.tool, pt);
+				this.changed(true);
+				return;
+			}
+			case 'label': {
+				if (this.marked(pt) || !this.nextLabel) return; // leave what is there; free points only
+				commit();
+				addPoint(cur, 'LB', pt + ':' + escapeText(this.nextLabel).replace(/:/g, '\\:'));
+				this.nextLabel = bumpLabel(this.nextLabel);
+				this.changed(true);
+				return;
+			}
+			case 'erase': {
+				if (!this.marked(pt) && !board.g[i]) return;
+				commit();
+				if (!this.clearMarks(pt)) this.setStone(i, pt, 0);
+				this.changed(true);
+				return;
+			}
+		}
+	}
+
 	private clearMarks(pt: string): boolean {
 		let any = false;
 		for (const id of MARKS) if (removePoint(this.cur, id, pt)) any = true;
@@ -1294,6 +1374,30 @@ export class Session {
 		while (n && getMove(n, this.w, this.h)?.pass) n = n.parent;
 		const m = n ? getMove(n, this.w, this.h) : null;
 		return n && m && !m.pass ? n : null;
+	}
+
+	/**
+	 * The stone left showing at the draggable move's point when that stone is lifted during a
+	 * drag: the position before the move, with this node's own setup stones applied, read at
+	 * the move's point. So a stone sitting under the move in the SGF (a setup stone on the same
+	 * point) becomes visible while the move's stone is dragged away. 0 when nothing is under it.
+	 */
+	underStone(): number {
+		const n = this.draggable;
+		const m = n ? getMove(n, this.w, this.h) : null;
+		if (!n || !m || m.pass || !n.parent) return 0;
+		const g = replay(pathTo(n.parent), this.w, this.h).board.g.slice();
+		const put = (id: string, c: number): void => {
+			for (const pt of points(n.props[id])) {
+				const x = coord(pt.charCodeAt(0));
+				const y = coord(pt.charCodeAt(1));
+				if (x >= 0 && y >= 0 && x < this.w && y < this.h) g[y * this.w + x] = c;
+			}
+		};
+		put('AE', 0);
+		put('AB', BLACK);
+		put('AW', WHITE);
+		return g[m.y * this.w + m.x];
 	}
 
 	/**
@@ -1404,10 +1508,22 @@ export class Session {
 	deleteNode(): void {
 		const p = this.cur.parent;
 		if (!p) return;
-		this.snapshot();
+		// A "move:" line that opens the board on a position being deleted (this one, or one
+		// after it) goes with it. Left behind, its number would pick out whatever position
+		// comes to stand there in a sequence built later, and the flag would seem to come
+		// back. ("move: end" names no position, so it stays.)
+		let dropsStart = false;
+		if (this.hasStart && !/^(last|end)$/i.test((this.opts.move ?? '').trim())) {
+			for (let a: SgfNode | null = this.home; a; a = a.parent) if (a === this.cur) dropsStart = true;
+		}
+		this.snapshot(); // (the tree and the option lines, so one undo brings both back)
 		p.children.splice(p.children.indexOf(this.cur), 1);
 		this.cur = p;
-		this.changed(true);
+		if (dropsStart) {
+			this.header = setOption(this.header, 'move', null);
+			delete this.opts.move;
+		}
+		this.changed(true, dropsStart);
 	}
 
 	/** Can the current variation move up a place? */

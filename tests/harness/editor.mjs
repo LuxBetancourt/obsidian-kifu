@@ -3,7 +3,7 @@
 // with the stand-in's switch both ways.
 import assert from 'node:assert/strict';
 import {
-	chromium, runner, pointXY, clickPoint, sleep, text, doc, notices, cap, stones, lockBtn, tool, boardCount, isEditing, active, toggleLock,
+	chromium, runner, pointXY, clickPoint, dragPoints, sleep, text, doc, notices, cap, stones, labels, lockBtn, tool, boardCount, isEditing, active, toggleLock,
 } from './lib.mjs';
 
 const browser = await chromium.launch();
@@ -1430,6 +1430,95 @@ await scenario('a reading pane that follows late, and a write the editor undoes 
 	// The board must not go on showing a stone that is in no note.
 	assert.deepEqual(await stones(page, 1), { black: 2, white: 0 });
 	assert.doesNotMatch(await text(page, 'N.md'), /\[ee\]/);
+});
+
+/* -------------------------------------------- a click-drag paints a run of points with an edit tool */
+
+await scenario('a click-drag with the black tool paints a run of stones, as one undo step', {
+	files: { 'B.md': '# B\n\n```kifu\n(;SZ[9])\n```\n\nafter\n' }, live: ['B.md'], autosave: 150,
+}, async (page) => {
+	await toggleLock(page);
+	await tool(page, 'Black stone').click();
+	await dragPoints(page, 0, ['cc', 'dc', 'ec']);
+	await sleep(700);
+	assert.deepEqual(await stones(page), { black: 3, white: 0 });
+	assert.match(blocks(await doc(page))[0], /AB\[cc\]\[dc\]\[ec\]/);
+	await tool(page, 'Undo').click(); // the whole stroke comes back in one step
+	await sleep(400);
+	assert.deepEqual(await stones(page), { black: 0, white: 0 });
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('a click-drag with a symbol tool marks a run of points', {
+	files: { 'S.md': '# S\n\n```kifu\n(;SZ[9])\n```\n\nafter\n' }, live: ['S.md'], autosave: 150,
+}, async (page) => {
+	await toggleLock(page);
+	await tool(page, 'Triangle').click();
+	await dragPoints(page, 0, ['cc', 'dc', 'ec']);
+	await sleep(700);
+	assert.match(blocks(await doc(page))[0], /TR\[cc\]\[dc\]\[ec\]/);
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('a click-drag with the letter tool places labels in order', {
+	files: { 'L.md': '# L\n\n```kifu\n(;SZ[9])\n```\n\nafter\n' }, live: ['L.md'], autosave: 150,
+}, async (page) => {
+	await toggleLock(page);
+	await tool(page, 'Letter or number').click();
+	await dragPoints(page, 0, ['cc', 'dc', 'ec']);
+	await sleep(700);
+	assert.equal(await labels(page), 'a,b,c');
+	assert.match(blocks(await doc(page))[0], /LB\[cc:a\]\[dc:b\]\[ec:c\]/);
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('a click-drag with the eraser clears a run of stones, as one undo step', {
+	files: { 'E.md': '# E\n\n```kifu\n(;SZ[9]AB[cc][dc][ec][fc])\n```\n\nafter\n' }, live: ['E.md'], autosave: 150,
+}, async (page) => {
+	await toggleLock(page);
+	assert.deepEqual(await stones(page), { black: 4, white: 0 });
+	await tool(page, 'Eraser').click();
+	await dragPoints(page, 0, ['cc', 'dc', 'ec']);
+	await sleep(700);
+	assert.deepEqual(await stones(page), { black: 1, white: 0 }); // fc is left alone
+	const sgf = blocks(await doc(page))[0];
+	assert.match(sgf, /AB\[fc\]/);
+	assert.doesNotMatch(sgf, /\[cc\]/);
+	await tool(page, 'Undo').click();
+	await sleep(400);
+	assert.deepEqual(await stones(page), { black: 4, white: 0 });
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('clicking the letter tool again cycles its series between a, A and 1', {
+	files: { 'C.md': '# C\n\n```kifu\n(;SZ[9])\n```\n\nafter\n' }, live: ['C.md'], autosave: 150,
+}, async (page) => {
+	await toggleLock(page);
+	const next = page.locator('.kifu-label');
+	await tool(page, 'Letter or number').click();
+	await sleep(60);
+	assert.equal(await next.inputValue(), 'a');
+	for (const want of ['A', '1', 'a']) {
+		await tool(page, 'Letter or number').click();
+		await sleep(60);
+		assert.equal(await next.inputValue(), want);
+	}
+	assert.deepEqual(await notices(page), []);
+});
+
+await scenario('the caption comment is plain while editing and markdown when locked (no jitter as you type)', {
+	files: { 'CM.md': '# CM\n\n```kifu\n(;GM[1]SZ[9]C[A **bold** note.])\n```\n\nafter\n' }, live: ['CM.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	const comment = page.locator('.kifu-comment');
+	assert.equal(await comment.locator('strong').count(), 1); // locked: markdown rendered
+	assert.equal((await comment.textContent()).trim(), 'A bold note.');
+	await toggleLock(page); await sleep(250); // unlock to edit
+	assert.equal(await comment.locator('strong').count(), 0); // plain text, no async render to jitter
+	assert.match(await comment.textContent(), /\*\*bold\*\*/);
+	await toggleLock(page); await sleep(250); // lock again
+	assert.equal(await comment.locator('strong').count(), 1); // markdown back
+	assert.deepEqual(await notices(page), []);
 });
 
 await browser.close();

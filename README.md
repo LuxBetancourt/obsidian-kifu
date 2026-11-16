@@ -56,10 +56,10 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ⏩ Pass | Records a pass for the side to play, as a move of its own (`B[]` or `W[]`). |
 | ● ○ Stones | Puts a stone down without it being a move (for setting up a position). Click a stone of the same colour to take it off. |
 | △ □ ○ ✕ | Marks. They belong to the move you are on, so every move can carry its own. |
-| A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. |
+| A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. Click the tool again to switch between `a`, `A` and `1`. |
 | Eraser | Removes a mark or label; a second click removes the stone under it. |
 | Crop | Drag to choose the part of the board the locked board shows. Double-click (or double-tap) to go back to the automatic crop. |
-| ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. |
+| ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. Deleting that position (or a move before it) takes the line away as well. |
 | # | Makes the locked board a *numbered figure* of the main line, or takes the numbers off again. Whatever a `numbers:` line said before is put back, so a range like `51-100`, or an `off`, is not lost by trying the switch. |
 | ↶ | Undo (`Ctrl/Cmd+Z` while the board has the keyboard; `Ctrl/Cmd+Shift+Z` or `Ctrl+Y` redoes). |
 | ‹ › | Previous / next move. |
@@ -67,7 +67,9 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ↑ | Move this variation up, towards being the main line. |
 | 🗑 | Delete this move and everything after it. |
 
-**Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual.
+**Click and drag** with the stones, the marks, the labels or the eraser to put down (or take off) a run of points in one stroke; labels count on as you go. A plain click still does what it did: on a stone of the same colour, or a mark that is already there, it takes it off. One undo puts the whole stroke back.
+
+**Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual. If the record has another stone set up on that same point, it shows through while you drag.
 
 Two things worth knowing:
 

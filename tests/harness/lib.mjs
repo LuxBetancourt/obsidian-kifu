@@ -31,13 +31,23 @@ async function cmLivePreview() {
  * (reading view, or a simple live preview); `live` opens notes in the CodeMirror
  * live preview, with `lp` setting its switches. Everything else goes to harness.boot().
  */
-export async function open(browser, { width = 1280, height = 900, scale = 1, dark = false, font = null, live = [], lp = {}, device = null, ...boot } = {}) {
+export async function open(browser, { width = 1280, height = 900, scale = 1, dark = false, font = null, live = [], lp = {}, device = null, media = null, ...boot } = {}) {
 	// (`device`: Playwright context options for a phone or tablet, touch included)
 	const ctx = await browser.newContext(device ?? { viewport: { width, height }, deviceScaleFactor: scale });
 	const page = await ctx.newPage();
 	const errors = [];
 	page.on('pageerror', (e) => errors.push(String(e.stack || e)));
 	page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+	// (`media`: force specific matchMedia() answers, e.g. an iPad that claims it can hover but is touch)
+	if (media) {
+		await page.addInitScript((m) => {
+			const real = window.matchMedia.bind(window);
+			window.matchMedia = (q) =>
+				q in m
+					? { matches: m[q], media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+					: real(q);
+		}, media);
+	}
 	await page.goto(pageUrl);
 	// Obsidian on phones and tablets lays the app out at the device's width
 	if (device) await page.evaluate(() => document.head.insertAdjacentHTML('afterbegin', '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">'));
@@ -69,6 +79,16 @@ export async function pointXY(page, board, pt, sel = '.kifu-svg') {
 export async function clickPoint(page, board, pt) {
 	const p = await pointXY(page, board, pt);
 	await page.mouse.click(p.x, p.y);
+}
+
+/** A click-drag: press at the first point, move across the rest in turn, release at the last. */
+export async function dragPoints(page, board, pts) {
+	const xs = [];
+	for (const pt of pts) xs.push(await pointXY(page, board, pt));
+	await page.mouse.move(xs[0].x, xs[0].y);
+	await page.mouse.down();
+	for (let k = 1; k < xs.length; k++) await page.mouse.move(xs[k].x, xs[k].y);
+	await page.mouse.up();
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
