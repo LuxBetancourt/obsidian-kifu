@@ -495,6 +495,34 @@ test('undo: comments are steps of their own, and nothing typed later is lost wit
 	assert.equal(steps, 100);
 });
 
+test('a comment being typed: shown plain under the board until the typing is over', () => {
+	const s = make('(;SZ[9]C[A **bold** note.];B[ee]C[on *ee*])');
+	s.last();
+	assert.equal(s.typingCaption(), false);
+	s.setEdit(true);
+	assert.equal(s.typingCaption(), false); // unlocking alone changes nothing
+	s.setComment('on *ee*, typed');
+	assert.equal(s.typingCaption(), true);
+	s.prev(); // another move: its comment was not typed
+	assert.equal(s.typingCaption(), false);
+	s.next();
+	s.doneTyping(); // the comment box was left
+	assert.equal(s.typingCaption(), false);
+	s.setComment('on *ee*, typed again');
+	assert.equal(s.typingCaption(), true);
+	// locking ends it, and unlocking later does not bring it back
+	s.setEdit(false);
+	s.setEdit(true);
+	s.last();
+	assert.equal(s.typingCaption(), false);
+	// on the opening position a "caption:" line is shown, not the comment being typed
+	const c = make('caption: The **caption**\n(;SZ[9];B[ee])');
+	c.setEdit(true);
+	c.goto(c.home);
+	c.setComment('typed at home');
+	assert.equal(c.typingCaption(), false);
+});
+
 test('edit: setup stones on a later node use AE and stay minimal', () => {
 	const s = make('(;SZ[9]AB[cc];W[dd])');
 	s.setEdit(true);

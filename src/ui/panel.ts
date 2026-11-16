@@ -105,6 +105,8 @@ export class TreePanel extends ItemView {
 		this.#comment = el(foot, 'textarea', 'kifu-p-comment');
 		this.#comment.placeholder = 'Comment on this position…';
 		this.#comment.addEventListener('input', () => this.#session?.setComment(this.#comment.value));
+		// (the board shows the comment as plain text while it is typed, and as markdown again now)
+		this.#comment.addEventListener('blur', () => this.#session?.doneTyping());
 
 		main.addEventListener('keydown', (ev) => this.#onKey(ev));
 		this.setSession(this.#plugin.activeSession);
@@ -117,6 +119,9 @@ export class TreePanel extends ItemView {
 	setSession(s: Session | null): void {
 		if (s !== this.#session) {
 			this.#session?.off(this.#onChange);
+			// (a click on another board keeps the keyboard in the comment box: the box is no
+			// longer this board's, so its typing is over)
+			this.#session?.doneTyping();
 			this.#session = s;
 			s?.on(this.#onChange);
 			this.#layoutKey = '';

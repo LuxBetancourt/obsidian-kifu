@@ -84,8 +84,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#capComment: Component | null = null;
 	#capCommentEl: HTMLElement | null = null;
 	#capText: string | null = null;
-	/** Whether the cached caption comment was built plain (editing) rather than as markdown (locked). */
-	#capEditing = false;
+	/** Whether the cached caption comment was built plain (being typed) rather than as markdown. */
+	#capPlain = false;
 	#msg: HTMLElement;
 	#tools: HTMLElement | null = null;
 	#toolBtns = new Map<string, HTMLButtonElement>();
@@ -606,14 +606,14 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			if (n.atColor) stone(s, n.atColor, n.at);
 			else s.appendChild(doc.createTextNode(n.at));
 		}
-		// the comment: on its own line below the verdict. When the board is locked its markdown
-		// is rendered; while editing it is plain text, because the comment is set on every
-		// keystroke as you type in the panel, and rendering markdown each time cleared and
-		// refilled the caption, jittering the board's height (the panel's edit box is plain for
-		// the same reason). The rendered node is kept and re-used while the text and the
-		// edit/locked state are unchanged (a board is redrawn often).
-		const editing = this.session?.edit ?? false;
-		if (m.text && m.text === this.#capText && this.#capEditing === editing && this.#capCommentEl) {
+		// the comment: on its own line below the verdict, its markdown rendered, unlocked or not.
+		// While it is being typed in the panel it is plain text: the comment is set on every
+		// keystroke, and rendering markdown each time cleared and refilled the caption,
+		// jittering the board's height (see Session.typingCaption). The rendered node is kept
+		// and re-used while the text and the way it is shown are unchanged (a board is
+		// redrawn often).
+		const plain = this.session?.typingCaption() ?? false;
+		if (m.text && m.text === this.#capText && this.#capPlain === plain && this.#capCommentEl) {
 			cap.appendChild(this.#capCommentEl);
 		} else {
 			if (this.#capComment) {
@@ -622,11 +622,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			}
 			this.#capCommentEl = null;
 			this.#capText = m.text || null;
-			this.#capEditing = editing;
+			this.#capPlain = plain;
 			if (m.text) {
 				const span = el(cap, 'span', 'kifu-comment');
 				this.#capCommentEl = span;
-				if (editing) span.textContent = m.text;
+				if (plain) span.textContent = m.text;
 				else this.#capComment = renderComment(this.#plugin.app, this, span, m.text, this.session?.notePath ?? '');
 			}
 		}

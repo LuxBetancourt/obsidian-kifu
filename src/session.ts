@@ -216,6 +216,11 @@ export class Session {
 	private scratch = false;
 
 	edit = false;
+	/**
+	 * The move whose comment is being typed in the panel, from the first keystroke until
+	 * the box is left or the board locked (see typingCaption).
+	 */
+	typing: SgfNode | null = null;
 	tool: Tool = 'play';
 	nextLabel = 'a';
 	/** True once a click-drag paint stroke has taken its single undo snapshot (see paint()). */
@@ -1160,6 +1165,7 @@ export class Session {
 		if (on === this.edit || (on && this.cantEdit)) return;
 		this.cancelReply();
 		this.burst = null;
+		this.typing = null;
 		if (on) {
 			let keep = false;
 			if (keepPlayed) for (let n: SgfNode | null = this.cur; n; n = n.parent) if (n.temp) keep = true;
@@ -1499,10 +1505,28 @@ export class Session {
 			this.snapshot();
 			this.burst = cur;
 		}
+		this.typing = cur;
 		const mark = nodeMark(cur);
 		setText(cur, 'C', next);
 		// typing only redraws the tree when a comment appears, disappears or changes a verdict
 		this.changed(true, false, !before !== !next || nodeMark(cur) !== mark);
+	}
+
+	/** The comment box was left (or the panel turned to another board): no more typing. */
+	doneTyping(): void {
+		if (!this.typing) return;
+		this.typing = null;
+		this.emit();
+	}
+
+	/**
+	 * Is the comment under the board the one being typed? Then the board shows it as plain
+	 * text: it changes on every keystroke, and rendering its markdown each time jittered the
+	 * board's height. Until the comment is touched it keeps its markdown, unlocked or not.
+	 * (On the opening position a "caption:" line is shown instead of the comment.)
+	 */
+	typingCaption(): boolean {
+		return this.edit && this.typing === this.cur && !(this.cur === this.home && this.opts.caption !== undefined);
 	}
 
 	/** Remove the current move and everything after it. */

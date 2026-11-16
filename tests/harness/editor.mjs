@@ -1506,18 +1506,48 @@ await scenario('clicking the letter tool again cycles its series between a, A an
 	assert.deepEqual(await notices(page), []);
 });
 
-await scenario('the caption comment is plain while editing and markdown when locked (no jitter as you type)', {
-	files: { 'CM.md': '# CM\n\n```kifu\n(;GM[1]SZ[9]C[A **bold** note.])\n```\n\nafter\n' }, live: ['CM.md'], autosave: 150,
+/* The comment under a board keeps its markdown when the board is unlocked. Only while it is
+   typed in the panel is it plain text (rendering markdown on every keystroke jittered the
+   board's height), and it is markdown again once the typing is over. */
+await scenario('the caption comment keeps its markdown when unlocked and is plain text only while it is typed', {
+	files: { 'CM.md': '# CM\n\n```kifu\n(;GM[1]SZ[9]C[A **bold** note.])\n```\n\nbetween\n\n```kifu\n(;GM[1]SZ[9]C[An *other* one.])\n```\n\nafter\n' }, live: ['CM.md'], autosave: 150,
 }, async (page) => {
 	await sleep(300);
-	const comment = page.locator('.kifu-comment');
-	assert.equal(await comment.locator('strong').count(), 1); // locked: markdown rendered
+	const comment = page.locator('.kifu-comment').nth(0);
+	const other = page.locator('.kifu-comment').nth(1);
+	const bold = () => comment.locator('strong').count();
+	assert.equal(await bold(), 1); // locked: markdown rendered
 	assert.equal((await comment.textContent()).trim(), 'A bold note.');
-	await toggleLock(page); await sleep(250); // unlock to edit
-	assert.equal(await comment.locator('strong').count(), 0); // plain text, no async render to jitter
-	assert.match(await comment.textContent(), /\*\*bold\*\*/);
-	await toggleLock(page); await sleep(250); // lock again
-	assert.equal(await comment.locator('strong').count(), 1); // markdown back
+	await toggleLock(page); await sleep(250); // unlocked: still markdown, the comment is not touched yet
+	assert.equal(await bold(), 1);
+	const box = page.locator('.kifu-p-comment');
+	await box.click(); await sleep(150); // (the box has the keyboard, nothing typed yet)
+	assert.equal(await bold(), 1);
+	// typing: plain text, there at once with every keystroke (nothing rendered later to jitter)
+	await page.keyboard.press('End');
+	await page.keyboard.type(' More', { delay: 20 });
+	assert.equal(await bold(), 0);
+	assert.equal(await comment.textContent(), 'A **bold** note. More');
+	// the box left: markdown again
+	await box.blur(); await sleep(250);
+	assert.equal(await bold(), 1);
+	assert.equal((await comment.textContent()).trim(), 'A bold note. More');
+	// typing again, then a click on the other board: the panel turns to it (the keyboard stays
+	// in the box, as a click on a board leaves it), so the typing is over
+	await box.click(); await page.keyboard.press('End'); await page.keyboard.type('!', { delay: 20 });
+	assert.equal(await bold(), 0);
+	await other.click(); await sleep(250);
+	assert.equal(await bold(), 1);
+	assert.equal(await other.locator('em').count(), 1);
+	// back to the first board: typing, then locking it, ends the typing too
+	await comment.click(); await sleep(150);
+	await box.click(); await page.keyboard.press('End'); await page.keyboard.type('?', { delay: 20 });
+	assert.equal(await bold(), 0);
+	await toggleLock(page); await sleep(250);
+	assert.equal(await bold(), 1);
+	assert.equal((await comment.textContent()).trim(), 'A bold note. More!?');
+	await sleep(400);
+	assert.ok((await doc(page)).includes('C[A **bold** note. More!?]'));
 	assert.deepEqual(await notices(page), []);
 });
 
