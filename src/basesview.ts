@@ -1,10 +1,11 @@
 /**
  * A Bases view: the notes of a base as cards, each with the first board in the note (or
- * the game in an SGF file), playable, with the note's name and the properties chosen for
- * the view, as the Cards view shows them.
+ * the game in an SGF file), playable, and the properties chosen for the view the way the
+ * Cards view shows them: the first one as the card's title (the file name, unless the view
+ * puts another first or leaves it out), the rest listed under it.
  */
 
-import { BasesEntry, BasesPropertyId, BasesView, Component, Keymap, QueryController, TFile } from 'obsidian';
+import { BasesEntry, BasesPropertyId, BasesView, Component, Keymap, QueryController, TFile, Value } from 'obsidian';
 import type KifuPlugin from './main';
 import { firstEmbed, mountDetached } from './linked';
 import { ImportError } from './importing';
@@ -79,9 +80,12 @@ export class KifuBasesView extends BasesView {
 		const playable = this.config.get('playable') !== false;
 		this.#root.toggleClass('is-static', !playable);
 		this.#root.style.setProperty('--kifu-card-width', `${Math.round(scale * 3.8)}px`);
-		const props = this.config.getOrder().filter((p) => p !== 'file.name');
-		// (what a card shows besides its board: when this changes, every card is made again)
-		const key = `${scale}|${playable}|${props.join(',')}`;
+		// As in Cards: the first property chosen for the view is the title, whichever it is,
+		// and the rest are listed under the board; with none chosen, a card is its board alone.
+		const [title, ...props] = this.config.getOrder();
+		// (how a card's board is shown: when this changes, every card is made again. The
+		// title and the properties are filled in again either way.)
+		const key = `${scale}|${playable}`;
 		const kept = new Set<string>();
 		this.#root.empty();
 		for (const group of this.data.groupedData) {
@@ -91,7 +95,7 @@ export class KifuBasesView extends BasesView {
 			}
 			const grid = this.#root.createDiv({ cls: 'kifu-bases-grid' });
 			for (const entry of group.entries) {
-				const card = this.#card(entry, props, scale, playable, key);
+				const card = this.#card(entry, title, props, scale, playable, key);
 				grid.appendChild(card);
 				kept.add(entry.file.path);
 			}
@@ -104,25 +108,39 @@ export class KifuBasesView extends BasesView {
 		}
 	}
 
-	/** A card: the note's board, its name, its properties. Kept as it is while its note is unchanged. */
-	#card(entry: BasesEntry, props: BasesPropertyId[], scale: number, playable: boolean, key: string): HTMLElement {
+	/** A card: the note's board, its title, its properties. Kept as it is while its note is unchanged. */
+	#card(entry: BasesEntry, title: BasesPropertyId | undefined, props: BasesPropertyId[], scale: number, playable: boolean, key: string): HTMLElement {
 		const file = entry.file;
 		const old = this.#cards.get(file.path);
 		if (old && old.mtime === file.stat.mtime && old.key === key) {
-			this.#fillProps(old.el, entry, props);
+			this.#fill(old.el, entry, title, props);
 			return old.el;
 		}
 		old?.unload();
 		const el = createDiv({ cls: 'kifu-bases-card' });
 		const boardEl = el.createDiv({ cls: 'kifu-bases-board' });
-		const title = el.createDiv({ cls: 'kifu-bases-title', text: file.basename });
-		const open = (ev: MouseEvent): void => {
-			void this.app.workspace.openLinkText(file.path, '', Keymap.isModEvent(ev));
-		};
-		title.addEventListener('click', open);
-		if (!playable) boardEl.addEventListener('click', open);
+		el.createDiv({ cls: 'kifu-bases-title' });
 		el.createDiv({ cls: 'kifu-bases-props' });
-		this.#fillProps(el, entry, props);
+		// As in Cards, a click on the card opens its note (with Ctrl or Cmd, or the middle
+		// button, in a new tab). Not on a board that can be played, which is for playing, nor on
+		// a link among the properties, which goes where it says, nor at the end of selecting text.
+		// The title is never a link of its own (see the stylesheet), so it opens the note too.
+		el.addEventListener('mousedown', (ev) => {
+			if (ev.button === 1) ev.preventDefault(); // (no scrolling by the middle button)
+		});
+		el.onClickEvent((ev) => {
+			if (ev.button !== 0 && ev.button !== 1) return;
+			const target = ev.target as Element;
+			// (a board takes every click for its own: one that is only a picture opens the note
+			// all the same; elsewhere, a click something on the card took for itself does not)
+			if (target.closest('.kifu-bases-board') ? playable : ev.defaultPrevented) return;
+			if (target.closest('a')) return;
+			const sel = el.ownerDocument.getSelection();
+			if (sel && !sel.isCollapsed && sel.anchorNode && el.contains(sel.anchorNode)) return;
+			ev.preventDefault();
+			void this.app.workspace.openLinkText(file.path, '', Keymap.isModEvent(ev));
+		});
+		this.#fill(el, entry, title, props);
 		// the board itself: once the card is in sight
 		const owner = new BoardHolder();
 		this.addChild(owner);
@@ -140,16 +158,38 @@ export class KifuBasesView extends BasesView {
 		return el;
 	}
 
-	#fillProps(el: HTMLElement, entry: BasesEntry, props: BasesPropertyId[]): void {
+	/**
+	 * A card's title and properties, as Obsidian renders their values. An empty title is
+	 * shown as a dash, as in Cards (the card is still there to be clicked); empty properties
+	 * are left out.
+	 */
+	#fill(el: HTMLElement, entry: BasesEntry, title: BasesPropertyId | undefined, props: BasesPropertyId[]): void {
+		const heading = el.querySelector<HTMLElement>('.kifu-bases-title');
+		if (heading) {
+			heading.empty();
+			heading.hidden = !title;
+			const value = title ? this.#value(entry, title) : null;
+			if (value) value.renderTo(heading, this.app.renderContext);
+		}
 		const list = el.querySelector<HTMLElement>('.kifu-bases-props');
 		if (!list) return;
 		list.empty();
 		for (const p of props) {
-			const value = entry.getValue(p);
-			if (!value || !value.isTruthy()) continue;
+			const value = this.#value(entry, p);
+			if (!value) continue;
 			const row = list.createDiv({ cls: 'kifu-bases-prop' });
 			row.createSpan({ cls: 'kifu-bases-prop-name', text: this.config.getDisplayName(p) });
 			value.renderTo(row.createSpan({ cls: 'kifu-bases-prop-value' }), this.app.renderContext);
+		}
+	}
+
+	/** A property's value for a note, or null when it is empty or can not be had (a formula that fails for it). */
+	#value(entry: BasesEntry, p: BasesPropertyId): Value | null {
+		try {
+			const value = entry.getValue(p);
+			return value && value.isTruthy() ? value : null;
+		} catch {
+			return null;
 		}
 	}
 

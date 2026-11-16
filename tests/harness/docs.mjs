@@ -82,10 +82,11 @@ const browser = await chromium.launch();
 		const v = h.app.vault;
 		const fm = (path, key) => (/^---\n([\s\S]*?)\n---/.exec(v.files.get(path).data)?.[1].match(new RegExp('^' + key + ': (.*)$', 'm'))?.[1] ?? '').trim();
 		const value = (t) => ({ isTruthy: () => !!t, toString: () => t, renderTo: (el) => { el.textContent = t; } });
-		const entries = ['Corner kill.md', 'Net.md', 'Under the stones.md', 'Chinese opening.md'].map((path) => ({
-			file: v.getAbstractFileByPath(path),
-			getValue: (p) => value(fm(path, p.replace(/^note\./, ''))),
-		}));
+		const entries = ['Corner kill.md', 'Net.md', 'Under the stones.md', 'Chinese opening.md'].map((path) => {
+			const file = v.getAbstractFileByPath(path);
+			// (the title, as Obsidian gives a note's file.name: its name without ".md")
+			return { file, getValue: (p) => value(p === 'file.name' ? file.basename : fm(path, p.replace(/^note\./, ''))) };
+		});
 		const config = { get: (k) => (k === 'boardScale' ? 60 : true), getOrder: () => ['file.name', 'note.level', 'note.topic', 'note.source'], getDisplayName: (p) => p.replace(/^note\./, '') };
 		const host = document.createElement('div');
 		host.style.cssText = 'width: 1020px; margin: 20px';

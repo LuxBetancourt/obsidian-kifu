@@ -21,6 +21,11 @@
 	Element.prototype.addClass = function (...c) { this.classList.add(...c); };
 	Element.prototype.removeClass = function (...c) { this.classList.remove(...c); };
 	Element.prototype.toggleClass = function (c, on) { this.classList.toggle(c, on); };
+	// (as Obsidian's: a click and a click of another button, the middle one opening in a new tab)
+	HTMLElement.prototype.onClickEvent = function (listener, options) {
+		this.addEventListener('click', listener, options);
+		this.addEventListener('auxclick', listener, options);
+	};
 	Node.prototype.createEl = function (tag, o) {
 		const e = (this.ownerDocument ?? this).createElement(tag);
 		if (typeof o === 'string') o = { cls: o };
@@ -671,7 +676,8 @@
 	class BasesView extends Component {
 		constructor(controller) { super(); this.app = controller.app; this.config = controller.config; this.data = controller.data; this.allProperties = []; }
 	}
-	const Keymap = { isModEvent: (e) => !!(e && (e.ctrlKey || e.metaKey)) };
+	// (Obsidian's says "tab" for the middle button too)
+	const Keymap = { isModEvent: (e) => !!(e && (e.ctrlKey || e.metaKey || (e instanceof MouseEvent && e.button === 1))) };
 
 	class Notice { constructor(message) { Notice.log.push(String(message)); console.log('[notice]', message); } }
 	Notice.log = [];

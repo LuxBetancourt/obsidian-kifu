@@ -1700,9 +1700,14 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	await page.evaluate(() => {
 		const h = window.harness;
 		const v = h.app.vault;
-		const value = (text) => ({ isTruthy: () => !!text, toString: () => text, renderTo: (el) => { el.textContent = text; } });
+		const value = (text) => ({ isTruthy: () => !!text, toString: () => text, renderTo: (el) => { el.append(text); } });
 		const props = { 'P.md': '20k', 'G.md': '', 'N.md': '', 'games/one.sgf': '' };
-		const entries = Object.keys(props).map((path) => ({ file: v.getAbstractFileByPath(path), getValue: (p) => (p === 'note.level' ? value(props[path]) : null) }));
+		// (Obsidian's file.name: a note's name without ".md", any other file's whole name)
+		const named = (f) => value(f.extension === 'md' ? f.basename : f.name);
+		const entries = Object.keys(props).map((path) => {
+			const file = v.getAbstractFileByPath(path);
+			return { file, getValue: (p) => (p === 'note.level' ? value(props[path]) : p === 'file.name' ? named(file) : null) };
+		});
 		const config = { values: { boardScale: 60, playable: true }, get(k) { return this.values[k]; }, getOrder: () => ['file.name', 'note.level'], getDisplayName: (p) => p.replace(/^note\./, '') };
 		const controller = { app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } };
 		const host = document.createElement('div');
@@ -1719,7 +1724,7 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	assert.equal(await page.locator('.kifu-bases-card').count(), 4);
 	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
 	assert.equal(await page.locator('.kifu-bases-none').textContent(), 'No board in this note.');
-	assert.deepEqual(await page.locator('.kifu-bases-title').allTextContents(), ['P', 'G', 'N', 'one']);
+	assert.deepEqual(await page.locator('.kifu-bases-title').allTextContents(), ['P', 'G', 'N', 'one.sgf']);
 	// every board fills its card: all of it but the card's padding, the paper's edge, the room
 	// beside the board for its buttons, and less than one cell (the cell is whole pixels)
 	const fill = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card')].filter((c) => c.querySelector('.kifu-svg')).map((c) => {
@@ -1752,9 +1757,10 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 	await lockBtn(page, 0).click();
 	assert.ok((await notices(page)).some((n) => /shown in a base\. Open the note to edit it\./.test(n)));
-	// the title opens the note (with Ctrl, in a new tab)
-	await page.locator('.kifu-bases-title').nth(1).click();
-	await page.locator('.kifu-bases-title').nth(1).click({ modifiers: ['Control'] });
+	// a click on the title (a click on its card: the title takes none itself) opens the note
+	// (with Ctrl, in a new tab), and playing the problem above opened nothing
+	await page.locator('.kifu-bases-title').nth(1).click({ force: true });
+	await page.locator('.kifu-bases-title').nth(1).click({ force: true, modifiers: ['Control'] });
 	assert.deepEqual(await page.evaluate(() => window.harness.app._opened), [['G.md', false], ['G.md', true]]);
 	// new data from the base: a card whose note did not change keeps its board (and the solved problem)
 	const first = await page.evaluateHandle(() => document.querySelector('.kifu-bases-card .kifu-svg'));
@@ -1775,6 +1781,95 @@ await scenario('the Kifu boards Bases view: a card per note, its first board pla
 	await sleep(400);
 	const widths = await page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card .kifu-svg')].map((e) => Number(e.getAttribute('width'))));
 	assert.ok(widths.every((w) => w > 0), widths.join());
+});
+
+/* As in Cards, the view's first property is the card's title, whichever it is: unticking
+   "file name" takes the name off the cards, and a click anywhere on a card but its board opens it. */
+await scenario('the Bases view: the first property is the title, as in Cards; the name goes when it is unticked', {
+	files: {
+		'Alpha.md': '```kifu\n(;GM[1]SZ[9];B[ee])\n```\n',
+		'Beta.md': '```kifu\n(;GM[1]SZ[9];B[cc])\n```\n',
+		'Gamma.md': '```kifu\n(;GM[1]SZ[9];B[gg])\n```\n',
+	},
+	panes: [],
+}, async (page) => {
+	await page.evaluate(() => {
+		const h = window.harness;
+		const v = h.app.vault;
+		const text = (t) => ({ isTruthy: () => !!t, toString: () => t, renderTo: (el) => { el.append(t); } });
+		// a formula making a link to the note itself ("Problem 1"), empty for the third note; Bases renders a link as one
+		const link = (t) => ({ isTruthy: () => !!t, toString: () => t, renderTo: (el) => { const a = document.createElement('a'); a.className = 'internal-link'; a.href = t; a.textContent = t; el.appendChild(a); } });
+		const problem = { 'Alpha.md': 'Problem 1', 'Beta.md': 'Problem 2', 'Gamma.md': '' };
+		const entries = Object.keys(problem).map((path) => {
+			const file = v.getAbstractFileByPath(path);
+			const values = { 'file.name': () => text(file.basename), 'formula.Problem': () => link(problem[path]), 'note.level': () => text(path === 'Beta.md' ? '5k' : ''), 'formula.Bad': () => { throw new Error('bad formula'); } };
+			return { file, getValue: (p) => values[p]?.() ?? null };
+		});
+		const names = { 'file.name': 'file name', 'formula.Problem': 'Problem', 'note.level': 'level', 'formula.Bad': 'Bad' };
+		const config = { order: ['file.name', 'formula.Problem', 'formula.Bad'], get: (k) => ({ boardScale: 60, playable: true })[k], getOrder() { return this.order; }, getDisplayName: (p) => names[p] };
+		const host = document.createElement('div');
+		host.style.width = '900px';
+		document.getElementById('main').appendChild(host);
+		const view = h.app._basesViews.get('kifu-boards').factory({ app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } }, host);
+		view.load();
+		view.onDataUpdated();
+		window.__cards = { view, config, order: (o) => { config.order = o; view.onDataUpdated(); } };
+	});
+	await sleep(400);
+	const titles = () => page.locator('.kifu-bases-title').allTextContents();
+	const rows = () => page.locator('.kifu-bases-prop').allTextContents();
+	const order = async (o) => { await page.evaluate((x) => window.__cards.order(x), o); await sleep(150); };
+	const opened = () => page.evaluate(() => window.harness.app._opened ?? []);
+	const card = (i) => page.locator('.kifu-bases-card').nth(i);
+	// the usual order, the file name first: it is the title, the formula a property (left out where it is empty),
+	// and a formula that fails for a note is left out rather than taking the view down
+	assert.deepEqual(await titles(), ['Alpha', 'Beta', 'Gamma']);
+	assert.deepEqual(await rows(), ['ProblemProblem 1', 'ProblemProblem 2']);
+	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
+	const firstBoard = await page.evaluateHandle(() => document.querySelector('.kifu-bases-card .kifu-svg'));
+	// the formula first: its text is the title, the link shown as the title (not as a link of its own),
+	// and a note for which it is empty gets a dash, as in Cards; the name further down is a property
+	await order(['formula.Problem', 'file.name']);
+	assert.deepEqual(await titles(), ['Problem 1', 'Problem 2', '']);
+	assert.equal(await page.locator('.kifu-bases-title').nth(2).evaluate((e) => getComputedStyle(e, '::before').content), '"—"');
+	assert.deepEqual(await rows(), ['file nameAlpha', 'file nameBeta', 'file nameGamma']);
+	// "file name" unticked: the name is nowhere on the cards
+	await order(['formula.Problem', 'note.level']);
+	assert.deepEqual(await titles(), ['Problem 1', 'Problem 2', '']);
+	assert.deepEqual(await rows(), ['level5k']);
+	const shown = await page.locator('.kifu-bases-grid').evaluate((g) => g.textContent);
+	assert.ok(!/Alpha|Beta|Gamma/.test(shown), shown);
+	// a click on the title's link opens the card's note (and only that: the link does not go anywhere of its own)
+	await page.locator('.kifu-bases-title a').nth(0).click({ force: true });
+	assert.deepEqual(await opened(), [['Alpha.md', false]]);
+	// so does a click on the card's properties, with Ctrl (or the middle button) in a new tab
+	await card(1).locator('.kifu-bases-prop').click({ modifiers: ['Control'] });
+	await card(2).click({ button: 'middle', position: { x: 4, y: 4 } });
+	assert.deepEqual(await opened(), [['Alpha.md', false], ['Beta.md', true], ['Gamma.md', true]]);
+	// but not selecting a property's text
+	const val = await card(1).locator('.kifu-bases-prop-value').boundingBox();
+	await page.mouse.move(val.x + 1, val.y + val.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(val.x + val.width - 1, val.y + val.height / 2, { steps: 4 });
+	await page.mouse.up();
+	assert.ok(String(await page.evaluate(() => String(getSelection()))).length > 0);
+	assert.equal((await opened()).length, 3);
+	await page.evaluate(() => getSelection().removeAllRanges());
+	// nor a click on a board that is played
+	const svg = await card(0).locator('.kifu-svg').boundingBox();
+	await page.mouse.click(svg.x + svg.width / 2, svg.y + svg.height / 2);
+	await page.mouse.click(svg.x + svg.width / 2, svg.y + svg.height / 2, { button: 'middle' });
+	assert.equal((await opened()).length, 3);
+	// nothing ticked: no title, no properties, just the boards (and a card still opens its note)
+	await order([]);
+	assert.equal(await page.locator('.kifu-bases-title:visible').count(), 0);
+	assert.equal(await page.locator('.kifu-bases-prop').count(), 0);
+	assert.equal(await page.locator('.kifu-bases-card .kifu-svg').count(), 3);
+	await card(1).click({ position: { x: 3, y: 3 } });
+	assert.deepEqual((await opened()).at(-1), ['Beta.md', false]);
+	// the boards were kept through all of it (a change of properties is no reason to draw a board again)
+	assert.equal(await page.evaluate((el) => el.isConnected, firstBoard), true);
+	assert.deepEqual(await notices(page), []);
 });
 
 await scenario('the Bases view: a note whose first board is an embedded link', {

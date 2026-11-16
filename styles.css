@@ -526,6 +526,7 @@ body .kifu-panel button.kifu-btn {
 	gap: var(--size-4-3, 12px);
 }
 
+/* a click on a card opens its note, as in Cards (but not on a board that can be played) */
 .kifu-bases-card {
 	display: flex;
 	flex-direction: column;
@@ -534,10 +535,19 @@ body .kifu-panel button.kifu-btn {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 8px);
 	background: var(--background-primary);
+	cursor: var(--cursor-link, pointer);
+}
+
+.kifu-bases-card:hover {
+	border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
 }
 
 .kifu-bases-board {
 	min-height: 2em;
+}
+
+.kifu-bases:not(.is-static) .kifu-bases-board {
+	cursor: default;
 }
 
 .kifu-bases-board .kifu {
@@ -546,15 +556,23 @@ body .kifu-panel button.kifu-btn {
 }
 
 
+/* The title, the first property of the view. As in Cards, a link there (a formula such as
+   file.asLink("Problem " + number)) reads as the title and is not a link of its own: a
+   click on it is a click on the card, which opens the note. Empty, it is a dash. */
 .kifu-bases-title {
+	--link-color: var(--text-normal);
+	--link-unresolved-color: var(--text-normal);
+	--link-unresolved-opacity: 1;
+	--link-decoration: none;
 	margin-top: var(--size-4-1, 4px);
 	font-weight: var(--font-semibold, 600);
-	cursor: pointer;
 	overflow-wrap: anywhere;
+	pointer-events: none;
 }
 
-.kifu-bases-title:hover {
-	color: var(--text-accent);
+.kifu-bases-title:empty::before {
+	content: "\2014";
+	color: var(--text-faint);
 }
 
 .kifu-bases-props {
@@ -590,10 +608,6 @@ body .kifu-panel button.kifu-btn {
 
 .kifu-bases.is-static .kifu-svg {
 	pointer-events: none;
-}
-
-.kifu-bases.is-static .kifu-bases-board {
-	cursor: pointer;
 }
 
 /* a board drawn from a link: what is said while it is fetched, or why it is not there */
