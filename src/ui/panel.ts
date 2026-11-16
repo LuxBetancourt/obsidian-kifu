@@ -1,6 +1,6 @@
 /** The sidebar panel: the move tree of the board in use, and the comment on the current move. */
 
-import { Component, ItemView, Menu, WorkspaceLeaf } from 'obsidian';
+import { Component, ItemView, Menu, ViewStateResult, WorkspaceLeaf } from 'obsidian';
 import type KifuPlugin from '../main';
 import { VIEW_TYPE } from '../config';
 import { pointName } from '../options';
@@ -39,6 +39,9 @@ export class TreePanel extends ItemView {
 	#info!: HTMLElement;
 	#text!: HTMLElement;
 	#comment!: HTMLTextAreaElement;
+	/** The comment's part of the panel, and its height when one was chosen by dragging the line above it (null: as tall as it needs). */
+	#foot: HTMLElement | null = null;
+	#footHeight: number | null = null;
 	#btn: Record<string, HTMLButtonElement> = {};
 	#layout: TreeLayout | null = null;
 	#layoutKey = '';
@@ -99,7 +102,9 @@ export class TreePanel extends ItemView {
 		this.#treeSvg.addEventListener('click', (ev) => this.#onTreeClick(ev));
 		this.#treeSvg.addEventListener('contextmenu', (ev) => this.#onTreeMenu(ev));
 
-		const foot = el(main, 'div', 'kifu-p-foot');
+		this.#makeSplit(el(main, 'div', 'kifu-p-split'));
+		const foot = (this.#foot = el(main, 'div', 'kifu-p-foot'));
+		this.#applyFoot();
 		this.#info = el(foot, 'div', 'kifu-p-info');
 		this.#text = el(foot, 'div', 'kifu-p-text');
 		this.#comment = el(foot, 'textarea', 'kifu-p-comment');
@@ -114,6 +119,90 @@ export class TreePanel extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.setSession(null);
+	}
+
+	/** (what the workspace keeps of the panel: the comment's height, once it was chosen) */
+	getState(): Record<string, unknown> {
+		const state = super.getState();
+		if (this.#footHeight !== null) state.commentHeight = this.#footHeight;
+		return state;
+	}
+
+	async setState(state: unknown, result: ViewStateResult): Promise<void> {
+		const h = (state as { commentHeight?: unknown } | null)?.commentHeight;
+		if (typeof h === 'number' && h > 0) this.#setFoot(h);
+		await super.setState(state, result);
+	}
+
+	/**
+	 * The line between the tree and the comment: drag it to give the comment more room or
+	 * less; the tree keeps the rest, never less than its least (when the panel is short, the
+	 * comment gives way first). A double click goes back to the comment's own size, as tall as
+	 * it needs. The height chosen is kept with the workspace, so it is there after a restart.
+	 */
+	#makeSplit(split: HTMLElement): void {
+		split.setAttribute('role', 'separator');
+		split.setAttribute('aria-orientation', 'horizontal');
+		split.setAttribute('aria-label', 'Drag to resize the comment (double-click: its own size)');
+		let drag: { id: number; y: number; h: number; max: number; moved: boolean } | null = null;
+		split.addEventListener('pointerdown', (ev) => {
+			const foot = this.#foot;
+			if (ev.button !== 0 || !foot) return;
+			// (no text is selected, and the keyboard stays where it is: in the comment box, say)
+			ev.preventDefault();
+			const h = foot.getBoundingClientRect().height;
+			const room = this.#treeBox.getBoundingClientRect().height - (parseFloat(getComputedStyle(this.#treeBox).minHeight) || 0);
+			drag = { id: ev.pointerId, y: ev.clientY, h, max: h + Math.max(0, room), moved: false };
+			split.setPointerCapture(ev.pointerId);
+		});
+		split.addEventListener('pointermove', (ev) => {
+			if (!drag || ev.pointerId !== drag.id) return;
+			const dy = drag.y - ev.clientY;
+			// (a click, or the first of a double click, is not a drag)
+			if (!drag.moved && Math.abs(dy) < 3) return;
+			drag.moved = true;
+			split.addClass('is-dragging');
+			this.#setFoot(Math.max(this.#footLeast(), Math.min(drag.max, drag.h + dy)));
+		});
+		const end = (ev: PointerEvent): void => {
+			if (!drag || ev.pointerId !== drag.id) return;
+			const moved = drag.moved;
+			drag = null;
+			split.removeClass('is-dragging');
+			if (split.hasPointerCapture(ev.pointerId)) split.releasePointerCapture(ev.pointerId);
+			if (!moved) return;
+			this.app.workspace.requestSaveLayout();
+			// (the current move kept in sight in a tree that may have shrunk)
+			this.#update();
+		};
+		split.addEventListener('pointerup', end);
+		split.addEventListener('pointercancel', end);
+		split.addEventListener('dblclick', () => {
+			if (this.#footHeight === null) return;
+			this.#setFoot(null);
+			this.app.workspace.requestSaveLayout();
+		});
+	}
+
+	/** The least the comment can be given: its line about the move, with its padding. */
+	#footLeast(): number {
+		const foot = this.#foot;
+		if (!foot) return 0;
+		const cs = getComputedStyle(foot);
+		return parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + this.#info.offsetHeight;
+	}
+
+	#setFoot(h: number | null): void {
+		this.#footHeight = h === null ? null : Math.round(h);
+		this.#applyFoot();
+	}
+
+	#applyFoot(): void {
+		const foot = this.#foot;
+		if (!foot) return;
+		foot.toggleClass('is-sized', this.#footHeight !== null);
+		if (this.#footHeight === null) foot.style.removeProperty('--kifu-foot-h');
+		else foot.style.setProperty('--kifu-foot-h', `${this.#footHeight}px`);
 	}
 
 	setSession(s: Session | null): void {

@@ -751,10 +751,54 @@ body .kifu-panel button.kifu-btn {
 	font-size: var(--font-ui-smaller, 12px);
 }
 
+/* (all the room the comment leaves: a basis of 0, so a long tree does not crowd the comment out) */
 .kifu-p-tree {
-	flex: 1 1 auto;
+	flex: 1 1 0;
 	min-height: 60px;
 	overflow: auto;
+}
+
+/* The line between the tree and the comment: drag it to give the comment more room or less, as
+   Obsidian's own dividers are dragged (a double click gives the comment back its own size). The
+   grip is wider than the line it lights up, and takes no room of its own. */
+.kifu-p-split {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	height: 9px;
+	margin: -4px 0 -5px;
+	cursor: row-resize;
+	touch-action: none;
+}
+
+.kifu-p-split::after {
+	content: "";
+	position: absolute;
+	top: 3px;
+	right: 0;
+	left: 0;
+	height: var(--divider-width-hover, 3px);
+	background-color: transparent;
+	transition: background-color 0.2s ease-in-out;
+}
+
+.kifu-p-split:hover::after {
+	background-color: var(--divider-color-hover, var(--interactive-accent));
+}
+
+.kifu-p-split.is-dragging::after {
+	background-color: var(--color-accent, var(--interactive-accent));
+}
+
+@media (pointer: coarse) {
+	.kifu-p-split {
+		height: 21px;
+		margin: -10px 0 -11px;
+	}
+
+	.kifu-p-split::after {
+		top: 9px;
+	}
 }
 
 .kifu-t {
@@ -860,6 +904,7 @@ body .kifu-panel button.kifu-btn {
 }
 
 .kifu-p-foot {
+	box-sizing: border-box;
 	flex: none;
 	max-height: 50%;
 	/* the extra bottom room keeps the comment box clear of the desktop status bar, which
@@ -867,6 +912,15 @@ body .kifu-panel button.kifu-btn {
 	padding: 8px 12px 30px;
 	overflow-y: auto;
 	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* a height chosen by dragging the line above: kept whatever the comment (a long one scrolls,
+   the edit box fills it), and the first to give way when the panel is short */
+.kifu-p-foot.is-sized {
+	display: flex;
+	flex: 0 1 var(--kifu-foot-h);
+	flex-direction: column;
+	max-height: none;
 }
 
 .kifu-p-info {
@@ -898,14 +952,20 @@ body .kifu-panel button.kifu-btn {
 	-webkit-user-select: text;
 }
 
+/* (sized by the line above the comment, not by a grip of its own) */
 .kifu-panel .kifu-p-comment {
 	box-sizing: border-box;
 	width: 100%;
 	min-height: 7em;
 	margin-top: 8px;
-	resize: vertical;
+	resize: none;
 	font: inherit;
 	line-height: 1.4;
+}
+
+.kifu-panel .kifu-p-foot.is-sized .kifu-p-comment {
+	flex: 1 1 auto;
+	min-height: 3em;
 }
 
 /* ---------------------------------------------------------- settings page */

@@ -347,6 +347,9 @@
 		constructor(leaf) { super(); this.leaf = leaf; this.app = leaf.app; this.containerEl = leaf.containerEl; this.navigation = true; this.scope = null; }
 		getIcon() { return 'document'; }
 		async onOpen() {} async onClose() {}
+		// (what the workspace layout keeps of a view, and gives back when it is made again)
+		getState() { return {}; }
+		async setState() {}
 	}
 	class ItemView extends View {
 		constructor(leaf) {
@@ -437,7 +440,10 @@
 			const factory = this.app._views.get(state.type);
 			this._setView(factory(this));
 			await this.view.onOpen();
+			// (as Obsidian: the view is opened, then given the state it was saved with)
+			if (state.state) await this.view.setState(state.state, { history: false });
 		}
+		getViewState() { return { type: this.view?.getViewType(), state: this.view?.getState() ?? {} }; }
 		_setView(view) { this.view = view; view.load(); }
 		/** A file in this pane: a note as a reading view, a file of a registered type in its plugin's view. */
 		async openFile(file) {
@@ -459,6 +465,8 @@
 	class Workspace extends Events {
 		constructor(app) { super(); this.app = app; this._leaves = []; this.layoutReady = true; this.activeEditor = null; this.revealed = []; }
 		onLayoutReady(cb) { cb(); }
+		/** (Obsidian saves the layout, each view's state in it, a moment later; here it is counted) */
+		requestSaveLayout() { this._layoutSaves = (this._layoutSaves ?? 0) + 1; }
 		openLinkText(path, source, newLeaf) { (this.app._opened ??= []).push([path, !!newLeaf]); return Promise.resolve(); }
 		iterateAllLeaves(cb) { for (const l of this._leaves.slice()) cb(l); }
 		getLeavesOfType(type) { return this._leaves.filter((l) => l.view && l.view.getViewType() === type); }

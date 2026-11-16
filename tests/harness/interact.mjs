@@ -686,6 +686,109 @@ await scenario('the move tree panel renders markdown in a comment', {
 	assert.equal((await textEl.textContent()).replace(/\s+/g, ' ').trim(), 'The vital point, a key shape, and A1.');
 });
 
+/* The line between the move tree and the comment can be dragged to give the comment more room
+   or less, as Obsidian's own dividers are; a double click gives it back its own size. The height
+   is kept with the workspace (the panel's view state), so it is there after a restart. */
+// (60 moves: a tree taller than the panel, which must not crowd the comment out)
+const SIXTY = Array.from({ length: 60 }, (_, i) => `;${i % 2 ? 'W' : 'B'}[${String.fromCharCode(97 + (i % 19), 97 + Math.floor(i / 19))}]`).join('');
+await scenario('dragging the line above the comment in the move tree panel resizes it, and the size is kept', {
+	files: { 'R.md': '# R\n\n```kifu\n(;GM[1]SZ[19]' + SIXTY + 'C[The **vital** point.])\n```\n' }, panes: [{ path: 'R.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	const showPanel = async (state) => {
+		await page.evaluate(async (st) => {
+			const ws = window.harness.app.workspace;
+			if (!st) return window.harness.app._commands.find((c) => c.id === 'show-tree').callback();
+			// (a panel made again from what the workspace kept of it, as after a restart)
+			ws.getLeavesOfType('kifu-tree')[0].detach();
+			await ws.getRightLeaf().setViewState({ type: 'kifu-tree', state: st });
+		}, state);
+		await sleep(50);
+		await page.evaluate(() => document.querySelector('.kifu').dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+		await sleep(300);
+	};
+	await showPanel(null);
+	const foot = page.locator('.kifu-p-foot');
+	const tree = page.locator('.kifu-p-tree');
+	const split = page.locator('.kifu-p-split');
+	const tall = async (loc) => (await loc.boundingBox()).height;
+	const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 1.5, `${what}: ${a} is not ${b}`);
+	const drag = async (dy) => {
+		const s = await split.boundingBox();
+		const x = s.x + s.width / 2;
+		const y = s.y + s.height / 2;
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x, y + dy, { steps: 6 });
+		await page.mouse.up();
+		await sleep(50);
+	};
+	const kept = () => page.evaluate(() => window.harness.app.workspace.getLeavesOfType('kifu-tree')[0].getViewState().state.commentHeight);
+	const saves = () => page.evaluate(() => window.harness.app.workspace._layoutSaves ?? 0);
+	assert.equal((await page.locator('.kifu-p-text strong').textContent()), 'vital'); // (the panel shows the board's comment)
+	const own = await tall(foot);
+	const treeBefore = await tall(tree);
+	// the line dragged up 150px: the comment 150px taller, the tree 150px shorter
+	await drag(-150);
+	near(await tall(foot), own + 150, 'comment');
+	near(await tall(tree), treeBefore - 150, 'tree');
+	// the height is kept whatever the comment: on a move with none it stays
+	await page.locator('.kifu-p-nav .kifu-btn[aria-label="Previous move"]').click();
+	await sleep(100);
+	assert.equal(await page.locator('.kifu-p-text').isVisible(), false);
+	near(await tall(foot), own + 150, 'comment, on a move without one');
+	// kept with the workspace, which was asked to save it; a panel made from that has it again
+	assert.equal(await kept(), Math.round(own + 150));
+	assert.ok((await saves()) >= 1);
+	await showPanel({ commentHeight: await kept() });
+	near(await tall(foot), own + 150, 'comment, in a panel made again');
+	// dragged far up, the tree keeps its least (60px); far down, the comment keeps its line about the move
+	await drag(-2000);
+	near(await tall(tree), 60, 'tree at its least');
+	near(await kept(), await tall(foot), 'what is kept is what is shown');
+	await drag(2000);
+	const info = await page.locator('.kifu-p-info').boundingBox();
+	const f = await foot.boundingBox();
+	// (its padding and border are 8 + 30 + 1: the line above the bottom room kept for the desktop status bar)
+	near(f.height, info.height + 39, 'the comment keeps its line about the move, clear of the status bar');
+	assert.ok(info.y >= f.y && info.y + info.height <= f.y + f.height - 30 + 0.5, 'the line about the move is in sight');
+	// a double click: the comment's own size again (just its line about the move, here), and nothing kept
+	await split.dblclick();
+	await sleep(50);
+	assert.equal(await kept(), undefined);
+	near(await tall(foot), info.height + 39, 'comment at its own size, with no comment');
+	await page.locator('.kifu-p-nav .kifu-btn[aria-label="Next move"]').click(); // (back to the move with one)
+	await sleep(100);
+	near(await tall(foot), own, 'comment at its own size');
+	// a click alone is not a drag
+	const before = await saves();
+	await split.click();
+	await sleep(50);
+	near(await tall(foot), own, 'comment after a click');
+	assert.equal(await saves(), before);
+	// unlocked: the edit box fills the comment's room, and the keyboard stays in it while the line is dragged
+	await page.locator('.kifu-p-nav .kifu-btn[aria-label="Unlock to edit"]').click();
+	await sleep(100);
+	const box = page.locator('.kifu-p-comment');
+	const inBox = () => page.evaluate(() => document.activeElement === document.querySelector('.kifu-p-comment'));
+	await box.click();
+	const held = await split.boundingBox();
+	await page.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
+	await page.mouse.down();
+	assert.equal(await inBox(), true); // (pressing the line does not take the keyboard from the box)
+	await page.mouse.up();
+	await drag(-200);
+	assert.equal(await inBox(), true);
+	const b = await box.boundingBox();
+	const g = await foot.boundingBox();
+	const pad = await foot.evaluate((e) => parseFloat(getComputedStyle(e).paddingBottom));
+	near(b.y + b.height, g.y + g.height - pad, 'the edit box reaches the bottom');
+	await page.keyboard.press('Control+A');
+	await page.keyboard.type('Typed after.');
+	await sleep(1000);
+	assert.match(await text(page, 'R.md'), /C\[Typed after\.\]/);
+	assert.deepEqual(await notices(page), []);
+});
+
 /* The board caption renders a comment's markdown, and sits the comment on its own line
    (a block) so it falls below the verdict, hint or notes rather than beside them. */
 await scenario('the board caption renders markdown and puts the comment on its own line', {

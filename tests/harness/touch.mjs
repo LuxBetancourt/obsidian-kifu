@@ -106,6 +106,30 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 			});
 		}
 	}
+	// The line between the move tree and the comment, dragged by a finger (Chromium: its
+	// protocol can move a touch). Its grip is wider on a touch screen, and a drag on it must
+	// not be taken by the browser for a scroll.
+	if (engine === 'chromium') {
+		await scenario(`${engine}, iPad (gen 7): the line above the comment in the move tree panel is dragged by a finger`, { device: devices['iPad (gen 7)'], files: { 'P.md': note }, autosave: 100, panes: [{ path: 'P.md', mode: 'source' }] }, async (page) => {
+			await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());
+			await sleep(50);
+			await page.evaluate(() => document.querySelector('.kifu').dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+			await sleep(300);
+			const split = await page.locator('.kifu-p-split').boundingBox();
+			assert.ok(split.height >= 20, `a grip of ${split.height}px`);
+			const foot = () => page.locator('.kifu-p-foot').boundingBox().then((b) => b.height);
+			const before = await foot();
+			const cdp = await page.context().newCDPSession(page);
+			const touch = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
+			const x = split.x + split.width / 2;
+			const y = split.y + split.height / 2;
+			await touch('touchStart', { x, y });
+			for (let k = 1; k <= 8; k++) await touch('touchMove', { x, y: y - (120 * k) / 8 });
+			await touch('touchEnd', null);
+			await sleep(100);
+			assert.ok(Math.abs((await foot()) - (before + 120)) <= 2, `the comment is ${await foot()}px, not ${before + 120}px`);
+		});
+	}
 	failed += report();
 	await browser.close();
 }
