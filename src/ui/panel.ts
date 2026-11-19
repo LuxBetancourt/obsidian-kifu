@@ -426,6 +426,7 @@ export class TreePanel extends ItemView {
 			let notes = '';
 			const labels = L.count <= MAX_LABELS;
 			const texts = svg(g, 'g'); // moved to the end below
+			const halos = svg(g, 'g'); // (these two too)
 			const badges = svg(g, 'g');
 			// walk the tree, counting moves as we go
 			const stack: [SgfNode, number][] = [[s.root, 0]];
@@ -472,10 +473,9 @@ export class TreePanel extends ItemView {
 					if (mk) {
 						const bx = cx + RAD - 1;
 						const by = cy - RAD + 1;
-						svg(badges, 'path', {
-							d: mk === 'correct' ? `M${bx - 3.5} ${by}l2.5 2.5l4.5-5` : `M${bx - 3} ${by - 3}l6 6M${bx + 3} ${by - 3}l-6 6`,
-							class: `kifu-t-badge is-${mk}`,
-						});
+						const d = mk === 'correct' ? `M${bx - 3.5} ${by}l2.5 2.5l4.5-5` : `M${bx - 3} ${by - 3}l6 6M${bx + 3} ${by - 3}l-6 6`;
+						svg(halos, 'path', { d, class: 'kifu-t-badge-halo' });
+						svg(badges, 'path', { d, class: `kifu-t-badge is-${mk}` });
 					}
 					if (n.props.C && n.props.C[0]) notes += dot(cx + RAD + 1.5, cy + RAD - 2.5, 1.8);
 				}
@@ -494,8 +494,12 @@ export class TreePanel extends ItemView {
 			add(twhite, 'kifu-t-w is-temp');
 			add(notes, 'kifu-t-note');
 			g.appendChild(texts);
-			g.appendChild(badges);
 			this.#ring = svg(g, 'circle', { class: 'kifu-t-cur', r: RAD + 3 });
+			// The ✓ and ✗ over the ring, each on a halo in the background colour: they sit at the
+			// stone's upper right, just where the ring round the current move runs, and the ring
+			// drawn over them cut a ✗ in half. (The halo also keeps them clear of a black stone.)
+			g.appendChild(halos);
+			g.appendChild(badges);
 			// (the flag over a halo in the background colour, so it reads over the ring, an edge or a verdict)
 			this.#flagHalo = svg(g, 'path', { class: 'kifu-t-flag-halo' });
 			this.#flag = svg(g, 'path', { class: 'kifu-t-flag' });

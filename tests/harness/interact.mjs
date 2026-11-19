@@ -686,6 +686,36 @@ await scenario('the move tree panel renders markdown in a comment', {
 	assert.equal((await textEl.textContent()).replace(/\s+/g, ' ').trim(), 'The vital point, a key shape, and A1.');
 });
 
+/* A ✓ or ✗ in the move tree sits at its stone's upper right, just where the ring round the current
+   move runs: it is drawn over the ring, on a halo, instead of being cut in half by it. */
+await scenario('the move tree draws a ✓ or ✗ over the ring round the current move, not under it', {
+	files: { 'V.md': '# V\n\n```kifu\n(;GM[1]SZ[9];B[ee]TE[1];W[cc]BM[1])\n```\n' }, panes: [{ path: 'V.md', mode: 'source' }], autosave: 100,
+}, async (page) => {
+	await page.evaluate(() => window.harness.app._commands.find((c) => c.id === 'show-tree').callback());
+	await sleep(50);
+	await page.evaluate(() => document.querySelector('.kifu').dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+	await sleep(300);
+	const seen = await page.evaluate(() => {
+		const ring = document.querySelector('.kifu-t-cur');
+		const below = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); // (b drawn over a)
+		const badges = [...document.querySelectorAll('.kifu-t-badge')];
+		const halos = [...document.querySelectorAll('.kifu-t-badge-halo')];
+		// the stone a ✗ belongs to: its path starts RAD + 2 right of the stone's centre and RAD + 2 above it
+		const cross = badges.find((b) => b.classList.contains('is-incorrect'));
+		const [, x, y] = /^M([\d.]+) ([\d.]+)/.exec(cross.getAttribute('d'));
+		return {
+			badges: badges.map((b) => (b.classList.contains('is-correct') ? 'correct' : 'incorrect')),
+			overRing: badges.every((b) => below(ring, b)) && halos.every((h) => below(ring, h)),
+			onHalos: badges.every((b) => halos.some((h) => h.getAttribute('d') === b.getAttribute('d') && below(h, b))),
+			ringOnTheCross: Number(ring.getAttribute('cx')) === Number(x) - 5 && Number(ring.getAttribute('cy')) === Number(y) + 11,
+		};
+	});
+	assert.deepEqual(seen.badges, ['correct', 'incorrect']);
+	assert.equal(seen.ringOnTheCross, true); // (the board rests on its last move, the one marked ✗)
+	assert.equal(seen.overRing, true);
+	assert.equal(seen.onHalos, true);
+});
+
 /* The line between the move tree and the comment can be dragged to give the comment more room
    or less, as Obsidian's own dividers are; a double click gives it back its own size. The height
    is kept with the workspace (the panel's view state), so it is there after a restart. */

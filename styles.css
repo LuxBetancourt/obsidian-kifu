@@ -869,6 +869,15 @@ body .kifu-panel button.kifu-btn {
 	stroke-linejoin: round;
 }
 
+/* (under a ✓ or ✗, so that it reads over the ring round the current move, an edge or a stone) */
+.kifu-t-badge-halo {
+	fill: none;
+	stroke: var(--background-secondary, var(--background-primary));
+	stroke-width: 4.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
 .kifu-t-badge.is-correct {
 	stroke: var(--text-success, #2a8a3e);
 }
