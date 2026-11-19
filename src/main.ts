@@ -1390,6 +1390,11 @@ export default class KifuPlugin extends Plugin implements Host {
 			// the disk said no: that may pass
 			const wait = RETRY_WAITS[Math.min(s.failures, RETRY_WAITS.length) - 1] ?? RETRY_WAITS[0];
 			this.requestSave(s, false, wait);
+		} else if (outcome === 'ok' && !s.dirtyTree && !s.dirtyHeader) {
+			// All of it is written, so the typing has paused (a write waits for a pause): a
+			// comment that was being typed shows its markdown under the board again, though
+			// the comment box may still have the keyboard.
+			s.doneTyping();
 		}
 	}
 

@@ -607,11 +607,11 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			else s.appendChild(doc.createTextNode(n.at));
 		}
 		// the comment: on its own line below the verdict, its markdown rendered, unlocked or not.
-		// While it is being typed in the panel it is plain text: the comment is set on every
-		// keystroke, and rendering markdown each time cleared and refilled the caption,
-		// jittering the board's height (see Session.typingCaption). The rendered node is kept
-		// and re-used while the text and the way it is shown are unchanged (a board is
-		// redrawn often).
+		// While it is being typed in the panel it is plain text, until the edit is written after a
+		// pause: the comment is set on every keystroke, and rendering markdown each time cleared
+		// and refilled the caption, jittering the board's height (see Session.typingCaption).
+		// The rendered node is kept and re-used while the text and the way it is shown are
+		// unchanged (a board is redrawn often).
 		const plain = this.session?.typingCaption() ?? false;
 		if (m.text && m.text === this.#capText && this.#capPlain === plain && this.#capCommentEl) {
 			cap.appendChild(this.#capCommentEl);

@@ -218,7 +218,8 @@ export class Session {
 	edit = false;
 	/**
 	 * The move whose comment is being typed in the panel, from the first keystroke until
-	 * the box is left or the board locked (see typingCaption).
+	 * the edit is written (after a pause), the box is left or the board locked (see
+	 * typingCaption).
 	 */
 	typing: SgfNode | null = null;
 	tool: Tool = 'play';
@@ -1512,7 +1513,7 @@ export class Session {
 		this.changed(true, false, !before !== !next || nodeMark(cur) !== mark);
 	}
 
-	/** The comment box was left (or the panel turned to another board): no more typing. */
+	/** The typing is over: the edit was written, the comment box left, or the panel turned to another board. */
 	doneTyping(): void {
 		if (!this.typing) return;
 		this.typing = null;

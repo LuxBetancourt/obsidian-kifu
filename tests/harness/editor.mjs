@@ -1508,7 +1508,8 @@ await scenario('clicking the letter tool again cycles its series between a, A an
 
 /* The comment under a board keeps its markdown when the board is unlocked. Only while it is
    typed in the panel is it plain text (rendering markdown on every keystroke jittered the
-   board's height), and it is markdown again once the typing is over. */
+   board's height), and it is markdown again once the typing is over: the edit written after a
+   pause, the box left, another board taken up, or the board locked. */
 await scenario('the caption comment keeps its markdown when unlocked and is plain text only while it is typed', {
 	files: { 'CM.md': '# CM\n\n```kifu\n(;GM[1]SZ[9]C[A **bold** note.])\n```\n\nbetween\n\n```kifu\n(;GM[1]SZ[9]C[An *other* one.])\n```\n\nafter\n' }, live: ['CM.md'], autosave: 150,
 }, async (page) => {
@@ -1528,15 +1529,24 @@ await scenario('the caption comment keeps its markdown when unlocked and is plai
 	await page.keyboard.type(' More', { delay: 20 });
 	assert.equal(await bold(), 0);
 	assert.equal(await comment.textContent(), 'A **bold** note. More');
-	// the box left: markdown again
-	await box.blur(); await sleep(250);
+	// a pause, and the edit is written (400 ms after the last key here): markdown again, though
+	// the box still has the keyboard
+	await sleep(900);
+	assert.ok((await doc(page)).includes('C[A **bold** note. More]'));
+	assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.kifu-p-comment')), true);
 	assert.equal(await bold(), 1);
-	assert.equal((await comment.textContent()).trim(), 'A bold note. More');
+	// typing on: plain again
+	await page.keyboard.type('.', { delay: 20 });
+	assert.equal(await bold(), 0);
+	// the box left: markdown again at once, before anything is written
+	await box.blur(); await sleep(150);
+	assert.equal(await bold(), 1);
+	assert.equal((await comment.textContent()).trim(), 'A bold note. More.');
 	// typing again, then a click on the other board: the panel turns to it (the keyboard stays
-	// in the box, as a click on a board leaves it), so the typing is over
+	// in the box, as a click on a board leaves it), so the typing is over, at once too
 	await box.click(); await page.keyboard.press('End'); await page.keyboard.type('!', { delay: 20 });
 	assert.equal(await bold(), 0);
-	await other.click(); await sleep(250);
+	await other.click(); await sleep(150);
 	assert.equal(await bold(), 1);
 	assert.equal(await other.locator('em').count(), 1);
 	// back to the first board: typing, then locking it, ends the typing too
@@ -1545,9 +1555,9 @@ await scenario('the caption comment keeps its markdown when unlocked and is plai
 	assert.equal(await bold(), 0);
 	await toggleLock(page); await sleep(250);
 	assert.equal(await bold(), 1);
-	assert.equal((await comment.textContent()).trim(), 'A bold note. More!?');
+	assert.equal((await comment.textContent()).trim(), 'A bold note. More.!?');
 	await sleep(400);
-	assert.ok((await doc(page)).includes('C[A **bold** note. More!?]'));
+	assert.ok((await doc(page)).includes('C[A **bold** note. More.!?]'));
 	assert.deepEqual(await notices(page), []);
 });
 
