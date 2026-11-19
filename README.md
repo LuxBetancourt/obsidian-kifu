@@ -315,6 +315,7 @@ With the keyboard on a board (click it) or on the panel:
 | `↑` `↓` | previous / next variation |
 | `Home` `End` | first position / end of the line |
 | `Esc` | locked: back to the resting position · unlocked: lock · while dragging a crop: never mind |
+| `Delete` `Backspace` | unlocked: delete the current move and what follows (one per press; undo brings it back) |
 | `Ctrl/Cmd+Z` | unlocked: undo · locked: take back your last step |
 | `Ctrl/Cmd+Shift+Z`, `Ctrl+Y` | unlocked: redo · locked: make that step again |
 

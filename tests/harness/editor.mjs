@@ -1570,5 +1570,60 @@ await scenario('links in comments follow a renamed note in a note open in the ed
 	assert.deepEqual(await notices(page), []);
 });
 
+/* Delete and Backspace take the current move away, and what follows it, while the board is
+   unlocked, as the trash button does; locked, they do nothing. One press, one move. They work on
+   the panel too, never reach the note's text, and in a text box they are the text's. */
+await scenario('Delete and Backspace delete the current move while the board is unlocked, on the board or the panel', {
+	files: { 'K.md': '# K\n\n```kifu\n(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[gc];B[cg])\n```\n\nafter\n' }, live: ['K.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	const game = async () => flat(blocks(await doc(page))[0]);
+	const focusBoard = () => page.locator('.kifu').first().evaluate((e) => e.focus());
+	// locked: nothing
+	await focusBoard();
+	await page.keyboard.press('Delete');
+	await page.keyboard.press('Backspace');
+	await sleep(500);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[gc];B[cg])');
+	// unlocked, on its last move: a press deletes the current move
+	await toggleLock(page); await sleep(250);
+	await focusBoard();
+	await page.keyboard.press('Delete');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc];B[gg];W[gc])');
+	await page.keyboard.press('Backspace');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	// a key held down deletes one move, not the whole line
+	await page.keyboard.down('Delete');
+	await page.keyboard.down('Delete');
+	await page.keyboard.down('Delete');
+	await page.keyboard.up('Delete');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc])');
+	// and undo brings it back
+	await page.keyboard.press('Control+z');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	// with the keyboard on the panel, the same
+	await page.evaluate(() => window.harness.plugin.showPanel(true));
+	await sleep(150);
+	await page.locator('.kifu-p-main').focus();
+	await page.keyboard.press('Delete');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc])');
+	// but in the panel's comment box they edit the text
+	await page.locator('.kifu-p-comment').click();
+	await page.keyboard.type('abc');
+	await page.keyboard.press('Backspace');
+	await page.keyboard.press('Home');
+	await page.keyboard.press('Delete');
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee];W[cc]C[b])');
+	// the note's own text never saw a key
+	assert.deepEqual(await editorLog(page), []);
+	assert.deepEqual(await notices(page), []);
+});
+
 await browser.close();
 process.exit(report() ? 1 : 0);

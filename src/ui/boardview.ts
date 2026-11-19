@@ -669,7 +669,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			['correct', 'check', 'Mark this line as correct', () => s.mark('correct')],
 			['incorrect', 'cross', 'Mark this line as incorrect', () => s.mark('incorrect')],
 			['promote', 'up', 'Move this variation up', () => s.promote()],
-			['delete', 'trash', 'Delete this move and what follows', () => s.deleteNode()],
+			['delete', 'trash', 'Delete this move and what follows (Delete or Backspace)', () => s.deleteNode()],
 		];
 		for (const [id, ic, title, fn] of more) {
 			if (id === 'undo' || id === 'prev' || id === 'correct' || id === 'promote') group = el(bar, 'div', 'kifu-group');
@@ -756,6 +756,13 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 					else if (s.edit) this.#toggleLock();
 					else if (s.moved) s.reset();
 					else handled = false;
+					break;
+				case 'Delete':
+				case 'Backspace':
+					// unlocked: the current move goes, and what follows it, as with the trash button.
+					// One press, one move: a key held down does not wipe out the line.
+					if (!s.edit) handled = false;
+					else if (!ev.repeat) s.deleteNode();
 					break;
 				default:
 					handled = false;

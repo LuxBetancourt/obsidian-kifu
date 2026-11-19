@@ -262,6 +262,12 @@ export class TreePanel extends ItemView {
 				else if (s.moved) s.reset();
 				else return;
 				break;
+			case 'Delete':
+			case 'Backspace':
+				// unlocked: the current move goes, and what follows it (one press, one move)
+				if (!s.edit) return;
+				if (!ev.repeat) s.deleteNode();
+				break;
 			default:
 				return;
 		}
