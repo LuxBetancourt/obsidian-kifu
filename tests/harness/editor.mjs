@@ -1724,6 +1724,10 @@ await scenario('buttons with choices: a click shows the palette, a click again g
 	// and counts on from there, as the palette shows when it is up again
 	await label.hover();
 	assert.equal(await next.inputValue(), '6');
+	// undone, the label goes and the next one is 5 again
+	await page.keyboard.press('Control+z');
+	assert.equal(await labels(page), '1');
+	assert.equal(await next.inputValue(), '5');
 	// Esc in the box: the palette goes, the board stays unlocked
 	await next.click();
 	await page.keyboard.press('Escape');

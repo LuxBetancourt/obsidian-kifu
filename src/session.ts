@@ -136,6 +136,8 @@ interface Snapshot {
 	header: string[];
 	at: number[];
 	hasGame: boolean;
+	/** The label tool's next label, for a step that put labels down (see countingLabels). */
+	nextLabel?: string;
 }
 
 /**
@@ -1112,7 +1114,8 @@ export class Session {
 
 	/* ------------------------------------------------------------------- undo */
 
-	private capture(headerOnly: boolean): Snapshot {
+	/** The state as it is. `label`: with the label tool's count (see countingLabels). */
+	private capture(headerOnly: boolean, label = false): Snapshot {
 		let saved = this.cur;
 		while (saved.temp && saved.parent) saved = saved.parent;
 		return {
@@ -1120,6 +1123,7 @@ export class Session {
 			header: this.header.slice(),
 			at: pathIndexes(saved),
 			hasGame: this.hasGame,
+			nextLabel: label ? this.nextLabel : undefined,
 		};
 	}
 
@@ -1157,6 +1161,7 @@ export class Session {
 		}
 		if (headerChanged) this.dirtyHeader = true;
 		this.hasGame = s.hasGame;
+		if (s.nextLabel !== undefined) this.nextLabel = s.nextLabel;
 		this.burst = null;
 		this.commit(true);
 	}
@@ -1173,7 +1178,7 @@ export class Session {
 		const s = this.undoStack.pop();
 		if (!s) return;
 		this.cancelReply();
-		this.redoStack.push(this.capture(s.sgf === null));
+		this.redoStack.push(this.capture(s.sgf === null, s.nextLabel !== undefined));
 		this.restore(s);
 	}
 
@@ -1181,8 +1186,18 @@ export class Session {
 		const s = this.redoStack.pop();
 		if (!s) return;
 		this.cancelReply();
-		this.undoStack.push(this.capture(s.sgf === null));
+		this.undoStack.push(this.capture(s.sgf === null, s.nextLabel !== undefined));
 		this.restore(s);
+	}
+
+	/**
+	 * A label is about to be put down in the step just begun: the step remembers the label
+	 * tool's count from before it (only the first label of a stroke), so that undoing the
+	 * step counts the tool back too, and redoing it counts on again.
+	 */
+	private countingLabels(): void {
+		const top = this.undoStack[this.undoStack.length - 1];
+		if (top && top.nextLabel === undefined) top.nextLabel = this.nextLabel;
 	}
 
 	/* ---------------------------------------------------------------- editing */
@@ -1334,6 +1349,7 @@ export class Session {
 				this.snapshot();
 				this.clearMarks(pt);
 				if (!had && this.nextLabel) {
+					this.countingLabels();
 					addPoint(cur, 'LB', pt + ':' + escapeText(this.nextLabel).replace(/:/g, '\\:'));
 					this.nextLabel = bumpLabel(this.nextLabel);
 				}
@@ -1523,6 +1539,7 @@ export class Session {
 			case 'label': {
 				if (this.marked(pt) || !this.nextLabel) return; // leave what is there; free points only
 				commit();
+				this.countingLabels();
 				addPoint(cur, 'LB', pt + ':' + escapeText(this.nextLabel).replace(/:/g, '\\:'));
 				this.nextLabel = bumpLabel(this.nextLabel);
 				this.changed(true);

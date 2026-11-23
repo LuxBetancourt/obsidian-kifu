@@ -457,6 +457,42 @@ test('edit: stones, play, marks, labels, undo', () => {
 	assert.ok(s.blockBody().startsWith('view: auto\n(;GM[1]FF[4]CA[UTF-8]SZ[19]'));
 });
 
+test('undoing a label counts the label tool back with it, and redoing counts it on again', () => {
+	const s = make('(;GM[1]SZ[9])');
+	s.setEdit(true);
+	s.setTool('label');
+	assert.equal(s.nextLabel, 'a');
+	click(s, 'aa');
+	assert.equal(s.nextLabel, 'b');
+	s.undo();
+	assert.equal(label(s, 'aa'), undefined);
+	assert.equal(s.nextLabel, 'a');
+	s.redo();
+	assert.equal(label(s, 'aa'), 'a');
+	assert.equal(s.nextLabel, 'b');
+	// a stroke (one undo step) counts back to where it began
+	s.startStroke();
+	for (const pt of ['bb', 'cc', 'dd']) s.paint(...at(pt));
+	s.endStroke();
+	assert.equal(s.nextLabel, 'e');
+	s.undo();
+	assert.equal(s.nextLabel, 'b');
+	assert.equal(label(s, 'cc'), undefined);
+	s.redo();
+	assert.equal(s.nextLabel, 'e');
+	assert.equal(label(s, 'dd'), 'd');
+	// a step that put no label down leaves the count as it is: a label taken off, a stone
+	click(s, 'aa');
+	s.nextLabel = '7';
+	s.undo();
+	assert.equal(label(s, 'aa'), 'a');
+	assert.equal(s.nextLabel, '7');
+	s.setTool('black');
+	click(s, 'ee');
+	s.undo();
+	assert.equal(s.nextLabel, '7');
+});
+
 test('undo: comments are steps of their own, and nothing typed later is lost with an earlier step', () => {
 	const s = make('(;SZ[9]AB[cc]AW[dd];B[ee])');
 	s.setEdit(true);
