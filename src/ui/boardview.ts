@@ -343,8 +343,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				s.refocus = null;
 				// unless the keyboard has gone somewhere else meanwhile
 				if (doc.activeElement !== doc.body && doc.activeElement !== null) return;
+				// (the label box is in the labels' palette: up again, with the keyboard in it)
+				if (want.label && s.edit && s.tool === 'label' && this.#paletteFor !== 'label') this.#openPalette(s, 'label', false, false);
 				const input = want.label ? this.#labelInput : null;
-				if (input && !input.hidden) {
+				if (input) {
 					input.focus({ preventScroll: true });
 					input.setSelectionRange(input.value.length, input.value.length);
 				} else {
@@ -714,18 +716,6 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			}
 			// (beside the play tool: passing is playing too)
 			if (tool === 'play') this.#toolBtns.set('pass', iconButton(group, 'pass', 'Pass (for the side to play)', () => s.pass()));
-			if (tool === 'label') {
-				const input = (this.#labelInput = el(group, 'input', 'kifu-label'));
-				input.type = 'text';
-				input.maxLength = 4;
-				input.setAttribute('aria-label', 'Next label');
-				input.addEventListener('input', () => {
-					s.nextLabel = input.value;
-				});
-				input.addEventListener('keydown', (ev) => {
-					if (ev.key === 'Enter' || ev.key === 'Escape') this.#root.focus({ preventScroll: true });
-				});
-			}
 		}
 		const more: [string, string, string, () => void][] = [
 			['figure', 'figure', 'When locked, show the moves as a numbered figure', () => s.setFigure(!s.figure)],
@@ -800,7 +790,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#paletteHover = false;
 	#paletteTimer = 0;
 
-	#openPalette(s: Session, id: string, hover = false): void {
+	/** Show the palette of button `id`: `hover`, shown by the mouse coming over; `rise`, with a moment's rise. */
+	#openPalette(s: Session, id: string, hover = false, rise = true): void {
 		this.#closePalette();
 		const bar = this.#tools;
 		const anchor = this.#toolBtns.get(id);
@@ -825,15 +816,39 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			const b = c.icon ? iconButton(pal, c.icon, c.title, choose) : textButton(pal, c.text ?? c.key, c.title, choose);
 			b.dataset.choice = c.key;
 		}
+		// The labels' palette also holds the next label, to be typed over: each click on the
+		// board counts on from it. (A press in it is taken by the board's root, see there.)
+		if (id === 'label') {
+			const input = (this.#labelInput = el(pal, 'input', 'kifu-label'));
+			input.type = 'text';
+			input.maxLength = 4;
+			input.value = s.nextLabel;
+			input.setAttribute('aria-label', 'Next label');
+			input.addEventListener('input', () => {
+				s.nextLabel = input.value;
+			});
+			// (typed in, it stays up, even when it was the mouse coming over that showed it)
+			input.addEventListener('focus', () => {
+				this.#paletteHover = false;
+				this.#keepPalette();
+			});
+			// Enter or Esc: done, back to the board
+			input.addEventListener('keydown', (ev) => {
+				if (ev.key !== 'Enter' && ev.key !== 'Escape') return;
+				ev.preventDefault();
+				this.#closePalette();
+			});
+		}
 		this.#paletteFor = id;
 		pal.hidden = false;
 		this.#markPalette(s);
 		// centred over the button, kept inside the strip
 		const x = anchor.offsetLeft + anchor.offsetWidth / 2 - pal.offsetWidth / 2;
 		pal.style.setProperty('--kifu-palette-x', `${Math.round(Math.max(0, Math.min(bar.clientWidth - pal.offsetWidth, x)))}px`);
-		// it comes up out of the button: a moment's fade and rise (none for a reader who asks for less motion)
+		// it comes up out of the button: a moment's fade and rise (none for a reader who asks for
+		// less motion, nor when it is only put back on a board drawn again)
 		const doc = this.#root.ownerDocument;
-		if (!doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		if (rise && !doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
 			pal.animate(
 				[
 					{ opacity: 0, transform: 'translateY(6px) scale(0.92)' },
@@ -857,7 +872,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#paletteOff = null;
 		this.#paletteFor = null;
 		this.#paletteHover = false;
-		if (this.#palette) this.#palette.hidden = true;
+		const pal = this.#palette;
+		if (!pal) return;
+		// (the keyboard was in it, in the label box: it goes back to the board, not to the page)
+		if (pal.contains(pal.ownerDocument.activeElement)) this.#root.focus({ preventScroll: true });
+		pal.hidden = true;
+		this.#labelInput = null;
 	}
 
 	/** The mouse left the button or its palette: one the mouse showed goes, unless it comes back within a moment. */
@@ -896,11 +916,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		if (open && !open.inHand) this.#closePalette();
 		else if (open) this.#markPalette(s);
 		setIcon(btn('play').firstChild as SVGSVGElement, m.toPlay === 1 ? 'playB' : 'playW');
+		// (the next label in the open palette counts on as labels are put down, unless it is being typed in)
 		const input = this.#labelInput;
-		if (input) {
-			input.hidden = s.tool !== 'label';
-			if (input.ownerDocument.activeElement !== input && input.value !== s.nextLabel) input.value = s.nextLabel;
-		}
+		if (input && input.ownerDocument.activeElement !== input && input.value !== s.nextLabel) input.value = s.nextLabel;
 		// (what only an option line can hold: not for an SGF file shown by itself)
 		btn('crop').hidden = btn('figure').hidden = btn('start').hidden = s.fileView;
 		btn('figure').classList.toggle('is-active', s.figure);

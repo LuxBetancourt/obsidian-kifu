@@ -772,13 +772,15 @@ body .kifu-panel button.kifu-btn {
 	background: var(--background-primary);
 }
 
-/* the shape button's palette: over the button, the shape in hand outlined */
+/* a button's palette: over the button, the choice in force outlined (the labels' palette also
+   holds the box for the next label) */
 .kifu-palette {
 	position: absolute;
 	bottom: calc(100% + 6px);
 	left: var(--kifu-palette-x, 0);
 	z-index: 2;
 	display: flex;
+	align-items: center;
 	gap: 1px;
 	padding: 3px;
 	border: 1px solid var(--background-modifier-border);

@@ -283,13 +283,18 @@ for (const ignoreEvents of [true, false]) {
 		await setCursor(page, 2, 10);
 		await toggleLock(page);
 		await tool(page, 'Letter or number').click();
-		await clickPoint(page, 0, 'ee'); // places "a"; it is written 400 ms from now
-		await page.locator('.kifu-label').click(); // meanwhile the user goes to change the next label
+		await clickPoint(page, 0, 'ee'); // places "a"; it is written 400 ms from now (and the palette goes)
+		// meanwhile the user goes to change the next label: the mouse over the button brings the palette up
+		await tool(page, 'Letter or number').hover();
+		await page.locator('.kifu-palette .kifu-label').click();
 		assert.equal(await active(page), 'INPUT.kifu-label');
 		await page.keyboard.type('1');
 		assert.equal(await page.locator('.kifu-label').inputValue(), '1'); // (a click selects what was there)
+		await page.mouse.move(5, 5); // (typed in, the palette stays when the mouse goes)
 		await sleep(600); // the save lands and the block is drawn again
 		assert.equal(blocks(await doc(page))[0], '(;SZ[9]AB[cc]LB[ee:a])');
+		// the palette is up again on the board drawn again, with the keyboard in its box
+		assert.equal(await page.locator('.kifu-palette').isVisible(), true);
 		assert.equal(await active(page), 'INPUT.kifu-label');
 		await page.keyboard.type('2');
 		assert.equal(await page.locator('.kifu-label').inputValue(), '12');
@@ -1686,16 +1691,44 @@ await scenario('buttons with choices: a click shows the palette, a click again g
 	await page.keyboard.press('Escape');
 	assert.equal(await open(), false);
 	assert.deepEqual(await isEditing(page), [true]);
-	// the label series the same way (the box shows the next label); a press elsewhere puts it away
+	// the label series the same way; the box for the next label is in the palette too (the strip has
+	// none of its own), and follows the series; a press elsewhere puts it away
 	const label = tool(page, 'Letter or number');
-	const next = page.locator('.kifu-label');
+	const next = pal.locator('.kifu-label');
 	await label.click();
 	assert.deepEqual(await choices(), ['Small letters (a, b, c…) (in force)', 'Capital letters (A, B, C…)', 'Numbers (1, 2, 3…)']);
+	assert.equal(await next.isVisible(), true);
+	assert.equal(await next.inputValue(), 'a');
+	assert.equal(await page.locator('.kifu-tools .kifu-label').count(), 1);
+	const nb = await next.boundingBox();
+	const lastChoice = await pal.locator('.kifu-btn').last().boundingBox();
+	assert.ok(nb.x >= lastChoice.x + lastChoice.width, 'after the choices');
+	assert.ok(Math.abs(nb.y + nb.height / 2 - (lastChoice.y + lastChoice.height / 2)) <= 1, 'in line with them');
 	await label.click();
 	assert.equal(await next.inputValue(), 'A');
 	await pal.locator('.kifu-btn[aria-label^="Numbers"]').click();
-	assert.equal(await next.inputValue(), '1');
 	assert.equal(await open(), false);
+	assert.equal(await page.locator('.kifu-label:visible').count(), 0);
+	// up again (the mouse over the button of the tool in hand): the next label, in the series chosen
+	await label.hover();
+	assert.equal(await open(), true);
+	assert.equal(await next.inputValue(), '1');
+	// typed over, it is the next label; Enter puts the palette away and gives the keyboard back to the board
+	await next.click();
+	await page.keyboard.type('5');
+	await page.keyboard.press('Enter');
+	assert.equal(await open(), false);
+	assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('kifu')), true);
+	await clickPoint(page, 0, 'cc');
+	assert.equal(await labels(page), '1,5'); // (1: the number on the move played)
+	// and counts on from there, as the palette shows when it is up again
+	await label.hover();
+	assert.equal(await next.inputValue(), '6');
+	// Esc in the box: the palette goes, the board stays unlocked
+	await next.click();
+	await page.keyboard.press('Escape');
+	assert.equal(await open(), false);
+	assert.deepEqual(await isEditing(page), [true]);
 	await label.click();
 	assert.equal(await open(), true);
 	await page.mouse.click(5, 5);

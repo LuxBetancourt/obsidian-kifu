@@ -139,12 +139,15 @@ for (const [label, opts] of [
 		await tool(page, 'Triangle').click();
 		await clickPoint(page, 0, 'pd');
 		await tool(page, 'Letter or number').click();
-		assert.equal(await page.locator('.kifu-label').inputValue(), 'a');
+		assert.equal(await page.locator('.kifu-palette .kifu-label').inputValue(), 'a');
 		await clickPoint(page, 0, 'dd');
 		await clickPoint(page, 0, 'dp');
-		await page.locator('.kifu-label').fill('7');
+		// (the box for the next label is in the palette, up again with the mouse over the button)
+		await tool(page, 'Letter or number').hover();
+		await page.locator('.kifu-palette .kifu-label').fill('7');
 		await clickPoint(page, 0, 'pp');
-		assert.equal(await page.locator('.kifu-label').inputValue(), '8');
+		await tool(page, 'Letter or number').hover();
+		assert.equal(await page.locator('.kifu-palette .kifu-label').inputValue(), '8');
 		assert.equal(await labels(page), '7,a,b');
 
 		// lock: written at once, cropped to the stones again
@@ -2428,11 +2431,14 @@ await scenario('the label box keeps the keyboard when a save redraws the board (
 	await toggleLock(page);
 	await tool(page, 'Letter or number').click();
 	await clickPoint(page, 0, 'ee');
-	await page.locator('.kifu-label').click();
+	// (the box is in the labels' palette, up again with the mouse over the button)
+	await tool(page, 'Letter or number').hover();
+	await page.locator('.kifu-palette .kifu-label').click();
 	await page.keyboard.type('1');
 	await sleep(600);
 	assert.equal(await text(page, 'N.md'), ONE.replace('AB[cc]', 'AB[cc]LB[ee:a]'));
 	assert.equal(await active(page), 'INPUT.kifu-label');
+	assert.equal(await page.locator('.kifu-palette').isVisible(), true);
 	await page.keyboard.type('2');
 	assert.equal(await page.locator('.kifu-label').inputValue(), '12');
 	await clickPoint(page, 0, 'gg');
