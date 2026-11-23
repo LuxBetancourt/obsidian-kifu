@@ -84,6 +84,9 @@ export function orientModel(m: Model, o: Orient): Model {
 		lines: m.lines.map((l) => ({ ...l, from: at(l.from), to: at(l.to) })),
 		selected: new Set([...m.selected].map(at)),
 		dimmed: new Set([...m.dimmed].map(at)),
+		// (recoloured, black's territory is shown as white's, and white's as black's)
+		tb: new Set([...(o.swap ? m.tw : m.tb)].map(at)),
+		tw: new Set([...(o.swap ? m.tb : m.tw)].map(at)),
 		last: m.last >= 0 ? at(m.last) : -1,
 		notes: m.notes.map((n) => ({ ...n, color: shownColor(o, n.color) as 1 | 2, atColor: shownColor(o, n.atColor) })),
 		toPlay: shownColor(o, m.toPlay) as Model['toPlay'],

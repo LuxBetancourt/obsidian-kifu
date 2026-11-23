@@ -63,6 +63,9 @@ test('a picture turned and recoloured', () => {
 		lines: [{ from: 0, to: 5, arrow: true }],
 		selected: new Set([2]),
 		dimmed: new Set([3]),
+		// black's territory on the far corner, white's beside it
+		tb: new Set([5]),
+		tw: new Set([4]),
 		last: 1,
 		notes: [],
 		toPlay: 1,
@@ -81,6 +84,9 @@ test('a picture turned and recoloured', () => {
 	assert.deepEqual(r.lines, [{ from: 5, to: 0, arrow: true }]); // (turned with the board, head and all)
 	assert.deepEqual([...r.selected], [3]);
 	assert.deepEqual([...r.dimmed], [2]);
+	// (turned, and recoloured: black's territory now white's)
+	assert.deepEqual([...r.tw], [0]);
+	assert.deepEqual([...r.tb], [1]);
 	assert.equal(r.last, 4);
 	assert.deepEqual(r.view, { x0: 1, y0: 1, x1: 2, y1: 1 });
 	assert.equal(r.toPlay, 2);

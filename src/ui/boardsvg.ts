@@ -56,6 +56,9 @@ const STRIPE = 12.5;
 /** Width of the coordinates band, in pixels, for a board whose lines are sized for `lineCell`. */
 export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
 
+/** Half the side of a territory square (the "square" highlight's is 18). */
+const TERRITORY = 14;
+
 const circle = (cx: number, cy: number, r: number): string =>
 	`M${+(cx - r).toFixed(1)} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
 
@@ -370,7 +373,29 @@ export class BoardSvg {
 		}
 		// (sliding stripes: still for a reader who asks for less motion, in styles.css)
 		this.hatch.classList.toggle('is-sliding', style.endsWith('-animated'));
+		// Territory (TB, TW): a small square on each point, black's like a black stone, white's
+		// like a white one (and smaller than the "square" highlight). A stone on the other side's
+		// territory is dead: veiled in paper, its square over it.
 		let fd = '';
+		const ringWidth = ring.toFixed(1);
+		const territory = (set: Set<number>, side: 'b' | 'w', deadColor: number): void => {
+			set.forEach((i) => {
+				const x = i % w;
+				const y = Math.floor(i / w);
+				if (!inView(x, y)) return;
+				const cx = x * U + HALF;
+				const cy = y * U + HALF;
+				if (m.grid[i] === deadColor) fd += circle(cx, cy, R + 1);
+				const cls = `kifu-terr is-${side} ${on(i)}`;
+				const d = `M${cx - TERRITORY} ${cy - TERRITORY}h${2 * TERRITORY}v${2 * TERRITORY}h${-2 * TERRITORY}z`;
+				want.push({
+					key: `T${i} ${cls} ${ringWidth}`,
+					make: () => svgNode(doc, 'path', side === 'w' ? { d, class: cls, 'stroke-width': ringWidth } : { d, class: cls }),
+				});
+			});
+		};
+		territory(m.tb, 'b', 2);
+		territory(m.tw, 'w', 1);
 		m.dimmed.forEach((i) => {
 			const x = i % w;
 			const y = Math.floor(i / w);

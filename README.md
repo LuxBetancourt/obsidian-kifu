@@ -58,8 +58,8 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | △ Shapes | A triangle, square, circle or cross, chosen in the palette. Marks belong to the move you are on, so every move can carry its own. |
 | A | Labels. The palette switches between `a`, `A` and `1`, and its little box holds the next label: type `a`, `A`, `1`, `51`… (Enter when done) and each click counts on from there. Undo takes a label back and counts back with it. |
 | ↗ Arrows and lines | Drag from one point to another to draw an arrow, or a line (chosen in the palette). Drawing the same one again takes it away. An arrow has a filled head, an open head (←) or a double line (⇐): the **Arrows** setting, or `arrows: open` for one board. |
-| ▨ Highlight and dim | Click a point, or drag across a rectangle, to highlight it: light grey, or diagonal stripes (with or without a border along the region's edge, still or slowly sliding), or a small square (the **Highlighted points** setting, or `highlight: stripes` for one board). Sliding stripes stand still when the system asks for less motion. Choose dim in the palette to dim points instead, fading the stones and lines there; dimming carries on to the moves after it until you change it. A drag that starts on a point already highlighted (or dimmed) takes the rectangle off. |
-| Eraser | Removes what is drawn on a point (a shape, a label, a highlight, the arrows and lines that start or end there); a second click removes the stone under it. |
+| ▨ Highlight, dim and territory | Click a point, or drag across a rectangle, to highlight it: light grey, or diagonal stripes (with or without a border along the region's edge, still or slowly sliding), or a small square (the **Highlighted points** setting, or `highlight: stripes` for one board). Sliding stripes stand still when the system asks for less motion. Choose dim in the palette to dim points instead, fading the stones and lines there; dimming carries on to the moves after it until you change it. A drag that starts on a point already highlighted (or dimmed) takes the rectangle off. The palette also marks territory: see *Territory* below. |
+| Eraser | Removes what is drawn on a point (a shape, a label, a highlight, territory, the arrows and lines that start or end there); a second click removes the stone under it. |
 | Crop | Drag to choose the part of the board the locked board shows. Double-click (or double-tap) to go back to the automatic crop. |
 | ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. Deleting that position (or a move before it) takes the line away as well. |
 | # | Makes the locked board a *numbered figure* of the main line, or takes the numbers off again. Whatever a `numbers:` line said before is put back, so a range like `51-100`, or an `off`, is not lost by trying the switch. |
@@ -75,7 +75,9 @@ While a board is unlocked the whole board is shown, with the part that will be h
 
 **Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it. If the record has another stone set up on that same point, it shows through while you drag. (With the arrow or highlight tool a drag from that stone draws instead.)
 
-These are SGF's own markup (`TR` `SQ` `CR` `MA`, `LB`, `AR` `LN`, `SL` `DD`), so other Go programs read them too, though not every program draws them all.
+**Territory.** The highlight button's palette has three more choices. *Black's territory* and *white's territory* mark points by hand, a click or a dragged rectangle at a time, like highlighting (a point is one side's or the other's, never both). *Territory, worked out* counts it for you: the first click on a position guesses which stones are dead and marks both sides' territory, the dead stones in it. A click on stones then makes them dead or alive again, with the stones of their colour they reach through empty points; hold Shift for one chain alone. A click on an empty point counts again from the stones marked dead, which takes back marks made by hand. Each click is one undo step. Territory is a small square on each point, black's like a black stone, white's like a white one; a dead stone is veiled, its square on top. A seki's eyes, and false eyes that have to be filled, count for nobody (Japanese counting), and so does territory that runs out of the part of the board the locked board shows. The guess comes from random games played out from the position, the same for the same position every time; it can take a group in seki or in a capturing race for dead, so check it, and click to set it right.
+
+These are SGF's own markup (`TR` `SQ` `CR` `MA`, `LB`, `AR` `LN`, `SL` `DD`, `TB` `TW`), so other Go programs read them too, though not every program draws them all.
 
 Two things worth knowing:
 
@@ -335,7 +337,7 @@ On a board alone:
 | `T` `S` `C` `X` | triangle, square, circle, cross |
 | `L` | labels; again: the next series (`a`, `A`, `1`) |
 | `A` | arrows; again: lines (and back) |
-| `H` | highlight; again: dim (and back) |
+| `H` | highlight; again: dim, black's territory, white's territory, territory worked out (and round) |
 | `E` | eraser |
 | `R` | crop |
 | `Shift+P` | pass, for the side to play |
@@ -421,6 +423,8 @@ Found a bug, or a board that looks wrong? Please [open an issue](https://github.
 ## License
 
 [GNU General Public License v3.0](LICENSE).
+
+The territory count is a port of [goscorer](https://github.com/lightvector/goscorer) by David J Wu, under the MIT license (its notice is in `src/goscorer.ts` and in the built `main.js`). The dead-stone guess follows the rules of Sabaki's [deadstones](https://github.com/SabakiHQ/deadstones) (MIT).
 
 ## Building it yourself
 

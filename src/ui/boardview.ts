@@ -22,7 +22,7 @@ const TOOLS: [string, string, string][] = [
 	['shape', 'TR', 'Triangle, square, circle or cross (T, S, C, X)'],
 	['label', 'label', 'Letter or number: a, A or 1 (L)'],
 	['line', 'arrow', 'Arrow or line: drag from one point to another (A)'],
-	['area', 'highlight', 'Highlight or dim: click a point, or drag across a rectangle (H)'],
+	['area', 'highlight', 'Highlight, dim or territory: click a point, or drag across a rectangle (H)'],
 	['erase', 'erase', 'Eraser (E)'],
 	['crop', 'crop', 'Choose the part of the board to show: drag; double-click or double-tap for the default (R)'],
 ];
@@ -68,6 +68,9 @@ const CHOICES: Record<string, Choice[]> = {
 	area: [
 		{ key: 'SL', icon: 'highlight', title: 'Highlight' },
 		{ key: 'DD', icon: 'dim', title: 'Dim' },
+		{ key: 'TB', icon: 'territoryB', title: "Black's territory" },
+		{ key: 'TW', icon: 'territoryW', title: "White's territory" },
+		{ key: 'territory', icon: 'territory', title: 'Territory, worked out: a click on stones makes them dead or alive (with Shift, one chain)' },
 	],
 };
 
@@ -79,6 +82,13 @@ function nextChoice(id: string, current: string): string {
 
 /** The tools a click-drag paints a run of points with: play alternates and crop drags out a box, so not those. */
 const PAINT_TOOLS = new Set<Tool>(['black', 'white', 'TR', 'SQ', 'CR', 'MA', 'label', 'erase']);
+
+/**
+ * The tools that draw from one point to another by a drag: lines and arrows, and highlighting,
+ * dimming or marking territory over a rectangle. (Territory worked out takes a click only: on a
+ * touch screen a finger moving with it scrolls the note.)
+ */
+const stretches = (t: Tool): boolean => isLine(t) || (isArea(t) && t !== 'territory');
 
 /** Events that stay inside a board (see the constructor). */
 const CONTAINED = [
@@ -572,7 +582,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			`kifu kifu-${style} kifu-${align}` +
 			(editing ? ' is-editing' : '') +
 			(editing && s.tool === 'crop' ? ' is-crop' : '') +
-			(editing && (PAINT_TOOLS.has(s.tool) || isLine(s.tool) || isArea(s.tool)) ? ' is-drawing' : '') +
+			(editing && (PAINT_TOOLS.has(s.tool) || stretches(s.tool)) ? ' is-drawing' : '') +
 			(touch ? ' kifu-touch' : '') +
 			(this.#keyFocus ? ' is-keyfocus' : '');
 
@@ -970,7 +980,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		// (each of the three shows the kind it stands for)
 		setIcon(btn('shape').firstChild as SVGSVGElement, isShape(s.tool) ? s.tool : s.shape);
 		setIcon(btn('line').firstChild as SVGSVGElement, (isLine(s.tool) ? s.tool : s.lineKind) === 'LN' ? 'line' : 'arrow');
-		setIcon(btn('area').firstChild as SVGSVGElement, (isArea(s.tool) ? s.tool : s.areaKind) === 'DD' ? 'dim' : 'highlight');
+		const area = isArea(s.tool) ? s.tool : s.areaKind;
+		setIcon(btn('area').firstChild as SVGSVGElement, CHOICES.area.find((c) => c.key === area)?.icon ?? 'highlight');
 		// a palette stays open while its tool is in hand, the choice in force marked
 		const open = this.#paletteFor ? this.#choice(s, this.#paletteFor) : null;
 		if (open && !open.inHand) this.#closePalette();
@@ -1080,7 +1091,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	/** Is the tool in hand one that draws on the board, by a click or a drag? */
 	#drawing(): boolean {
 		const s = this.session;
-		return !!s && s.ready && s.edit && !this.#away(s) && (PAINT_TOOLS.has(s.tool) || isLine(s.tool) || isArea(s.tool));
+		return !!s && s.ready && s.edit && !this.#away(s) && (PAINT_TOOLS.has(s.tool) || stretches(s.tool));
 	}
 
 	#onClick(ev: MouseEvent): void {
@@ -1088,7 +1099,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		if (!s || !s.ready || ev.button !== 0 || this.#cropping() || this.#away(s)) return;
 		if (Date.now() < this.#noClickUntil) return;
 		const p = this.#board.pointAt(ev.clientX, ev.clientY);
-		if (p) s.click(...this.#toGame(s, p));
+		if (p) s.click(...this.#toGame(s, p), ev.shiftKey);
 	}
 
 	/** The point of the game under a point of the picture (they differ on a randomized board). */
@@ -1170,7 +1181,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		}
 		// a line, an arrow, a rectangle to highlight or dim: drawn from where the press began
 		const s = this.session;
-		if (s && s.edit && ev.button === 0 && (isLine(s.tool) || isArea(s.tool)) && !this.#away(s)) {
+		if (s && s.edit && ev.button === 0 && stretches(s.tool) && !this.#away(s)) {
 			const p = this.#board.pointAt(ev.clientX, ev.clientY);
 			if (p) {
 				this.#stretch = { line: isLine(s.tool), from: p, to: p, began: false, touch: ev.pointerType !== 'mouse' };

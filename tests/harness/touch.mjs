@@ -162,6 +162,32 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 			assert.equal(await scrolled(), before);
 		});
 	}
+	// Territory by touch: marked by hand with a tap (a tool that draws, the tap clicked by the
+	// board itself), or worked out with a tap (a tool that takes a click only, the browser's own).
+	const walls = '# T\n\n```kifu\nview: full\n(;GM[1]SZ[9]AB[da:di][hg]AW[fa:fi][bb][bd])\n```\n\nAfter.\n';
+	await scenario(`${engine}, iPad (gen 7): territory marked by a tap, and worked out by a tap`, { device: devices['iPad (gen 7)'], files: { 'T.md': walls }, autosave: 100, panes: [{ path: 'T.md', mode: 'source' }] }, async (page) => {
+		const game = async () => (await doc(page)).replace(/\s+/g, '');
+		await sleep(100);
+		await lockBtn(page).tap();
+		await tool(page, 'Highlight, dim').tap();
+		await page.locator('.kifu-palette .kifu-btn[aria-label="Black\'s territory"]').tap();
+		await tap(page, 'ea');
+		await sleep(800);
+		assert.match(await game(), /TB\[ea\]/);
+		// (undone: with no territory there, the worked-out kind guesses the dead stones)
+		await tool(page, 'Undo').tap();
+		await sleep(800);
+		assert.doesNotMatch(await game(), /TB\[/);
+		await tool(page, 'Highlight, dim').tap();
+		await page.locator('.kifu-palette .kifu-btn[aria-label^="Territory"]').tap();
+		await tap(page, 'ee');
+		await sleep(800);
+		assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
+		// a tap on a dead stone makes it live
+		await tap(page, 'bb');
+		await sleep(800);
+		assert.doesNotMatch(await game(), /TB\[/);
+	});
 	failed += report();
 	await browser.close();
 }

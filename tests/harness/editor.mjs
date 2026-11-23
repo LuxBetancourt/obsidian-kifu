@@ -1793,7 +1793,7 @@ await scenario('buttons with choices: a click shows the palette, a click again g
 	await page.mouse.click(5, 5);
 	assert.equal(await open(), false);
 	// over the button of a tool that is not in hand: nothing
-	const area = tool(page, 'Highlight or dim');
+	const area = tool(page, 'Highlight, dim');
 	const ab = await area.boundingBox();
 	await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2);
 	await sleep(100);
@@ -1870,11 +1870,11 @@ await scenario('keys for the tools: a letter takes one up, again goes on to its 
 	await page.keyboard.press('a');
 	assert.equal(await icon('Arrow or line'), 'line');
 	await page.keyboard.press('h');
-	assert.equal(await icon('Highlight or dim'), 'highlight');
+	assert.equal(await icon('Highlight, dim'), 'highlight');
 	await page.keyboard.down('h');
 	await page.keyboard.down('h'); // (a repeat)
 	await page.keyboard.up('h');
-	assert.equal(await icon('Highlight or dim'), 'dim');
+	assert.equal(await icon('Highlight, dim'), 'dim');
 	assert.equal(await page.locator('.kifu-palette:visible').count(), 0);
 	await page.keyboard.press('l');
 	assert.equal(await on('Letter or number'), true);
@@ -1934,7 +1934,7 @@ await scenario('arrows and lines by a drag; highlighting and dimming by a click 
 	await toggleLock(page); await sleep(250);
 	const game = async () => flat(blocks(await doc(page))[0]);
 	const line = tool(page, 'Arrow or line');
-	const area = tool(page, 'Highlight or dim');
+	const area = tool(page, 'Highlight, dim');
 	const icon = (b) => b.locator('svg').getAttribute('data-icon');
 	// an arrow (the first time): dragged from one point to another, here onto the last move
 	await line.click();
@@ -1975,6 +1975,86 @@ await scenario('arrows and lines by a drag; highlighting and dimming by a click 
 	await sleep(600);
 	assert.doesNotMatch(await game(), /cc:ee/);
 	assert.match(await game(), /AR\[ee:ge\]/);
+	assert.deepEqual(await editorLog(page), []);
+	assert.deepEqual(await notices(page), []);
+});
+
+/* Territory, in the highlight button's palette: black's or white's marked by hand (a click, or a
+   dragged rectangle), or worked out by a click: the dead stones guessed the first time, then a
+   click on stones makes them dead or alive (with Shift, one chain). A small square on each point;
+   dead stones veiled, their square over them. */
+await scenario('territory: marked by hand, or worked out by a click that a click on stones corrects', {
+	files: { 'T.md': '# T\n\n```kifu\nview: full\n(;GM[1]SZ[9]AB[da:di][hg]AW[fa:fi][bb][bd])\n```\n\nafter\n' }, live: ['T.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	await toggleLock(page); await sleep(250);
+	const game = async () => flat(blocks(await doc(page))[0]);
+	const area = tool(page, 'Highlight, dim');
+	const pal = page.locator('.kifu-palette');
+	const icon = () => area.locator('svg').getAttribute('data-icon');
+	const squares = (side) => page.locator(`.kifu-svg .kifu-terr.is-${side}`).count();
+	// five choices now, in the order a click on the button goes through them
+	await area.click();
+	assert.deepEqual(await pal.locator('.kifu-btn').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label').split(':')[0])), ['Highlight', 'Dim', "Black's territory", "White's territory", 'Territory, worked out']);
+	// black's territory by hand: a click, a rectangle
+	await pal.locator('.kifu-btn[aria-label="Black\'s territory"]').click();
+	assert.equal(await icon(), 'territoryB');
+	await clickPoint(page, 0, 'aa');
+	await dragPoints(page, 0, ['ac', 'bd', 'ce']);
+	await sleep(600);
+	assert.match(await game(), /TB\[aa\]\[ac:ce\]/);
+	assert.equal(await squares('b'), 10);
+	// white's over a black one: the point is white's now
+	await area.click();
+	assert.equal(await icon(), 'territoryW');
+	await clickPoint(page, 0, 'aa');
+	await sleep(600);
+	assert.match(await game(), /TW\[aa\]/);
+	assert.doesNotMatch(await game(), /TB\[aa\]/);
+	assert.equal(await squares('w'), 1);
+	// (each an undo step: back to no territory at all)
+	for (let k = 0; k < 3; k++) await page.keyboard.press('Control+z');
+	await sleep(600);
+	assert.doesNotMatch(await game(), /T[BW]\[/);
+	assert.equal(await squares('b') + await squares('w'), 0);
+	// worked out: with none there yet, the first click guesses the dead stones
+	await area.click();
+	assert.equal(await icon(), 'territory');
+	await clickPoint(page, 0, 'ee');
+	await sleep(600);
+	assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
+	assert.equal(await squares('b'), 27);
+	assert.equal(await squares('w'), 27);
+	// the dead stones (bb and bd, white; hg, black) are veiled: three circles in the veil
+	assert.equal(((await page.locator('.kifu-faded').getAttribute('d')) ?? '').split('M').length - 1, 3);
+	// a click on a dead stone: it and the white stones it reaches through empty points live again
+	await clickPoint(page, 0, 'bb');
+	await sleep(600);
+	assert.doesNotMatch(await game(), /TB\[/);
+	assert.equal(((await page.locator('.kifu-faded').getAttribute('d')) ?? '').split('M').length - 1, 1);
+	// with Shift, a chain alone: bb dead again, and bd with it only by another click
+	await page.keyboard.down('Shift');
+	await clickPoint(page, 0, 'bb');
+	await page.keyboard.up('Shift');
+	await sleep(600);
+	assert.match(await game(), /TB\[bb\]/);
+	// one undo step a click
+	await page.keyboard.press('Control+z');
+	await sleep(600);
+	assert.doesNotMatch(await game(), /TB\[/);
+	// H goes round all five
+	await page.keyboard.press('h');
+	assert.equal(await icon(), 'highlight');
+	for (const want of ['dim', 'territoryB', 'territoryW', 'territory']) {
+		await page.keyboard.press('h');
+		assert.equal(await icon(), want);
+	}
+	// the eraser takes a point's territory off
+	await tool(page, 'Eraser').click();
+	await clickPoint(page, 0, 'ia');
+	await sleep(600);
+	assert.doesNotMatch(await game(), /TW\[ga:ii\]/);
+	assert.equal(await squares('w'), 26);
 	assert.deepEqual(await editorLog(page), []);
 	assert.deepEqual(await notices(page), []);
 });

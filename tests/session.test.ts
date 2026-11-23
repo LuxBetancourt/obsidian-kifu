@@ -457,6 +457,81 @@ test('edit: stones, play, marks, labels, undo', () => {
 	assert.ok(s.blockBody().startsWith('view: auto\n(;GM[1]FF[4]CA[UTF-8]SZ[19]'));
 });
 
+test('territory by hand: black\'s or white\'s, by a click or a rectangle, never both on a point; the eraser takes it off', () => {
+	const s = make('(;GM[1]SZ[9])');
+	s.setEdit(true);
+	const idx = (pts: string[]) => pts.map((p) => at(p)[1] * 9 + at(p)[0]).sort((a, b) => a - b);
+	const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
+	s.setTool('TB');
+	click(s, 'aa');
+	assert.deepEqual(s.root.props.TB, ['aa']);
+	s.setTool('TW');
+	click(s, 'aa'); // (white's now, not black's)
+	assert.deepEqual(s.root.props.TW, ['aa']);
+	assert.equal(s.root.props.TB, undefined);
+	click(s, 'aa');
+	assert.equal(s.root.props.TW, undefined);
+	// a rectangle, on or off by where it began; marked for one side, it is the other's no longer
+	s.setTool('TB');
+	s.areaDrag(0, 0, 2, 1);
+	assert.deepEqual(s.root.props.TB, ['aa:cb']);
+	s.setTool('TW');
+	s.areaDrag(2, 1, 3, 2);
+	assert.deepEqual(s.root.props.TW, ['cb:dc']);
+	assert.deepEqual(sorted(s.model().tb), idx(['aa', 'ba', 'ca', 'ab', 'bb']));
+	assert.deepEqual(sorted(s.model().tw), idx(['cb', 'db', 'cc', 'dc']));
+	s.areaDrag(2, 1, 2, 2); // (from a point that is white's: off)
+	assert.deepEqual(sorted(s.model().tw), idx(['db', 'dc']));
+	s.setTool('erase');
+	click(s, 'aa');
+	assert.equal(s.model().tb.has(0), false);
+	s.setTool('territory');
+	s.areaDrag(0, 0, 8, 8); // (territory worked out is not dragged)
+	assert.deepEqual(sorted(s.model().tw), idx(['db', 'dc']));
+});
+
+test('territory worked out: guessed and written whole at the first click, then a click on stones makes them dead or alive', () => {
+	// black's wall down the d column and white's down the f; two white stones stranded on the left, a black one on the right
+	const s = make('view: full\n(;GM[1]SZ[9]AB[da:di][hg]AW[fa:fi][bb][bd])');
+	s.setEdit(true);
+	s.setTool('territory');
+	click(s, 'ee'); // the first click: the dead stones guessed, both sides' territory with them in it
+	assert.deepEqual(s.root.props.TB, ['aa:ci']);
+	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	const steps = () => (s as unknown as { undoStack: unknown[] }).undoStack.length;
+	const before = steps();
+	// a click on a dead stone: it, and the white stones it reaches through empty points, live
+	click(s, 'bb');
+	assert.equal(s.root.props.TB, undefined); // (no area is black's alone now)
+	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	click(s, 'bb'); // and again, dead
+	assert.deepEqual(s.root.props.TB, ['aa:ci']);
+	// with Shift, its own chain alone
+	s.click(...at('bb'), true);
+	assert.deepEqual(s.root.props.TB, ['bd']);
+	assert.equal(steps(), before + 3); // (one undo step a click)
+	s.undo();
+	assert.deepEqual(s.root.props.TB, ['aa:ci']);
+	// a mark made by hand goes when the territory is worked out again, by a click on an empty point
+	s.setTool('TW');
+	click(s, 'ea');
+	assert.deepEqual(s.root.props.TW, ['ea', 'ga:ii']);
+	s.setTool('territory');
+	click(s, 'ee');
+	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	// the picture: the dead stones are on the other side's territory
+	const m = s.model();
+	assert.equal(m.tb.has(1 * 9 + 1), true); // (bb, white and dead: black's)
+	assert.equal(m.tw.has(6 * 9 + 7), true); // (hg, black and dead: white's)
+	// nothing to count (one colour only): nothing written, no undo step
+	const t = make('view: full\n(;GM[1]SZ[9]AB[cc][dd])');
+	t.setEdit(true);
+	t.setTool('territory');
+	click(t, 'ee');
+	assert.equal(t.root.props.TB, undefined);
+	assert.equal(t.canUndo, false);
+});
+
 test('undoing a label counts the label tool back with it, and redoing counts it on again', () => {
 	const s = make('(;GM[1]SZ[9])');
 	s.setEdit(true);

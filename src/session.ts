@@ -48,6 +48,7 @@ import {
 } from './options';
 import { Place, squash } from './blocks';
 import { relinkOptionLine, rewriteComments } from './links';
+import { chainAt, deadFromMarks, guessDead, relatedStones, territoryMap } from './territory';
 import type { KifuSettings } from './config';
 
 /**
@@ -58,14 +59,15 @@ import type { KifuSettings } from './config';
 export type Tool = 'play' | 'black' | 'white' | Shape | 'label' | Line | Area | 'erase' | 'crop';
 export type Shape = 'TR' | 'SQ' | 'CR' | 'MA';
 export type Line = 'LN' | 'AR';
-export type Area = 'SL' | 'DD';
+/** Highlight, dim, black's or white's territory by hand, and territory worked out (see territory.ts). */
+export type Area = 'SL' | 'DD' | 'TB' | 'TW' | 'territory';
 export type Status = 'correct' | 'incorrect' | null;
 
 export const SHAPES: Shape[] = ['TR', 'SQ', 'CR', 'MA'];
 const MARKS: string[] = SHAPES;
 export const isShape = (t: Tool): t is Shape => (SHAPES as string[]).includes(t);
 export const isLine = (t: Tool): t is Line => t === 'LN' || t === 'AR';
-export const isArea = (t: Tool): t is Area => t === 'SL' || t === 'DD';
+export const isArea = (t: Tool): t is Area => t === 'SL' || t === 'DD' || t === 'TB' || t === 'TW' || t === 'territory';
 
 /** A line or an arrow, between two points (as indexes into the grid). */
 export interface MarkLine {
@@ -121,6 +123,9 @@ export interface Model {
 	selected: Set<number>;
 	/** Dimmed points (DD: set on this position or an earlier one, and still in force). */
 	dimmed: Set<number>;
+	/** Black's and white's territory (TB, TW), dead stones' points included. */
+	tb: Set<number>;
+	tw: Set<number>;
 	/** Point to flag as the latest move, or -1. */
 	last: number;
 	notes: FigureNote[];
@@ -872,6 +877,8 @@ export class Session {
 			lines,
 			selected: indexes(points(cur.props.SL)),
 			dimmed: indexes(this.dimmedAt(cur)),
+			tb: indexes(points(cur.props.TB)),
+			tw: indexes(points(cur.props.TW)),
 			// the latest move gets a dot when nothing else is written on it
 			last: cur !== this.home && pos.last >= 0 && !labels.has(pos.last) ? pos.last : -1,
 			notes,
@@ -1051,10 +1058,10 @@ export class Session {
 
 	/* ---------------------------------------------------------------- playing */
 
-	/** A click on the board. */
-	click(x: number, y: number): void {
+	/** A click on the board. `single`: (Shift held) with the territory tool, a stone's own chain alone goes dead or alive. */
+	click(x: number, y: number, single = false): void {
 		if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
-		if (this.edit) this.editAt(x, y);
+		if (this.edit) this.editAt(x, y, single);
 		else this.playAt(x, y);
 	}
 
@@ -1303,7 +1310,7 @@ export class Session {
 		return MARKS.some((id) => points(p[id]).includes(pt)) || (p.LB ?? []).some((v) => v.slice(0, 2) === pt);
 	}
 
-	private editAt(x: number, y: number): void {
+	private editAt(x: number, y: number, single = false): void {
 		const i = y * this.w + x;
 		const pt = xy2pt(x, y);
 		const cur = this.cur;
@@ -1375,6 +1382,25 @@ export class Session {
 				this.changed(true);
 				return;
 			}
+			case 'TB':
+			case 'TW': {
+				// (a point is one side's territory or the other's, never both)
+				const other = this.tool === 'TB' ? 'TW' : 'TB';
+				const mine = new Set(points(cur.props[this.tool]));
+				const theirs = new Set(points(cur.props[other]));
+				if (!mine.delete(pt)) {
+					mine.add(pt);
+					theirs.delete(pt);
+				}
+				this.snapshot();
+				setPointList(cur, this.tool, mine);
+				setPointList(cur, other, theirs);
+				this.changed(true);
+				return;
+			}
+			case 'territory':
+				this.countTerritory(i, single);
+				return;
 			case 'erase': {
 				if (!this.drawnOn(pt) && !board.g[i]) return;
 				this.snapshot();
@@ -1412,14 +1438,18 @@ export class Session {
 	}
 
 	/**
-	 * Highlight or dim, whichever the tool is, the rectangle between two points: the point the
-	 * drag began on says which way, on when it was off, off when it was on. One undo step.
+	 * Highlight, dim or mark as one side's territory, whichever the tool is, the rectangle
+	 * between two points: the point the drag began on says which way, on when it was off, off
+	 * when it was on (territory marked takes the other side's off). One undo step. (Territory
+	 * worked out is not dragged: see countTerritory.)
 	 */
 	areaDrag(x0: number, y0: number, x1: number, y1: number): void {
 		const tool = this.tool;
-		if (!this.edit || !isArea(tool)) return;
+		if (!this.edit || !isArea(tool) || tool === 'territory') return;
 		const cur = this.cur;
-		const set = new Set(tool === 'SL' ? points(cur.props.SL) : this.dimmedAt(cur));
+		const set = new Set(tool === 'DD' ? this.dimmedAt(cur) : points(cur.props[tool]));
+		const other = tool === 'TB' ? 'TW' : tool === 'TW' ? 'TB' : null;
+		const theirs = new Set(other ? points(cur.props[other]) : []);
 		const on = !set.has(xy2pt(x0, y0));
 		let change = false;
 		for (let y = Math.max(0, Math.min(y0, y1)); y <= Math.min(this.h - 1, Math.max(y0, y1)); y++) {
@@ -1430,12 +1460,68 @@ export class Session {
 					else set.delete(p);
 					change = true;
 				}
+				if (on && theirs.delete(p)) change = true;
 			}
 		}
 		if (!change) return;
 		this.snapshot();
-		if (tool === 'SL') setPointList(cur, 'SL', set);
-		else this.setDimmed(set);
+		if (tool === 'DD') this.setDimmed(set);
+		else setPointList(cur, tool, set);
+		if (other) setPointList(cur, other, theirs);
+		this.changed(true);
+	}
+
+	/**
+	 * The territory tool, at point `i`: territory worked out, and written as TB and TW on the
+	 * current position, whole, in one undo step (see territory.ts).
+	 *
+	 * With no territory there yet, the dead stones are guessed and the click does nothing more.
+	 * Once there is, the marks say which stones are dead (a stone on the other side's territory),
+	 * and a click on a stone makes it, and the stones of its colour it reaches through empty
+	 * points, dead or alive again (`single`: its own chain alone); a click on an empty point
+	 * only works the territory out again (hand-made marks go). Territory that runs out of the
+	 * part of the board the locked board shows counts for nobody.
+	 */
+	private countTerritory(i: number, single: boolean): void {
+		const { w, h, cur } = this;
+		const grid = this.position().board.g;
+		const owner = new Uint8Array(w * h);
+		const index = (pt: string): number => {
+			const x = coord(pt.charCodeAt(0));
+			const y = coord(pt.charCodeAt(1));
+			return x >= 0 && y >= 0 && x < w && y < h ? y * w + x : -1;
+		};
+		for (const [id, c] of [['TB', 1], ['TW', 2]] as const) {
+			for (const pt of points(cur.props[id])) {
+				const p = index(pt);
+				if (p >= 0) owner[p] = c;
+			}
+		}
+		let dead: Uint8Array;
+		if (!cur.props.TB && !cur.props.TW) {
+			dead = guessDead(grid, w, h);
+		} else {
+			dead = deadFromMarks(grid, owner);
+			if (grid[i]) {
+				const to = dead[i] ? 0 : 1;
+				for (const p of single ? chainAt(grid, i, w, h) : relatedStones(grid, i, w, h)) dead[p] = to;
+			}
+		}
+		const resting = this.restingView();
+		const map = territoryMap(grid, dead, w, h, isFull(resting, w, h) ? null : resting);
+		const tb = new Set<string>();
+		const tw = new Set<string>();
+		for (let p = 0; p < map.length; p++) {
+			if (map[p]) (map[p] === 1 ? tb : tw).add(xy2pt(p % w, Math.floor(p / w)));
+		}
+		const same = (id: 'TB' | 'TW', want: Set<string>): boolean => {
+			const had = points(cur.props[id]);
+			return had.length === want.size && had.every((pt) => want.has(pt));
+		};
+		if (same('TB', tb) && same('TW', tw)) return;
+		this.snapshot();
+		setPointList(cur, 'TB', tb);
+		setPointList(cur, 'TW', tw);
 		this.changed(true);
 	}
 
@@ -1457,20 +1543,26 @@ export class Session {
 		if (!same) cur.props.DD = want.size ? compressPoints(want) : [''];
 	}
 
-	/** Is anything drawn on a point: a shape, a label, a highlight, a line or an arrow that starts or ends there? */
+	/** Is anything drawn on a point: a shape, a label, a highlight, territory, a line or an arrow that starts or ends there? */
 	private drawnOn(pt: string): boolean {
 		const p = this.cur.props;
-		return this.marked(pt) || points(p.SL).includes(pt) || [...(p.LN ?? []), ...(p.AR ?? [])].some((v) => touches(v, pt));
+		return (
+			this.marked(pt) ||
+			['SL', 'TB', 'TW'].some((id) => points(p[id]).includes(pt)) ||
+			[...(p.LN ?? []), ...(p.AR ?? [])].some((v) => touches(v, pt))
+		);
 	}
 
 	/** Take off what is drawn on a point (see drawnOn; dimming is not drawn on it). Whether there was any. */
 	private eraseDrawn(pt: string): boolean {
 		const cur = this.cur;
 		let any = this.clearMarks(pt);
-		const sel = new Set(points(cur.props.SL));
-		if (sel.delete(pt)) {
-			setPointList(cur, 'SL', sel);
-			any = true;
+		for (const id of ['SL', 'TB', 'TW']) {
+			const set = new Set(points(cur.props[id]));
+			if (set.delete(pt)) {
+				setPointList(cur, id, set);
+				any = true;
+			}
 		}
 		for (const id of ['LN', 'AR']) {
 			const vals = cur.props[id];

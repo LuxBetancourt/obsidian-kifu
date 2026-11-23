@@ -230,6 +230,26 @@ body .kifu-panel button.kifu-btn[hidden] {
 	fill-opacity: 0.62;
 }
 
+/* Territory (TB, TW): a small square, black's like a black stone, white's like a white one; on a
+   dead stone (veiled by .kifu-faded) it sits on top. */
+.kifu-terr {
+	pointer-events: none;
+}
+
+.kifu-terr.is-b {
+	fill: var(--kifu-black);
+}
+
+/* (on a living black stone, where black's own territory is marked: in the ink that shows on it) */
+.kifu-terr.is-b.kifu-on-b {
+	fill: var(--kifu-on-black);
+}
+
+.kifu-terr.is-w {
+	fill: var(--kifu-white);
+	stroke: var(--kifu-ink);
+}
+
 /* Lines (LN) and arrows (AR): ink with an edge of paper, so they read over black stones and
    across the lines; over highlighted points the edge shows the highlight instead (a copy of
    it, seen through .kifu-case-shape, the edge's own shape, in a mask) */

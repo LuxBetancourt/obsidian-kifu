@@ -93,6 +93,10 @@ const ICONS: Record<string, string> = {
 	arrow: 'M5.5 18.5L14.4 9.6|*M19 5L12.1 7.3L16.7 11.9z',
 	highlight: 'M4.5 4.5h15v15h-15z|M4.5 11.5l7-7|M4.5 19.5l15-15|M11.5 19.5l8-8',
 	dim: 'M12 4.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15z|*M12 4.5a7.5 7.5 0 0 1 0 15z',
+	// (a point of the board with black's, or white's, territory on it; and a corner of the board with both, worked out)
+	territoryB: 'M12 3.5v17|M3.5 12h17|BM8.75 8.75h6.5v6.5h-6.5z',
+	territoryW: 'M12 3.5v17|M3.5 12h17|WM8.75 8.75h6.5v6.5h-6.5z',
+	territory: 'M8 3.5v17|M16 3.5v17|M3.5 8h17|M3.5 16h17|BM5.5 5.5h5v5h-5z|WM13.5 13.5h5v5h-5z',
 	// (a graduation cap: a problem is something to study. A ? in a circle read as help.)
 	problem: 'M2.5 9.5L12 5l9.5 4.5L12 14z|M6.5 11.6v4.4c0 1.5 2.5 3 5.5 3s5.5-1.5 5.5-3v-4.4|M21.5 9.5v5',
 	shuffle: 'M3.5 7h3.2c4.6 0 5.6 10 10.2 10h3.6|M3.5 17h3.2c1.7 0 2.9-1.4 3.9-3.2|M13.2 10.2C14.2 8.4 15.4 7 17.1 7h3.4|M18 4.5L20.5 7L18 9.5|M18 14.5L20.5 17L18 19.5',
