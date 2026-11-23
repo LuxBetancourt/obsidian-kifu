@@ -289,6 +289,75 @@ function strongLife(b: Int8Array, G: Geo): { strong: Uint8Array; excluded: Uint8
 const signs = (grid: Uint8Array): Int8Array => Int8Array.from(grid, (c) => (c === 1 ? 1 : c === 2 ? -1 : 0));
 
 /**
+ * Random games played out from the position: how far each point leaned to black (towards 1)
+ * or white (towards -1) at their end, by how often it was whose.
+ */
+function playedOut(b: Int8Array, G: Geo, playouts: number, seed: number, excluded: Uint8Array): Float64Array {
+	const n = b.length;
+	const rnd = new Rand(seed);
+	const blacks = new Int32Array(n);
+	const whites = new Int32Array(n);
+	for (let i = 0; i < playouts; i++) {
+		const a = playOut(b, i < Math.floor(playouts / 2) ? -1 : 1, rnd, G, excluded);
+		for (let v = 0; v < n; v++) {
+			if (a[v] === 1) blacks[v]++;
+			else if (a[v] === -1) whites[v]++;
+		}
+	}
+	const lean = new Float64Array(n);
+	for (let v = 0; v < n; v++) {
+		const all = blacks[v] + whites[v];
+		if (all) lean[v] = (blacks[v] * 2) / all - 1;
+	}
+	return lean;
+}
+
+/**
+ * Who each point is likely to be whose (1 black, -1 white, 0 no one), for the parts of a game
+ * not settled yet: Bouzy's dilations and erosions (Bruno Bouzy's "5/21" operators, as GNU Go's
+ * manual describes them), five and ten, the setting GNU Go calls moyo, on the position with the
+ * dead stones taken off. Each stone starts at 128, plus for black and minus for white. A
+ * dilation adds to a point, when none of its neighbours is the other side's, the number of its
+ * neighbours that are its side's (an empty point next to one side's only joins it); an erosion
+ * takes from a point the number of its neighbours that are not its side's, down to nothing.
+ * What one side's stones surround, and nothing of the other's comes near, is left with it.
+ */
+export function influence(grid: Uint8Array, dead: Uint8Array, w: number, h: number, dilations = 5, erosions = 10): Int8Array {
+	const n = w * h;
+	const G = geometry(w, h);
+	let v = Int32Array.from(grid, (c, i) => (dead[i] ? 0 : c === 1 ? 128 : c === 2 ? -128 : 0));
+	for (let k = 0; k < dilations; k++) {
+		const next = v.slice();
+		for (let p = 0; p < n; p++) {
+			let plus = 0;
+			let minus = 0;
+			for (let j = 0; j < G.cnt[p]; j++) {
+				const q = v[G.nb[p * 4 + j]];
+				if (q > 0) plus++;
+				else if (q < 0) minus++;
+			}
+			if (v[p] >= 0 && minus === 0) next[p] += plus;
+			if (v[p] <= 0 && plus === 0) next[p] -= minus;
+		}
+		v = next;
+	}
+	for (let k = 0; k < erosions; k++) {
+		const next = v.slice();
+		for (let p = 0; p < n; p++) {
+			if (v[p] === 0) continue;
+			let against = 0;
+			for (let j = 0; j < G.cnt[p]; j++) {
+				const q = v[G.nb[p * 4 + j]];
+				if (v[p] > 0 ? q <= 0 : q >= 0) against++;
+			}
+			next[p] = v[p] > 0 ? Math.max(0, v[p] - against) : Math.min(0, v[p] + against);
+		}
+		v = next;
+	}
+	return Int8Array.from(v, (x) => Math.sign(x));
+}
+
+/**
  * A guess at which stones are dead (1 where one is). `grid`: 0 empty, 1 black, 2 white. The
  * games are seeded from the position unless a `seed` is given.
  */
@@ -299,19 +368,8 @@ export function guessDead(grid: Uint8Array, w: number, h: number, playouts = PLA
 	const out = new Uint8Array(n);
 	if (!b.some((c) => c !== 0)) return out;
 	const { strong, excluded } = strongLife(b, G);
-	const rnd = new Rand(seed);
-	// how often each point was black's, and white's, at the end of the games
-	const blacks = new Int32Array(n);
-	const whites = new Int32Array(n);
-	for (let i = 0; i < playouts; i++) {
-		const a = playOut(b, i < Math.floor(playouts / 2) ? -1 : 1, rnd, G, excluded);
-		for (let v = 0; v < n; v++) {
-			if (a[v] === 1) blacks[v]++;
-			else if (a[v] === -1) whites[v]++;
-		}
-	}
-	// a chain mostly the other side's at the end is dead (by the mean, over its stones, of
-	// how far each leaned to black, from -1 to 1)
+	const lean = playedOut(b, G, playouts, seed, excluded);
+	// a chain mostly the other side's at the end is dead (by the mean of its stones' leaning)
 	const dead = new Uint8Array(n);
 	const done = new Uint8Array(n);
 	for (let v = 0; v < n; v++) {
@@ -320,8 +378,7 @@ export function guessDead(grid: Uint8Array, w: number, h: number, playouts = PLA
 		let sum = 0;
 		for (const c of chain) {
 			done[c] = 1;
-			const all = blacks[c] + whites[c];
-			if (all) sum += (blacks[c] * 2) / all - 1;
+			sum += lean[c];
 		}
 		if (!strong[v] && (sum / chain.length) * b[v] < 0) for (const c of chain) dead[c] = 1;
 	}
@@ -354,11 +411,13 @@ export function relatedStones(grid: Uint8Array, i: number, w: number, h: number)
 
 /**
  * Whose territory each point is: 0 nobody's, 1 black's, 2 white's, the points of dead stones
- * with the side that took them. Territory that runs out of `window` (the part of the board
+ * with the side that took them. Where one side's living stones alone reach, goscorer decides;
+ * where both can still reach (a game not over: everything but what is walled in), `estimate`
+ * does, if given (see influence). Territory that runs out of `window` (the part of the board
  * shown, when it is not all of it) counts for nobody; and while one colour has no living stones
  * at all, nothing does but the dead stones (an empty board around a few stones is no one's).
  */
-export function territoryMap(grid: Uint8Array, dead: Uint8Array, w: number, h: number, window: Rect | null = null): Uint8Array {
+export function territoryMap(grid: Uint8Array, dead: Uint8Array, w: number, h: number, window: Rect | null = null, estimate: Int8Array | null = null): Uint8Array {
 	const n = w * h;
 	const out = new Uint8Array(n);
 	let blackLives = false;
@@ -369,8 +428,32 @@ export function territoryMap(grid: Uint8Array, dead: Uint8Array, w: number, h: n
 		else whiteLives = true;
 	}
 	if (blackLives && whiteLives) {
-		const t = territoryScoring(grid, dead, w, h).territory;
-		for (let i = 0; i < n; i++) if (!grid[i]) out[i] = t[i];
+		const s = territoryScoring(grid, dead, w, h);
+		// Regions still open: next to a point that both sides can reach but the estimate gives to
+		// one. Their groups are not finished, so what goscorer makes of their eyes (seki, false
+		// eyes) is not final either: the estimate decides there too. (A real seki is walled in:
+		// its shared liberties touch both sides, which the estimate gives to no one.)
+		const open = new Set<number>();
+		if (estimate) {
+			const G = geometry(w, h);
+			for (let i = 0; i < n; i++) {
+				const r = s.region[i];
+				if (r < 0 || open.has(r)) continue;
+				for (let k = 0; k < G.cnt[i]; k++) {
+					const j = G.nb[i * 4 + k];
+					if (s.region[j] < 0 && !grid[j] && estimate[j]) {
+						open.add(r);
+						break;
+					}
+				}
+			}
+		}
+		for (let i = 0; i < n; i++) {
+			if (grid[i]) continue;
+			if (s.territory[i]) out[i] = s.territory[i];
+			// not settled (both sides can still reach it, or its region is open): the estimate's
+			else if (estimate && estimate[i] && (s.dame[i] || open.has(s.region[i]))) out[i] = estimate[i] > 0 ? 1 : 2;
+		}
 	}
 	for (let i = 0; i < n; i++) if (grid[i] && dead[i]) out[i] = 3 - grid[i];
 	if (window && !(window.x0 <= 0 && window.y0 <= 0 && window.x1 >= w - 1 && window.y1 >= h - 1)) {

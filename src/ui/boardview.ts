@@ -772,6 +772,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			return;
 		}
 		if (this.#paletteFor === id) {
+			// (going on past territory worked out, untouched, takes its count back)
+			if (p.current === 'territory') s.takeBackScore();
 			p.choose(nextChoice(id, p.current));
 			// (shown by the mouse coming over, it stays now that it is being used)
 			this.#paletteHover = false;
@@ -787,9 +789,15 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	 */
 	#keyTool(s: Session, id: string): void {
 		const p = this.#choice(s, id);
-		if (!p) s.setTool(id as Tool);
-		else if (!p.inHand) p.takeUp();
-		else p.choose(nextChoice(id, p.current));
+		if (!p) {
+			s.setTool(id as Tool);
+		} else if (!p.inHand) {
+			p.takeUp();
+		} else {
+			// (going on past territory worked out, untouched, takes its count back)
+			if (p.current === 'territory') s.takeBackScore();
+			p.choose(nextChoice(id, p.current));
+		}
 	}
 
 	/** A key for a tool or a button of the strip, on an unlocked board: was it one? (See TOOL_KEYS.) */

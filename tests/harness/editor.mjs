@@ -2017,31 +2017,45 @@ await scenario('territory: marked by hand, or worked out by a click that a click
 	await sleep(600);
 	assert.doesNotMatch(await game(), /T[BW]\[/);
 	assert.equal(await squares('b') + await squares('w'), 0);
-	// worked out: with none there yet, the first click guesses the dead stones
+	// worked out: the moment it is taken up (here going round the palette), with none there yet, the
+	// dead stones guessed and the territory counted
+	const veiled = async () => ((await page.locator('.kifu-faded').getAttribute('d')) ?? '').split('M').length - 1;
 	await area.click();
 	assert.equal(await icon(), 'territory');
-	await clickPoint(page, 0, 'ee');
 	await sleep(600);
 	assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
 	assert.equal(await squares('b'), 27);
 	assert.equal(await squares('w'), 27);
 	// the dead stones (bb and bd, white; hg, black) are veiled: three circles in the veil
-	assert.equal(((await page.locator('.kifu-faded').getAttribute('d')) ?? '').split('M').length - 1, 3);
+	assert.equal(await veiled(), 3);
+	// going on round the palette before anything is done only looked: the count is taken back
+	await area.click();
+	await sleep(600);
+	assert.equal(await icon(), 'highlight');
+	assert.doesNotMatch(await game(), /T[BW]\[/);
+	// chosen in the palette: counted again; a click on an empty point counts the same
+	await pal.locator('.kifu-btn[aria-label^="Territory"]').click();
+	await sleep(600);
+	assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
+	await clickPoint(page, 0, 'ee');
+	await sleep(600);
+	assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
 	// a click on a dead stone: it and the white stones it reaches through empty points live again
+	// (and the left is black's no longer, but by the estimate, near the wall)
 	await clickPoint(page, 0, 'bb');
 	await sleep(600);
-	assert.doesNotMatch(await game(), /TB\[/);
-	assert.equal(((await page.locator('.kifu-faded').getAttribute('d')) ?? '').split('M').length - 1, 1);
+	assert.doesNotMatch(await game(), /TB\[aa:ci\]/);
+	assert.equal(await veiled(), 1);
 	// with Shift, a chain alone: bb dead again, and bd with it only by another click
 	await page.keyboard.down('Shift');
 	await clickPoint(page, 0, 'bb');
 	await page.keyboard.up('Shift');
 	await sleep(600);
-	assert.match(await game(), /TB\[bb\]/);
+	assert.equal(await veiled(), 2);
 	// one undo step a click
 	await page.keyboard.press('Control+z');
 	await sleep(600);
-	assert.doesNotMatch(await game(), /TB\[/);
+	assert.equal(await veiled(), 1);
 	// H goes round all five
 	await page.keyboard.press('h');
 	assert.equal(await icon(), 'highlight');
@@ -2050,11 +2064,12 @@ await scenario('territory: marked by hand, or worked out by a click that a click
 		assert.equal(await icon(), want);
 	}
 	// the eraser takes a point's territory off
+	const whites = await squares('w');
 	await tool(page, 'Eraser').click();
 	await clickPoint(page, 0, 'ia');
 	await sleep(600);
 	assert.doesNotMatch(await game(), /TW\[ga:ii\]/);
-	assert.equal(await squares('w'), 26);
+	assert.equal(await squares('w'), whites - 1);
 	assert.deepEqual(await editorLog(page), []);
 	assert.deepEqual(await notices(page), []);
 });

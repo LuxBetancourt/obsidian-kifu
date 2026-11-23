@@ -179,14 +179,13 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 		await sleep(800);
 		assert.doesNotMatch(await game(), /TB\[/);
 		await tool(page, 'Highlight, dim').tap();
-		await page.locator('.kifu-palette .kifu-btn[aria-label^="Territory"]').tap();
-		await tap(page, 'ee');
+		await page.locator('.kifu-palette .kifu-btn[aria-label^="Territory"]').tap(); // (counted the moment it is chosen)
 		await sleep(800);
 		assert.match(await game(), /TB\[aa:ci\]TW\[ga:ii\]/);
 		// a tap on a dead stone makes it live
 		await tap(page, 'bb');
 		await sleep(800);
-		assert.doesNotMatch(await game(), /TB\[/);
+		assert.doesNotMatch(await game(), /TB\[aa:ci\]/);
 	});
 	failed += report();
 	await browser.close();

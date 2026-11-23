@@ -48,7 +48,7 @@ import {
 } from './options';
 import { Place, squash } from './blocks';
 import { relinkOptionLine, rewriteComments } from './links';
-import { chainAt, deadFromMarks, guessDead, relatedStones, territoryMap } from './territory';
+import { chainAt, deadFromMarks, guessDead, influence, relatedStones, territoryMap } from './territory';
 import type { KifuSettings } from './config';
 
 /**
@@ -1270,12 +1270,42 @@ export class Session {
 	}
 
 	setTool(tool: Tool): void {
-		if (tool === 'label' && this.tool !== 'label') this.nextLabel = this.freeLabel();
+		const before = this.tool;
+		if (tool === 'label' && before !== 'label') this.nextLabel = this.freeLabel();
 		if (isShape(tool)) this.shape = tool;
 		else if (isLine(tool)) this.lineKind = tool;
 		else if (isArea(tool)) this.areaKind = tool;
 		this.tool = tool;
+		// (the territory tool counts the position the moment it is taken up)
+		if (tool !== 'territory') this.scored = null;
+		else if (before !== 'territory') this.scoreOnPick();
 		this.emit();
+	}
+
+	/** The count made when the territory tool was taken up, and where: see takeBackScore. */
+	private scored: { step: Snapshot; node: SgfNode } | null = null;
+
+	/** The territory tool taken up: the position counted at once (see countTerritory). */
+	private scoreOnPick(): void {
+		this.scored = null;
+		if (!this.edit || !this.ready) return;
+		const top = this.undoStack[this.undoStack.length - 1];
+		this.countTerritory(-1, false);
+		const step = this.undoStack[this.undoStack.length - 1];
+		if (step && step !== top) this.scored = { step, node: this.cur };
+	}
+
+	/**
+	 * Take back the count made when the territory tool was taken up, when nothing has been done
+	 * since, there: the tool's palette gone round past it (H, or a click again on its button) only
+	 * looked at it in passing.
+	 */
+	takeBackScore(): void {
+		const s = this.scored;
+		this.scored = null;
+		if (!s || this.cur !== s.node || this.undoStack[this.undoStack.length - 1] !== s.step) return;
+		this.undoStack.pop();
+		this.restore(s.step);
 	}
 
 	/** The series the label tool counts in: a…, A… or 1…. */
@@ -1399,6 +1429,8 @@ export class Session {
 				return;
 			}
 			case 'territory':
+				// (clicked: the count made when the tool was taken up is kept now, see takeBackScore)
+				this.scored = null;
 				this.countTerritory(i, single);
 				return;
 			case 'erase': {
@@ -1472,15 +1504,15 @@ export class Session {
 	}
 
 	/**
-	 * The territory tool, at point `i`: territory worked out, and written as TB and TW on the
-	 * current position, whole, in one undo step (see territory.ts).
+	 * The territory tool, at point `i` (or, taken up, at none: -1): territory worked out, and
+	 * written as TB and TW on the current position, whole, in one undo step (see territory.ts).
 	 *
-	 * With no territory there yet, the dead stones are guessed and the click does nothing more.
-	 * Once there is, the marks say which stones are dead (a stone on the other side's territory),
-	 * and a click on a stone makes it, and the stones of its colour it reaches through empty
-	 * points, dead or alive again (`single`: its own chain alone); a click on an empty point
-	 * only works the territory out again (hand-made marks go). Territory that runs out of the
-	 * part of the board the locked board shows counts for nobody.
+	 * The marks say which stones are dead: a stone on the other side's territory. A click on a
+	 * stone makes it, and the stones of its colour it reaches through empty points, dead or alive
+	 * again (`single`: its own chain alone). Otherwise (the tool taken up, or a click on an empty
+	 * point) the position is counted: from the stones the marks have dead, or, with no marks
+	 * yet, from a guess at the dead stones; marks made by hand go. Territory that runs out of
+	 * the part of the board the locked board shows counts for nobody.
 	 */
 	private countTerritory(i: number, single: boolean): void {
 		const { w, h, cur } = this;
@@ -1498,17 +1530,22 @@ export class Session {
 			}
 		}
 		let dead: Uint8Array;
-		if (!cur.props.TB && !cur.props.TW) {
-			dead = guessDead(grid, w, h);
-		} else {
+		if (i >= 0 && grid[i]) {
+			// (with no marks yet, every stone is alive until clicked)
 			dead = deadFromMarks(grid, owner);
-			if (grid[i]) {
-				const to = dead[i] ? 0 : 1;
-				for (const p of single ? chainAt(grid, i, w, h) : relatedStones(grid, i, w, h)) dead[p] = to;
-			}
+			const to = dead[i] ? 0 : 1;
+			for (const p of single ? chainAt(grid, i, w, h) : relatedStones(grid, i, w, h)) dead[p] = to;
+		} else if (cur.props.TB || cur.props.TW) {
+			dead = deadFromMarks(grid, owner);
+		} else {
+			dead = guessDead(grid, w, h);
 		}
 		const resting = this.restingView();
-		const map = territoryMap(grid, dead, w, h, isFull(resting, w, h) ? null : resting);
+		// What is not settled yet is estimated (see territoryMap), unless the game ended here, both
+		// sides passing: then what neither closed off counts for nobody.
+		const passed = (n: SgfNode | null): boolean => !!n && !!getMove(n, w, h)?.pass;
+		const ended = passed(cur) && passed(cur.parent);
+		const map = territoryMap(grid, dead, w, h, isFull(resting, w, h) ? null : resting, ended ? null : influence(grid, dead, w, h));
 		const tb = new Set<string>();
 		const tw = new Set<string>();
 		for (let p = 0; p < map.length; p++) {

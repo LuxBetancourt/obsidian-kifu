@@ -45,6 +45,8 @@ export interface Scoring {
 	unscorableFalseEye: Uint8Array;
 	dame: Uint8Array;
 	eyeValue: Uint8Array;
+	/** The region (an area one side's living stones alone reach, with those stones) each point is in, or -1. */
+	region: Int32Array;
 }
 
 interface Geo {
@@ -771,6 +773,7 @@ function markScoring(
 		unscorableFalseEye: new Uint8Array(n),
 		dame: new Uint8Array(n),
 		eyeValue: new Uint8Array(n),
+		region: regionIds,
 	};
 	const extraBlackUnscoreablePoints = new Set<number>();
 	const extraWhiteUnscoreablePoints = new Set<number>();

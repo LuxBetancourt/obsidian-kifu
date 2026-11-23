@@ -485,30 +485,42 @@ test('territory by hand: black\'s or white\'s, by a click or a rectangle, never 
 	s.setTool('erase');
 	click(s, 'aa');
 	assert.equal(s.model().tb.has(0), false);
-	s.setTool('territory');
-	s.areaDrag(0, 0, 8, 8); // (territory worked out is not dragged)
-	assert.deepEqual(sorted(s.model().tw), idx(['db', 'dc']));
 });
 
-test('territory worked out: guessed and written whole at the first click, then a click on stones makes them dead or alive', () => {
+test('territory worked out: counted the moment the tool is taken up, then a click on stones makes them dead or alive', () => {
 	// black's wall down the d column and white's down the f; two white stones stranded on the left, a black one on the right
 	const s = make('view: full\n(;GM[1]SZ[9]AB[da:di][hg]AW[fa:fi][bb][bd])');
 	s.setEdit(true);
-	s.setTool('territory');
-	click(s, 'ee'); // the first click: the dead stones guessed, both sides' territory with them in it
+	s.setTool('territory'); // taken up: the dead stones guessed, both sides' territory with them in it
 	assert.deepEqual(s.root.props.TB, ['aa:ci']);
 	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	// gone round past in the palette with nothing done: the count taken back, as if never made
+	s.takeBackScore();
+	assert.equal(s.root.props.TB, undefined);
+	assert.equal(s.canUndo, false);
+	s.setTool('SL');
+	s.setTool('territory');
+	assert.deepEqual(s.root.props.TB, ['aa:ci']);
 	const steps = () => (s as unknown as { undoStack: unknown[] }).undoStack.length;
+	click(s, 'ee'); // an empty point: counted again, the same, so no step
+	assert.equal(steps(), 1);
 	const before = steps();
 	// a click on a dead stone: it, and the white stones it reaches through empty points, live
+	// (black's area is no longer black's alone: only an estimate's, beside the wall)
+	const bb = 1 * 9 + 1;
+	const bd = 3 * 9 + 1;
 	click(s, 'bb');
-	assert.equal(s.root.props.TB, undefined); // (no area is black's alone now)
-	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	assert.equal(s.model().tb.has(bb), false);
+	assert.equal(s.model().tb.has(bd), false);
+	assert.notDeepEqual(s.root.props.TB, ['aa:ci']);
+	const whites = s.model().tw;
+	for (let y = 0; y < 9; y++) for (let x = 6; x < 9; x++) assert.ok(whites.has(y * 9 + x), `${x} ${y} still white's`);
 	click(s, 'bb'); // and again, dead
 	assert.deepEqual(s.root.props.TB, ['aa:ci']);
 	// with Shift, its own chain alone
 	s.click(...at('bb'), true);
-	assert.deepEqual(s.root.props.TB, ['bd']);
+	assert.equal(s.model().tb.has(bb), false);
+	assert.equal(s.model().tb.has(bd), true);
 	assert.equal(steps(), before + 3); // (one undo step a click)
 	s.undo();
 	assert.deepEqual(s.root.props.TB, ['aa:ci']);
@@ -523,13 +535,40 @@ test('territory worked out: guessed and written whole at the first click, then a
 	const m = s.model();
 	assert.equal(m.tb.has(1 * 9 + 1), true); // (bb, white and dead: black's)
 	assert.equal(m.tw.has(6 * 9 + 7), true); // (hg, black and dead: white's)
-	// nothing to count (one colour only): nothing written, no undo step
+	// once something has been done, going round past the tool takes nothing back; and it is not dragged
+	s.takeBackScore();
+	s.areaDrag(0, 0, 8, 8);
+	assert.deepEqual(s.root.props.TB, ['aa:ci']);
+	assert.deepEqual(s.root.props.TW, ['ga:ii']);
+	// nothing to count (one colour only): nothing written, no undo step; a click on stones still makes them dead
 	const t = make('view: full\n(;GM[1]SZ[9]AB[cc][dd])');
 	t.setEdit(true);
 	t.setTool('territory');
 	click(t, 'ee');
 	assert.equal(t.root.props.TB, undefined);
 	assert.equal(t.canUndo, false);
+	click(t, 'cc');
+	assert.deepEqual(t.root.props.TW, ['cc', 'dd']);
+});
+
+test('territory worked out in a game not over: what is still open is estimated, unless both sides passed', () => {
+	// a stone in each corner of an open board: each side's corners its own, by the estimate, and the middle no one's
+	const open = '(;GM[1]SZ[9]AB[cc][gc]AW[cg][gg]';
+	const s = make(`view: full\n${open})`);
+	s.setEdit(true);
+	s.setTool('territory');
+	const tb = s.model().tb;
+	const tw = s.model().tw;
+	assert.equal(tb.has(0) && tb.has(8), true); // (black's top corners)
+	assert.equal(tw.has(72) && tw.has(80), true); // (white's bottom ones)
+	assert.equal(tb.has(40) || tw.has(40), false); // (the middle point)
+	// the same with the game over, both having passed: nothing is closed off, so nothing counts
+	const t = make(`view: full\n${open};B[];W[])`);
+	t.setEdit(true);
+	t.last();
+	t.setTool('territory');
+	assert.equal(t.root.props.TB, undefined);
+	assert.equal(t.model().tb.size + t.model().tw.size, 0);
 });
 
 test('undoing a label counts the label tool back with it, and redoing counts it on again', () => {
