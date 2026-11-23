@@ -495,7 +495,7 @@ await scenario('the pass button in the editing toolbar records a pass for the si
 }, async (page) => {
 	await toggleLock(page);
 	const tools = await page.locator('.kifu-tools .kifu-btn').evaluateAll((bs) => bs.slice(0, 3).map((b) => b.getAttribute('aria-label')));
-	assert.deepEqual(tools, ['Play moves (who plays next: black or white)', 'Pass (for the side to play)', 'Black stone']);
+	assert.deepEqual(tools, ['Play moves, and who plays next: black or white (P)', 'Pass, for the side to play (Shift+P)', 'Black stone (B)']);
 	await tool(page, 'Pass').click();
 	await sleep(700);
 	assert.match(await doc(page), /\(;GM\[1\]SZ\[9\];B\[ee\];W\[\]\)/);
@@ -586,7 +586,7 @@ await scenario('same note in two panes, and twin blocks', {
 	assert.equal(await boardCount(page), 4); // two blocks, each shown in both panes
 	// the reading pane (boards 2 and 3) has no lock (the buttons are made as the mouse comes over each board)
 	for (let i = 0; i < 4; i++) await hover(page, i);
-	assert.deepEqual(await page.locator('.kifu-ctl .kifu-btn[aria-label="Unlock to edit"]').evaluateAll((bs) => bs.map((b) => b.hidden)), [false, false, true, true]);
+	assert.deepEqual(await page.locator('.kifu-ctl .kifu-btn[aria-label="Unlock to edit (Enter)"]').evaluateAll((bs) => bs.map((b) => b.hidden)), [false, false, true, true]);
 	// unlock the SECOND block in the editor pane
 	const p = await pointXY(page, 1, 'jj');
 	await page.mouse.move(p.x, p.y);

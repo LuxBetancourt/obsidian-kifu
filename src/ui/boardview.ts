@@ -16,16 +16,25 @@ import { fromShown, orientModel, shownColor } from '../orient';
  * and #pick): who plays next, the shape, the label series, arrow or line, highlight or dim.
  */
 const TOOLS: [string, string, string][] = [
-	['play', 'playB', 'Play moves (who plays next: black or white)'],
-	['black', 'black', 'Black stone'],
-	['white', 'white', 'White stone'],
-	['shape', 'TR', 'Triangle, square, circle or cross'],
-	['label', 'label', 'Letter or number (a, A or 1)'],
-	['line', 'arrow', 'Arrow or line: drag from one point to another'],
-	['area', 'highlight', 'Highlight or dim: click a point, or drag across a rectangle'],
-	['erase', 'erase', 'Eraser'],
-	['crop', 'crop', 'Choose the part of the board to show (drag; double-click or double-tap for the default)'],
+	['play', 'playB', 'Play moves, and who plays next: black or white (P)'],
+	['black', 'black', 'Black stone (B)'],
+	['white', 'white', 'White stone (W)'],
+	['shape', 'TR', 'Triangle, square, circle or cross (T, S, C, X)'],
+	['label', 'label', 'Letter or number: a, A or 1 (L)'],
+	['line', 'arrow', 'Arrow or line: drag from one point to another (A)'],
+	['area', 'highlight', 'Highlight or dim: click a point, or drag across a rectangle (H)'],
+	['erase', 'erase', 'Eraser (E)'],
+	['crop', 'crop', 'Choose the part of the board to show: drag; double-click or double-tap for the default (R)'],
 ];
+
+/**
+ * The tools' keys, on an unlocked board that has the keyboard: a letter takes up its tool as
+ * last used, and pressed again while the tool is in hand goes on to its next choice (who plays
+ * next, the label series, arrow or line, highlight or dim), as a click again on the button
+ * does. The shapes have a key each. (Other keys: #hotkey, and #onKey for Enter.)
+ */
+const TOOL_KEYS: Record<string, string> = { p: 'play', b: 'black', w: 'white', l: 'label', a: 'line', h: 'area', e: 'erase', r: 'crop' };
+const SHAPE_KEYS: Record<string, Shape> = { t: 'TR', s: 'SQ', c: 'CR', x: 'MA' };
 
 /** One choice in a palette: its key, an icon (or a character or two, `text`), and its name. */
 interface Choice {
@@ -61,6 +70,12 @@ const CHOICES: Record<string, Choice[]> = {
 		{ key: 'DD', icon: 'dim', title: 'Dim' },
 	],
 };
+
+/** The choice after `current` in button `id`'s palette, round past the end. */
+function nextChoice(id: string, current: string): string {
+	const list = CHOICES[id];
+	return list[(list.findIndex((c) => c.key === current) + 1) % list.length].key;
+}
 
 /** The tools a click-drag paints a run of points with: play alternates and crop drags out a box, so not those. */
 const PAINT_TOOLS = new Set<Tool>(['black', 'white', 'TR', 'SQ', 'CR', 'MA', 'label', 'erase']);
@@ -441,7 +456,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#buildCtl(): Ctl {
 		const ctl = el(this.#frame, 'div', 'kifu-ctl');
-		const lock = iconButton(ctl, 'lock', 'Unlock to edit', () => this.#toggleLock());
+		const lock = iconButton(ctl, 'lock', 'Unlock to edit (Enter)', () => this.#toggleLock());
 		// On a locked board: take back the moves played on it, and make them again. Never
 		// a step into the record itself, before the resting position or after it (that
 		// would give a problem's answer away). Unlocked, the toolbar has its own buttons.
@@ -488,7 +503,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	/** Show the buttons as the board stands: which are there, which are lit, what they say. */
 	#updateCtl(c: Ctl, s: Session, readOnly: boolean, away: boolean, editing: boolean): void {
 		setIcon(c.lock.firstChild as SVGSVGElement, s.edit ? 'unlock' : 'lock');
-		c.lock.setAttribute('aria-label', s.edit ? 'Lock (stop editing)' : 'Unlock to edit');
+		c.lock.setAttribute('aria-label', s.edit ? 'Lock, stop editing (Esc)' : 'Unlock to edit (Enter)');
 		c.lock.classList.toggle('is-active', s.edit);
 		// (in the reading view a board is only played, never edited)
 		c.lock.hidden = readOnly;
@@ -715,16 +730,16 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				});
 			}
 			// (beside the play tool: passing is playing too)
-			if (tool === 'play') this.#toolBtns.set('pass', iconButton(group, 'pass', 'Pass (for the side to play)', () => s.pass()));
+			if (tool === 'play') this.#toolBtns.set('pass', iconButton(group, 'pass', 'Pass, for the side to play (Shift+P)', () => s.pass()));
 		}
 		const more: [string, string, string, () => void][] = [
-			['figure', 'figure', 'When locked, show the moves as a numbered figure', () => s.setFigure(!s.figure)],
-			['start', 'flag', 'Open the board at this position when the note is shown', () => s.toggleStart()],
-			['undo', 'undo', 'Undo (redo with Ctrl/Cmd+Shift+Z)', () => s.undo()],
-			['prev', 'prev', 'Previous move', () => s.prev()],
-			['next', 'next', 'Next move', () => s.next()],
-			['correct', 'check', 'Mark this line as correct', () => s.mark('correct')],
-			['incorrect', 'cross', 'Mark this line as incorrect', () => s.mark('incorrect')],
+			['figure', 'figure', 'When locked, show the moves as a numbered figure (#)', () => s.setFigure(!s.figure)],
+			['start', 'flag', 'Open the board at this position when the note is shown (F)', () => s.toggleStart()],
+			['undo', 'undo', 'Undo, Ctrl/Cmd+Z (redo: Ctrl/Cmd+Shift+Z)', () => s.undo()],
+			['prev', 'prev', 'Previous move (←)', () => s.prev()],
+			['next', 'next', 'Next move (→)', () => s.next()],
+			['correct', 'check', 'Mark this line as correct (+)', () => s.mark('correct')],
+			['incorrect', 'cross', 'Mark this line as incorrect (-)', () => s.mark('incorrect')],
 			['promote', 'up', 'Move this variation up', () => s.promote()],
 			['delete', 'trash', 'Delete this move and what follows (Delete or Backspace)', () => s.deleteNode()],
 		];
@@ -747,15 +762,60 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			return;
 		}
 		if (this.#paletteFor === id) {
-			const list = CHOICES[id];
-			const at = list.findIndex((c) => c.key === p.current);
-			p.choose(list[(at + 1) % list.length].key);
+			p.choose(nextChoice(id, p.current));
 			// (shown by the mouse coming over, it stays now that it is being used)
 			this.#paletteHover = false;
 			return;
 		}
 		if (!p.inHand) p.takeUp();
 		this.#openPalette(s, id);
+	}
+
+	/**
+	 * A tool's key (see TOOL_KEYS), as a click on its button but with no palette: the tool
+	 * taken up as last used, or, in hand already, its next choice.
+	 */
+	#keyTool(s: Session, id: string): void {
+		const p = this.#choice(s, id);
+		if (!p) s.setTool(id as Tool);
+		else if (!p.inHand) p.takeUp();
+		else p.choose(nextChoice(id, p.current));
+	}
+
+	/** A key for a tool or a button of the strip, on an unlocked board: was it one? (See TOOL_KEYS.) */
+	#hotkey(s: Session, ev: KeyboardEvent): boolean {
+		if (ev.isComposing || ev.key.length !== 1) return false;
+		const k = ev.key.toLowerCase();
+		// (a key held down does its work once)
+		const once = !ev.repeat;
+		// these whatever the Shift key (on many keyboards it is what types them)
+		if (k === '#') {
+			if (once && !s.fileView) s.setFigure(!s.figure);
+			return true;
+		}
+		if (k === '+' || k === '=' || k === '-') {
+			if (once && s.cur.parent) s.mark(k === '-' ? 'incorrect' : 'correct');
+			return true;
+		}
+		if (ev.shiftKey) {
+			if (k !== 'p') return false;
+			if (once) s.pass();
+			return true;
+		}
+		if (k === 'f') {
+			if (once && !s.fileView && ((s.hasStart && s.cur === s.home) || s.canSetStart)) s.toggleStart();
+			return true;
+		}
+		const shape = SHAPE_KEYS[k];
+		if (shape) {
+			if (once) s.setTool(shape);
+			return true;
+		}
+		const id = TOOL_KEYS[k];
+		if (!id) return false;
+		// (the crop is not for an SGF file shown by itself: no button, no key)
+		if (once && !(id === 'crop' && s.fileView)) this.#keyTool(s, id);
+		return true;
 	}
 
 	/**
@@ -996,8 +1056,14 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 					if (!s.edit) handled = false;
 					else if (!ev.repeat) s.deleteNode();
 					break;
+				case 'Enter':
+					// locked: unlock, as the lock does (Esc locks again); not where there is no lock
+					if (s.edit || this.readOnlyPane()) handled = false;
+					else if (!ev.repeat) this.#toggleLock();
+					break;
 				default:
-					handled = false;
+					// unlocked: the tools' keys and a few of the strip's buttons
+					handled = s.edit && this.#hotkey(s, ev);
 			}
 		}
 		if (handled) {

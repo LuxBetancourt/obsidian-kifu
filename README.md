@@ -320,12 +320,32 @@ With the keyboard on a board (click it) or on the panel:
 | `←` `→` | previous / next move |
 | `↑` `↓` | previous / next variation |
 | `Home` `End` | first position / end of the line |
-| `Esc` | locked: back to the resting position · unlocked: lock · while dragging a crop: never mind |
+| `Esc` | locked: back to the resting position · unlocked: lock (a palette that is up goes first) · while dragging a crop: never mind |
 | `Delete` `Backspace` | unlocked: delete the current move and what follows (one per press; undo brings it back) |
 | `Ctrl/Cmd+Z` | unlocked: undo · locked: take back your last step |
 | `Ctrl/Cmd+Shift+Z`, `Ctrl+Y` | unlocked: redo · locked: make that step again |
 
-In the panel's comment box every key belongs to the text you are typing, undo included.
+On a board alone:
+
+| Key | |
+| --- | --- |
+| `Enter` | locked: unlock |
+| `P` | unlocked: play moves; again: switch who plays next |
+| `B` `W` | black stone, white stone |
+| `T` `S` `C` `X` | triangle, square, circle, cross |
+| `L` | labels; again: the next series (`a`, `A`, `1`) |
+| `A` | arrows; again: lines (and back) |
+| `H` | highlight; again: dim (and back) |
+| `E` | eraser |
+| `R` | crop |
+| `Shift+P` | pass, for the side to play |
+| `+` `-` | mark the line through this move as correct / incorrect |
+| `#` | numbered figure on or off |
+| `F` | open the locked board at this position (⚑), or not |
+
+A tool's key does what a click on its button does, without the palette: pressed again while the tool is in hand, it goes on to the next choice. The buttons' tooltips show their keys.
+
+In the panel's comment box, and in the box for the next label, every key belongs to the text you are typing, undo included.
 
 While a board has the keyboard, what you type, paste or undo stays with the board and never reaches the note's text. Obsidian's own hotkeys keep working, though — including ones that act on the editor.
 

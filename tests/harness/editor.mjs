@@ -1824,6 +1824,103 @@ await scenario('less motion: animated stripes stay still and palettes come up at
 	assert.deepEqual(await notices(page), []);
 });
 
+/* Keys for the tools, on an unlocked board that has the keyboard: a letter takes up a tool, and again
+   goes on to its next choice, as a click again on its button does; Shift+P passes, + and - mark the
+   line, # makes the figure, F the start. Enter unlocks a locked board. A key held down acts once;
+   locked, the letters do nothing; in the label box they are text; none of them reaches the note. */
+await scenario('keys for the tools: a letter takes one up, again goes on to its next choice; Enter unlocks', {
+	files: { 'K.md': '# K\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n\nafter\n' }, live: ['K.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	const game = async () => flat(blocks(await doc(page))[0]);
+	const on = (title) => tool(page, title).evaluate((b) => b.classList.contains('is-active'));
+	const icon = (title) => tool(page, title).locator('svg').getAttribute('data-icon');
+	// locked: a letter does nothing, Enter unlocks (and the keyboard stays on the board)
+	await page.locator('.kifu').first().evaluate((e) => e.focus());
+	await page.keyboard.press('b');
+	await page.keyboard.press('Shift+P');
+	assert.deepEqual(await isEditing(page), [false]);
+	await page.keyboard.press('Enter');
+	await sleep(250);
+	assert.deepEqual(await isEditing(page), [true]);
+	assert.equal(await active(page), 'DIV.kifu');
+	// a letter for each tool
+	await page.keyboard.press('b');
+	assert.equal(await on('Black stone'), true);
+	await page.keyboard.press('w');
+	assert.equal(await on('White stone'), true);
+	assert.equal(await on('Black stone'), false);
+	for (const [k, shape] of [['t', 'TR'], ['c', 'CR'], ['x', 'MA'], ['s', 'SQ']]) {
+		await page.keyboard.press(k);
+		assert.equal(await on('Triangle, square'), true, k);
+		assert.equal(await icon('Triangle, square'), shape, k);
+	}
+	await page.keyboard.press('e');
+	assert.equal(await on('Eraser'), true);
+	await page.keyboard.press('r');
+	assert.equal(await on('Choose the part'), true);
+	// again, the next choice (with no palette coming up); a key held down, once
+	await page.keyboard.press('a');
+	assert.equal(await on('Arrow or line'), true);
+	assert.equal(await icon('Arrow or line'), 'arrow');
+	await page.keyboard.press('a');
+	assert.equal(await icon('Arrow or line'), 'line');
+	await page.keyboard.press('h');
+	assert.equal(await icon('Highlight or dim'), 'highlight');
+	await page.keyboard.down('h');
+	await page.keyboard.down('h'); // (a repeat)
+	await page.keyboard.up('h');
+	assert.equal(await icon('Highlight or dim'), 'dim');
+	assert.equal(await page.locator('.kifu-palette:visible').count(), 0);
+	await page.keyboard.press('l');
+	assert.equal(await on('Letter or number'), true);
+	await page.keyboard.press('l'); // (a, A)
+	await clickPoint(page, 0, 'cc');
+	assert.equal(await labels(page), '1,A'); // (1: the number on the move played)
+	// P: play, and again who plays next (White after Black's move; then Black); Shift+P passes
+	await page.keyboard.press('p');
+	assert.equal(await on('Play moves'), true);
+	assert.equal(await icon('Play moves'), 'playW');
+	await page.keyboard.press('p');
+	assert.equal(await icon('Play moves'), 'playB');
+	await page.keyboard.press('Shift+P');
+	await sleep(600);
+	assert.match(await game(), /;B\[ee\][^;]*PL\[B\][^;]*;B\[\]\)$/);
+	// + and - mark the line through this move; # the numbered figure; F the start, each a switch
+	await page.keyboard.press('+');
+	assert.equal(await on('Mark this line as correct'), true);
+	await page.keyboard.press('-');
+	assert.equal(await on('Mark this line as incorrect'), true);
+	assert.equal(await on('Mark this line as correct'), false);
+	await page.keyboard.press('#');
+	assert.equal(await on('When locked, show the moves'), true);
+	await page.keyboard.press('#');
+	assert.equal(await on('When locked, show the moves'), false);
+	await page.keyboard.press('f');
+	assert.equal(await on('Open the board at this position'), true);
+	await sleep(600);
+	assert.match(blocks(await doc(page))[0], /^move: /m);
+	await page.keyboard.press('f');
+	assert.equal(await on('Open the board at this position'), false);
+	// other shifted letters are not the board's
+	await page.keyboard.press('Shift+B');
+	assert.equal(await on('Black stone'), false);
+	// in the label box the letters are text
+	await page.keyboard.press('l');
+	await tool(page, 'Letter or number').hover();
+	await page.locator('.kifu-palette .kifu-label').click();
+	await page.keyboard.type('bw');
+	assert.equal(await page.locator('.kifu-palette .kifu-label').inputValue(), 'bw');
+	assert.equal(await on('Letter or number'), true);
+	// Esc there puts the palette away; again, locks
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('Escape');
+	await sleep(250);
+	assert.deepEqual(await isEditing(page), [false]);
+	assert.deepEqual(await editorLog(page), []);
+	assert.deepEqual(await notices(page), []);
+});
+
 /* Arrows and lines are dragged from one point to another; highlighting and dimming take a click
    on a point or a dragged rectangle. A second click on either button switches between its two. */
 await scenario('arrows and lines by a drag; highlighting and dimming by a click or a dragged rectangle', {
