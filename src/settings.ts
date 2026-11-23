@@ -8,8 +8,9 @@ import { ARROW_STYLES, BoardSvg, HIGHLIGHTS } from './ui/boardsvg';
 import { el } from './ui/dom';
 
 // A classic (star point, knight's approach; then knight's answer, slide, 3-3, extension),
-// as a position with four moves played on it, so that the numbering has something to show.
-const SAMPLE = 'view: top-right 11x9\n(;SZ[19]AB[pd]AW[nc];B[qf];W[pb];B[qc];W[kc])';
+// as a position with four moves played on it, so that the numbering has something to show;
+// with white's base highlighted and an arrow down the right side, for the looks of those.
+const SAMPLE = 'view: top-right 11x9\n(;SZ[19]AB[pd]AW[nc];B[qf];W[pb];B[qc];W[kc]SL[lb:mc]AR[qf:qi])';
 
 /** Bring stored data back into shape: unknown keys dropped, wrong types replaced by defaults. */
 export function sanitize(data: unknown): KifuSettings {
@@ -231,7 +232,7 @@ export class KifuSettingTab extends PluginSettingTab {
 			sampleBox.className = `kifu kifu-sample kifu-${s.style} kifu-${s.align}`;
 			sample.refresh();
 			sample.last();
-			board.draw(sample.model(), { cell: Math.max(6, Math.round(BASE_CELL * s.scale)), coords: s.coords });
+			board.draw(sample.model(), { cell: Math.max(6, Math.round(BASE_CELL * s.scale)), coords: s.coords, highlight: s.highlight, arrows: s.arrows });
 		};
 		redraw();
 		this.#redraw = redraw;

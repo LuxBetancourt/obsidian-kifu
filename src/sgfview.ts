@@ -92,6 +92,9 @@ export class SgfView extends FileView {
 		// (no block: the board belongs to no note, and the move tree panel takes it as it is)
 		s.link = file.path;
 		s.fileView = true;
+		// (a change on the settings page redraws it, as it does the boards in notes)
+		plugin.detachedShown(s, true);
+		shown.register(() => plugin.detachedShown(s, false));
 		const ctx: MarkdownPostProcessorContext = {
 			docId: '',
 			sourcePath: file.path,

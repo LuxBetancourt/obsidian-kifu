@@ -1326,6 +1326,45 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	assert.deepEqual(res.cursor, { line: 3, ch: 0 });
 });
 
+/* A change on the settings page shows at once on every board: one in a note, an SGF file open in its own
+   tab (which went on with the old look until it was opened again), and the page's own preview (which had
+   no highlight or arrow to show a change of those on). */
+await scenario('a change on the settings page redraws every board: an SGF file in its own tab, and the preview', {
+	files: {
+		'g.sgf': '(;GM[1]SZ[9]AB[cc]AW[ee]SL[cc:dd]AR[aa:ee])\n',
+		'N.md': '# N\n\n```kifu\n(;GM[1]SZ[9]AB[cc]AW[ee]SL[cc:dd]AR[aa:ee])\n```\n',
+	},
+	panes: [{ path: 'N.md', mode: 'preview' }],
+}, async (page) => {
+	await page.evaluate(() => window.harness.app.workspace._openFile('g.sgf'));
+	await page.evaluate(() => {
+		const t = window.harness.app._settingTabs[0];
+		document.getElementById('main').appendChild(t.containerEl);
+		t.display();
+	});
+	await sleep(400);
+	const looks = () => page.evaluate(() => Object.fromEntries(Object.entries({ note: '.markdown-preview-view .kifu', file: '.kifu-sgf-view .kifu', preview: '.kifu-sample' }).map(([k, sel]) => {
+		const root = document.querySelector(sel);
+		const head = root.querySelector('.kifu-line-head');
+		return [k, [root.classList.contains('kifu-theme') ? 'theme' : 'paper', root.querySelector('.kifu-hl.is-striped') ? 'stripes' : 'grey', head && head.getAttribute('d') !== '' ? 'filled' : 'open']];
+	})));
+	assert.deepEqual(await looks(), { note: ['paper', 'grey', 'filled'], file: ['paper', 'grey', 'filled'], preview: ['paper', 'grey', 'filled'] });
+	for (const [key, value] of [['style', 'theme'], ['highlight', 'stripes'], ['arrows', 'open']]) {
+		await page.evaluate(([k, v]) => window.harness.app._settingTabs[0].setControlValue(k, v), [key, value]);
+	}
+	await sleep(200);
+	assert.deepEqual(await looks(), { note: ['theme', 'stripes', 'open'], file: ['theme', 'stripes', 'open'], preview: ['theme', 'stripes', 'open'] });
+	// (the file's tab closed: its board is let go, and a change after that finds nothing amiss)
+	await page.evaluate(() => {
+		const leaf = window.harness.app.workspace.getLeavesOfType('kifu-sgf')[0];
+		leaf.detach();
+	});
+	await page.evaluate(() => window.harness.app._settingTabs[0].setControlValue('arrows', 'double'));
+	await sleep(200);
+	// (a double line: two lines into the head, and the head)
+	assert.equal(((await page.locator('.markdown-preview-view .kifu .kifu-line').getAttribute('d')) ?? '').split('M').length - 1, 3);
+});
+
 await scenario('insert a board from an SGF file', { files: { 'I.md': 'text\n', 'games/a.sgf': '(;SZ[9]AB[ee])', 'b.SGF': '(;SZ[9])', 'c.txt': 'no' }, panes: [{ path: 'I.md', mode: 'source' }] }, async (page) => {
 	const res = await page.evaluate(() => {
 		const h = window.harness;

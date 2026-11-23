@@ -354,7 +354,7 @@ Option lines come first in the block, one per line, before any SGF.
 
 ## Settings
 
-**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how highlights and arrows look, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
+**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how highlights and arrows look, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins. A change shows at once, on the preview at the top of the page and on every board that is open.
 
 **What's new:** once after each update, a window shows the new features, each with a short animation (loaded from the plugin's page on GitHub when the window opens). A fresh install shows nothing. Turn it off under **Settings → Kifu → Updates**, or with the link at the bottom of the window.
 

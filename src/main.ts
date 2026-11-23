@@ -459,8 +459,11 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	/** Boards drawn from links, and when what they show was fetched: kept a few minutes, so a note shown again does not ask again. */
 	#linked = new Map<string, { at: number; body: Promise<string> }>();
-	/** The sessions of the boards drawn from links that are on screen (settings that change redraw them too). */
-	#linkedSessions = new Set<Session>();
+	/**
+	 * The sessions of the boards on screen that belong to no block of a note (drawn from a
+	 * link, shown in a base, or an SGF file in its own tab): settings that change redraw them too.
+	 */
+	#detached = new Set<Session>();
 
 	/** What a board drawn from a link shows: a block's text, made from what the site sent. */
 	fetchLinked(t: LinkTarget): Promise<string> {
@@ -488,9 +491,10 @@ export default class KifuPlugin extends Plugin implements Host {
 		return body;
 	}
 
-	linkedShown(s: Session, on: boolean): void {
-		if (on) this.#linkedSessions.add(s);
-		else this.#linkedSessions.delete(s);
+	/** A board that belongs to no block of a note is on screen, or gone. */
+	detachedShown(s: Session, on: boolean): void {
+		if (on) this.#detached.add(s);
+		else this.#detached.delete(s);
 	}
 
 	/** Fetch a problem from goproblems.com and put it where the cursor is, with a link back to it. */
@@ -864,7 +868,7 @@ export default class KifuPlugin extends Plugin implements Host {
 
 	#refreshAll(): void {
 		for (const s of this.#sessions) if (s.ready) s.refresh();
-		for (const s of this.#linkedSessions) if (s.ready) s.refresh();
+		for (const s of this.#detached) if (s.ready) s.refresh();
 	}
 
 	/* ----------------------------------------------------------------- boards */

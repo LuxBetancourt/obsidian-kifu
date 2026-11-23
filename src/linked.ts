@@ -85,8 +85,8 @@ export function mountDetached(
 	const s = new Session(plugin, notePath, body);
 	s.link = from;
 	s.fixed = why;
-	plugin.linkedShown(s, true);
-	owner.register(() => plugin.linkedShown(s, false));
+	plugin.detachedShown(s, true);
+	owner.register(() => plugin.detachedShown(s, false));
 	// (a board in the editor or a base has no section of the note to tell about)
 	const stub: MarkdownPostProcessorContext = { docId: '', sourcePath: notePath, frontmatter: null, getSectionInfo: () => null, addChild: (c: MarkdownRenderChild) => owner.addChild(c) };
 	const view = new BoardView(el, plugin, ctx ?? stub, body);
