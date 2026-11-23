@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	parseSgf, serializeSgf, findGames, isClosed, getMove, boardSize, getText, setText,
-	escapeText, unescapeText, points, pathTo, eachNode, xy2pt,
+	escapeText, unescapeText, points, pathTo, eachNode, xy2pt, compressPoints,
 } from '../src/sgf';
 import { Board, replay, buildFigure } from '../src/goban';
 import {
@@ -50,6 +50,17 @@ test('sgf: collections, passes, compressed lists', () => {
 	assert.equal(getMove(roots[1].children[0])!.pass, true);
 	assert.equal(getMove(roots[1].children[0].children[0])!.pass, true);
 	assert.deepEqual(points(roots[2].props.AB), ['aa', 'ba', 'ca', 'ab', 'bb', 'cb']);
+});
+
+test('sgf: point lists written compactly, rectangles where there are blocks', () => {
+	assert.deepEqual(compressPoints(['aa', 'ba', 'ab', 'bb', 'dd']), ['aa:bb', 'dd']);
+	assert.deepEqual(compressPoints(['cc']), ['cc']);
+	assert.deepEqual(compressPoints([]), []);
+	// an L: as wide as the top row goes, then what is left
+	assert.deepEqual(compressPoints(['aa', 'ba', 'ca', 'ab', 'ac']), ['aa:ca', 'ab:ac']);
+	// whatever the shape, the same points come back
+	const ring = ['bb', 'cb', 'db', 'bc', 'dc', 'bd', 'cd', 'dd'];
+	assert.deepEqual(points(compressPoints(ring)).sort(), [...ring].sort());
 });
 
 test('sgf: finding the games in a text that holds other things too', () => {

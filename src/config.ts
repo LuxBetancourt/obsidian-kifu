@@ -1,5 +1,7 @@
 /** Plugin-wide defaults. A board uses these unless its own block says otherwise. */
 
+import type { ArrowStyle, Highlight } from './ui/boardsvg';
+
 export interface KifuSettings {
 	/** 1 = 100 %. Per board: `scale:`. */
 	scale: number;
@@ -17,6 +19,10 @@ export interface KifuSettings {
 	boardSize: number;
 	/** Show the comment of the current move under the board. Per board: `comments:`. */
 	showComments: boolean;
+	/** How a highlighted point (SGF "SL") looks: a light grey cell, a striped one (with or without a border round the region, still or sliding), or a small square. Per board: `highlight:`. */
+	highlight: Highlight;
+	/** How arrows (SGF "AR") look: a filled head, an open one, or a double line. Per board: `arrows:`. */
+	arrows: ArrowStyle;
 	/** How the saved lines answer when one has several replies. */
 	reply: 'first' | 'random';
 	/** Pause before the reply is played, in milliseconds. */
@@ -42,6 +48,8 @@ export const DEFAULT_SETTINGS: KifuSettings = {
 	align: 'center',
 	boardSize: 19,
 	showComments: true,
+	highlight: 'grey',
+	arrows: 'filled',
 	reply: 'random',
 	replyDelay: 350,
 	revealPanel: true,

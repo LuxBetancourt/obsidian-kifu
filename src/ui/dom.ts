@@ -88,6 +88,11 @@ const ICONS: Record<string, string> = {
 	CR: 'M12 4.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15z',
 	MA: 'M6 6l12 12|M18 6L6 18',
 	label: 'M6.5 19L12 5l5.5 14|M8.7 13.5h6.6',
+	// (a line between two points, an arrow to one, a hatched square, a half-veiled stone)
+	line: 'M6.5 17.5L17.5 6.5|*M6.5 15.25a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 1 0 0-4.5z|*M17.5 4.25a2.25 2.25 0 1 0 0 4.5a2.25 2.25 0 1 0 0-4.5z',
+	arrow: 'M5.5 18.5L14.4 9.6|*M19 5L12.1 7.3L16.7 11.9z',
+	highlight: 'M4.5 4.5h15v15h-15z|M4.5 11.5l7-7|M4.5 19.5l15-15|M11.5 19.5l8-8',
+	dim: 'M12 4.5a7.5 7.5 0 1 0 0 15a7.5 7.5 0 1 0 0-15z|*M12 4.5a7.5 7.5 0 0 1 0 15z',
 	// (a graduation cap: a problem is something to study. A ? in a circle read as help.)
 	problem: 'M2.5 9.5L12 5l9.5 4.5L12 14z|M6.5 11.6v4.4c0 1.5 2.5 3 5.5 3s5.5-1.5 5.5-3v-4.4|M21.5 9.5v5',
 	shuffle: 'M3.5 7h3.2c4.6 0 5.6 10 10.2 10h3.6|M3.5 17h3.2c1.7 0 2.9-1.4 3.9-3.2|M13.2 10.2C14.2 8.4 15.4 7 17.1 7h3.4|M18 4.5L20.5 7L18 9.5|M18 14.5L20.5 17L18 19.5',
@@ -135,6 +140,20 @@ export function iconButton(parent: Node, name: string, title: string, onClick: (
 	b.type = 'button';
 	b.setAttribute('aria-label', title);
 	icon(b, name);
+	b.addEventListener('click', (ev) => {
+		ev.preventDefault();
+		onClick(ev);
+	});
+	// keep focus (and the editor's cursor) where it is
+	b.addEventListener('mousedown', (ev) => ev.preventDefault());
+	return b;
+}
+
+/** A small button showing a character or two instead of an icon (a label series in a palette). */
+export function textButton(parent: Node, text: string, title: string, onClick: (ev: MouseEvent) => void): HTMLButtonElement {
+	const b = el(parent, 'button', 'kifu-btn kifu-btn-text', text);
+	b.type = 'button';
+	b.setAttribute('aria-label', title);
 	b.addEventListener('click', (ev) => {
 		ev.preventDefault();
 		onClick(ev);

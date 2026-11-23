@@ -4,7 +4,7 @@ import { App, PluginSettingTab, SecretComponent, SettingDefinitionItem } from 'o
 import type KifuPlugin from './main';
 import { BASE_CELL, DEFAULT_SETTINGS, KifuSettings } from './config';
 import { Session } from './session';
-import { BoardSvg } from './ui/boardsvg';
+import { ARROW_STYLES, BoardSvg, HIGHLIGHTS } from './ui/boardsvg';
 import { el } from './ui/dom';
 
 // A classic (star point, knight's approach; then knight's answer, slide, 3-3, extension),
@@ -29,6 +29,8 @@ export function sanitize(data: unknown): KifuSettings {
 	pick('align', oneOf('left', 'center', 'right'));
 	pick('boardSize', (v) => typeof v === 'number' && Number.isInteger(v) && v >= 2 && v <= 52);
 	pick('showComments', bool);
+	pick('highlight', oneOf(...HIGHLIGHTS));
+	pick('arrows', oneOf(...ARROW_STYLES));
 	pick('reply', oneOf('first', 'random'));
 	pick('replyDelay', (v) => typeof v === 'number' && v >= 0 && v <= 5000);
 	pick('revealPanel', bool);
@@ -72,6 +74,27 @@ export class KifuSettingTab extends PluginSettingTab {
 				name: 'Colors',
 				desc: 'Black ink on white paper like a book, or the colors of your theme. Per board: "style: paper" or "style: theme".',
 				control: { type: 'dropdown', key: 'style', options: { paper: 'White paper', theme: 'Follow the theme' } },
+			},
+			{
+				name: 'Highlighted points',
+				desc: 'How points marked with the highlight tool (SGF "SL") look. Per board: "highlight: grey", "highlight: stripes", "highlight: stripes-border", "highlight: stripes-animated", "highlight: stripes-border-animated" or "highlight: square".',
+				control: {
+					type: 'dropdown',
+					key: 'highlight',
+					options: {
+						grey: 'Light grey',
+						stripes: 'Diagonal stripes',
+						'stripes-border': 'Diagonal stripes with a border',
+						'stripes-animated': 'Animated stripes',
+						'stripes-border-animated': 'Animated stripes with a border',
+						square: 'Small square',
+					},
+				},
+			},
+			{
+				name: 'Arrows',
+				desc: 'How arrows drawn with the arrow tool (SGF "AR") look. Per board: "arrows: filled", "arrows: open" or "arrows: double".',
+				control: { type: 'dropdown', key: 'arrows', options: { filled: 'Filled head', open: 'Open head', double: 'Double line' } },
 			},
 			{
 				name: 'Part of the board shown',

@@ -492,7 +492,7 @@ await scenario('the pass button in the editing toolbar records a pass for the si
 }, async (page) => {
 	await toggleLock(page);
 	const tools = await page.locator('.kifu-tools .kifu-btn').evaluateAll((bs) => bs.slice(0, 3).map((b) => b.getAttribute('aria-label')));
-	assert.deepEqual(tools, ['Play moves (click again to change who plays)', 'Pass (for the side to play)', 'Black stone']);
+	assert.deepEqual(tools, ['Play moves (who plays next: black or white)', 'Pass (for the side to play)', 'Black stone']);
 	await tool(page, 'Pass').click();
 	await sleep(700);
 	assert.match(await doc(page), /\(;GM\[1\]SZ\[9\];B\[ee\];W\[\]\)/);
@@ -684,6 +684,102 @@ await scenario('the move tree panel renders markdown in a comment', {
 	assert.equal(await textEl.locator('code').textContent(), 'A1');
 	// the plain reading is intact, without the markdown punctuation
 	assert.equal((await textEl.textContent()).replace(/\s+/g, ' ').trim(), 'The vital point, a key shape, and A1.');
+});
+
+/* Markup from a file: highlighted points (SL) are grey by default; the setting, or "highlight:"
+   for one board, makes them diagonal stripes or small squares. Dimmed points (DD) are veiled;
+   lines (LN) and arrows (AR) are drawn over everything. */
+await scenario('markup from a file: highlights grey, striped or square; dimmed points; lines and arrows', {
+	files: { 'H.md': '```kifu\n(;GM[1]SZ[9]AB[ee]SL[dd][ee]DD[aa]AR[cc:gg][ca:ee]LN[ag:ci])\n```\n\n```kifu\nhighlight: stripes\n(;GM[1]SZ[9]SL[dd])\n```\n\n```kifu\nhighlight: square\n(;GM[1]SZ[9]AB[ee]SL[dd][ee])\n```\n\n```kifu\nhighlight: stripes-border\n(;GM[1]SZ[9]SL[dd])\n```\n\n```kifu\narrows: open\n(;GM[1]SZ[9]AR[aa:ee])\n```\n\n```kifu\narrows: double\n(;GM[1]SZ[9]AR[aa:ee])\n```\n\n```kifu\nhighlight: stripes-animated\n(;GM[1]SZ[9]SL[dd:ee])\n```\n' },
+	panes: [{ path: 'H.md', mode: 'preview' }],
+}, async (page) => {
+	await sleep(300);
+	const board = (i) => page.locator('.kifu-svg').nth(i);
+	const hl = (i) => board(i).locator('.kifu-hl');
+	const count = async (loc) => ((await loc.getAttribute('d')) ?? '').split('M').length - 1;
+	const before = (a, b) => a.evaluate((e, sel) => !!(e.compareDocumentPosition(e.ownerSVGElement.querySelector(sel)) & Node.DOCUMENT_POSITION_FOLLOWING), b);
+	// grey, the default: a shaded cell for each highlighted point, under the lines
+	assert.equal(await hl(0).getAttribute('class'), 'kifu-hl');
+	assert.equal(await count(hl(0)), 2);
+	assert.equal(await before(hl(0), '.kifu-grid'), true);
+	// the dimmed point veiled over the stones; the arrow and the line over all of it
+	const faded = board(0).locator('.kifu-faded');
+	assert.equal(await count(faded), 1);
+	assert.equal(await board(0).locator('.kifu-b').evaluate((e) => !!(e.compareDocumentPosition(e.ownerSVGElement.querySelector('.kifu-faded')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+	assert.equal(await count(board(0).locator('.kifu-line')), 3);
+	assert.equal(await count(board(0).locator('.kifu-line-head')), 2);
+	// an arrow to an empty point ends on it; one to a stone, at the stone's edge (its number stays clear)
+	const tips = await board(0).locator('.kifu-line-head').evaluate((e) => [...e.getAttribute('d').matchAll(/M([\d.]+) ([\d.]+)/g)].map((t) => [Number(t[1]), Number(t[2])]));
+	assert.deepEqual(tips[0], [650, 650]); // gg
+	const off = Math.hypot(tips[1][0] - 450, tips[1][1] - 450); // ee, where the black stone is (radius 47.5)
+	assert.ok(off > 47.5 && off < 56, `the tip is ${off} from the stone's centre`);
+	// Over highlighted points the edge of lines and arrows shows the highlight, not paper (along stripes
+	// a white edge made a glaring channel; over a black stone the edge must stay): a copy of the
+	// highlight, over the edge, seen only through the edge's own shape.
+	const through = await board(0).evaluate((svg) => {
+		const edge = svg.querySelector('.kifu-line-case');
+		const copy = edge.nextElementSibling;
+		const id = /^url\(#(.+)\)$/.exec(copy?.getAttribute('mask') ?? '')?.[1];
+		return {
+			copy: copy?.querySelector('.kifu-hl-copy')?.getAttribute('d') === svg.querySelector('.kifu-hl').getAttribute('d'),
+			seenThroughTheEdge: !!id && svg.querySelector(`#${id} path`)?.getAttribute('d') === edge.getAttribute('d'),
+		};
+	});
+	assert.deepEqual(through, { copy: true, seenThroughTheEdge: true });
+	assert.equal(await before(faded, '.kifu-line'), true);
+	// arrows with an open head (its arms stroked, nothing filled), or a double line (two lines into a wide
+	// open head, and an edge that covers the space between them)
+	assert.equal(await board(4).locator('.kifu-line-head').getAttribute('d'), '');
+	assert.equal(await count(board(4).locator('.kifu-line')), 2);
+	assert.equal(await count(board(5).locator('.kifu-line')), 3);
+	assert.equal(await count(board(5).locator('.kifu-line-case')), 4);
+	// animated stripes: the pattern slides along (and still stripes do not)
+	const sliding = (i) => board(i).evaluate((svg) => {
+		const fill = svg.querySelector('.kifu-hl').getAttribute('fill');
+		return !!fill && svg.querySelector(`${fill.slice(4, -1)} .kifu-hatch-g`).getAnimations().length > 0;
+	});
+	assert.equal(await sliding(6), true);
+	assert.equal(await sliding(1), false);
+	const snap = () => board(6).screenshot();
+	const a = await snap();
+	await sleep(300);
+	assert.equal(a.equals(await snap()), false);
+	// stripes: the cell filled with the board's own pattern
+	assert.equal(await hl(1).getAttribute('class'), 'kifu-hl is-striped');
+	const fill = await hl(1).getAttribute('fill');
+	assert.match(fill, /^url\(#kifu-stripes-\d+\)$/);
+	assert.equal(await hl(1).evaluate((e, f) => !!e.ownerSVGElement.querySelector(f.slice(4, -1) + ' line'), fill), true);
+	// the stripes as wide as the space between them, and no border
+	assert.equal(await hl(1).evaluate((e, f) => {
+		const p = e.ownerSVGElement.querySelector(f.slice(4, -1));
+		return Number(p.getAttribute('width')) / Number(p.querySelector('line').getAttribute('stroke-width'));
+	}, fill), 2);
+	assert.equal(await count(board(1).locator('.kifu-hl-edge')), 0);
+	assert.equal(await count(board(0).locator('.kifu-hl-edge')), 0);
+	// stripes with a border: the same stripes, and a band as wide along the region's edge
+	assert.equal(await hl(3).getAttribute('class'), 'kifu-hl is-striped');
+	assert.match(await hl(3).getAttribute('fill'), /^url\(#kifu-stripes-\d+\)$/);
+	assert.equal(await count(board(3).locator('.kifu-hl-edge')), 4);
+	// square: a small square on each point (on a stone, in the ink that shows on it), and no cells
+	assert.equal(await hl(2).getAttribute('d'), '');
+	assert.deepEqual(await board(2).locator('.kifu-sel').evaluateAll((els) => els.map((e) => e.getAttribute('class'))), ['kifu-sel kifu-on-e', 'kifu-sel kifu-on-b']);
+	// the setting changes the boards that do not say otherwise
+	await page.evaluate(() => {
+		window.harness.plugin.settings.highlight = 'square';
+		return window.harness.plugin.saveSettings();
+	});
+	await sleep(200);
+	assert.equal(await hl(0).getAttribute('d'), '');
+	assert.equal(await board(0).locator('.kifu-sel').count(), 2);
+	assert.equal(await hl(1).getAttribute('class'), 'kifu-hl is-striped'); // (it says "stripes")
+	// and so does the arrows setting
+	await page.evaluate(() => {
+		window.harness.plugin.settings.arrows = 'open';
+		return window.harness.plugin.saveSettings();
+	});
+	await sleep(200);
+	assert.equal(await board(0).locator('.kifu-line-head').getAttribute('d'), '');
+	assert.equal(await count(board(5).locator('.kifu-line')), 3); // (it says "double")
 });
 
 /* A ✓ or ✗ in the move tree sits at its stone's upper right, just where the ring round the current
@@ -1173,7 +1269,7 @@ await scenario('settings page and commands', { files: { 'S.md': '# S\n\n```kifu\
 	});
 	assert.ok(tab);
 	await sleep(50);
-	assert.equal(await page.locator('.setting-item').count(), 19); // the preview, and 14 settings under 4 headings
+	assert.equal(await page.locator('.setting-item').count(), 21); // the preview, and 16 settings under 4 headings
 	// the goproblems.com token: only the name of the secret is kept with the settings, never the token
 	await page.evaluate(() => {
 		window.harness.app.secretStorage.setSecret('gp-token', 's3cret');

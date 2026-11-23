@@ -4,24 +4,63 @@ import { Component, MarkdownPostProcessorContext, MarkdownRenderChild } from 'ob
 import type KifuPlugin from '../main';
 import { BASE_CELL } from '../config';
 import { Rect, parseBool, parseScale } from '../options';
-import type { Model, Session, SessionView, Tool } from '../session';
-import { getMove } from '../sgf';
-import { BoardSvg, MarkGhost, bandPixels } from './boardsvg';
-import { clear, el, icon, iconButton, renderComment, setIcon } from './dom';
+import type { Area, Line, Model, Session, SessionView, Shape, Tool } from '../session';
+import { isArea, isLine, isShape } from '../session';
+import { BLACK, WHITE, getMove } from '../sgf';
+import { ARROW_STYLES, BoardSvg, HIGHLIGHTS, MarkGhost, bandPixels } from './boardsvg';
+import { clear, el, icon, iconButton, renderComment, setIcon, textButton } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
 
-const TOOLS: [Tool, string, string][] = [
-	['play', 'playB', 'Play moves (click again to change who plays)'],
+/**
+ * The tool buttons: id, icon, title. Five of them have a palette of choices (see CHOICES
+ * and #pick): who plays next, the shape, the label series, arrow or line, highlight or dim.
+ */
+const TOOLS: [string, string, string][] = [
+	['play', 'playB', 'Play moves (who plays next: black or white)'],
 	['black', 'black', 'Black stone'],
 	['white', 'white', 'White stone'],
-	['TR', 'TR', 'Triangle'],
-	['SQ', 'SQ', 'Square'],
-	['CR', 'CR', 'Circle'],
-	['MA', 'MA', 'Cross'],
-	['label', 'label', 'Letter or number (click the tool again to switch a / A / 1)'],
+	['shape', 'TR', 'Triangle, square, circle or cross'],
+	['label', 'label', 'Letter or number (a, A or 1)'],
+	['line', 'arrow', 'Arrow or line: drag from one point to another'],
+	['area', 'highlight', 'Highlight or dim: click a point, or drag across a rectangle'],
 	['erase', 'erase', 'Eraser'],
 	['crop', 'crop', 'Choose the part of the board to show (drag; double-click or double-tap for the default)'],
 ];
+
+/** One choice in a palette: its key, an icon (or a character or two, `text`), and its name. */
+interface Choice {
+	key: string;
+	icon?: string;
+	text?: string;
+	title: string;
+}
+
+/** The palettes, by button: their choices, in the order a click on the button goes through them. */
+const CHOICES: Record<string, Choice[]> = {
+	play: [
+		{ key: 'B', icon: 'playB', title: 'Black plays next' },
+		{ key: 'W', icon: 'playW', title: 'White plays next' },
+	],
+	shape: [
+		{ key: 'TR', icon: 'TR', title: 'Triangle' },
+		{ key: 'SQ', icon: 'SQ', title: 'Square' },
+		{ key: 'CR', icon: 'CR', title: 'Circle' },
+		{ key: 'MA', icon: 'MA', title: 'Cross' },
+	],
+	label: [
+		{ key: 'a', text: 'a', title: 'Small letters (a, b, c…)' },
+		{ key: 'A', text: 'A', title: 'Capital letters (A, B, C…)' },
+		{ key: '1', text: '1', title: 'Numbers (1, 2, 3…)' },
+	],
+	line: [
+		{ key: 'AR', icon: 'arrow', title: 'Arrow' },
+		{ key: 'LN', icon: 'line', title: 'Line' },
+	],
+	area: [
+		{ key: 'SL', icon: 'highlight', title: 'Highlight' },
+		{ key: 'DD', icon: 'dim', title: 'Dim' },
+	],
+};
 
 /** The tools a click-drag paints a run of points with: play alternates and crop drags out a box, so not those. */
 const PAINT_TOOLS = new Set<Tool>(['black', 'white', 'TR', 'SQ', 'CR', 'MA', 'label', 'erase']);
@@ -96,7 +135,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	/** A click that follows a drag of the stone is part of the drag, not a click of its own. */
 	#noClickUntil = 0;
 	/** A press with an edit tool that may grow into a drag that paints: where it began, the last point painted, and whether it has become a drag. */
-	#paint: { down: [number, number]; last: [number, number]; began: boolean } | null = null;
+	#paint: { down: [number, number]; last: [number, number]; began: boolean; touch: boolean } | null = null;
+	/**
+	 * A line or arrow (line) or a rectangle to highlight or dim being dragged out, between
+	 * points as shown; `began` once the press has left its point (until then it is a click).
+	 */
+	#stretch: { line: boolean; from: [number, number]; to: [number, number]; began: boolean; touch: boolean } | null = null;
 	/** When the last plain tap with the crop tool ended, and when a double tap last reset the crop. */
 	#lastTap = 0;
 	#tapReset = 0;
@@ -204,14 +248,20 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 				this.session?.endStroke();
 				this.#paint = null;
 			}
+			if (this.#stretch) {
+				this.#stretch = null;
+				this.#board.setAreaGhost(null);
+			}
 		});
-		// On a touch screen a finger that starts on the stone that can be dragged drags it
-		// rather than scrolling the note (anywhere else, it scrolls as usual).
+		// On a touch screen a finger that starts on the stone that can be dragged drags it, and
+		// with a tool that draws (stones, shapes, labels, the eraser, lines, highlights) it draws
+		// wherever it starts, rather than scrolling the note (otherwise it scrolls as usual). The
+		// browser then makes no click of a tap either: #onUp deals with taps itself.
 		svgEl.addEventListener(
 			'touchstart',
 			(ev) => {
 				const t = ev.touches[0];
-				if (ev.touches.length === 1 && t && this.#onCurrentStone(t.clientX, t.clientY)) ev.preventDefault();
+				if (ev.touches.length === 1 && t && (this.#onCurrentStone(t.clientX, t.clientY) || this.#drawing())) ev.preventDefault();
 			},
 			{ passive: false },
 		);
@@ -349,6 +399,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	onunload(): void {
 		const s = this.session;
+		this.#closePalette();
 		this.#detach();
 		if (s) this.#plugin.sessionReleased(s);
 	}
@@ -492,6 +543,9 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const coords = parseBool(s.opts.coords) ?? set.coords;
 		const style = /^(paper|theme)$/.test(s.opts.style ?? '') ? s.opts.style : set.style;
 		const align = /^(left|center|right)$/.test(s.opts.align ?? '') ? s.opts.align : set.align;
+		const asked = (s.opts.highlight ?? '').toLowerCase().replace(/^gray$/, 'grey').replace(/\s+/g, '-');
+		const highlight = HIGHLIGHTS.find((h) => h === asked) ?? set.highlight;
+		const arrows = ARROW_STYLES.find((a) => a === (s.opts.arrows ?? '').trim().toLowerCase()) ?? set.arrows;
 		const readOnly = this.readOnlyPane();
 		const away = s.edit && readOnly;
 		const editing = s.edit && !away;
@@ -501,6 +555,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			`kifu kifu-${style} kifu-${align}` +
 			(editing ? ' is-editing' : '') +
 			(editing && s.tool === 'crop' ? ' is-crop' : '') +
+			(editing && (PAINT_TOOLS.has(s.tool) || isLine(s.tool) || isArea(s.tool)) ? ' is-drawing' : '') +
 			(touch ? ' kifu-touch' : '') +
 			(this.#keyFocus ? ' is-keyfocus' : '');
 
@@ -512,7 +567,7 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const fit = /^fit$/i.test(s.opts.scale ?? '');
 		const lineCell = Math.max(6, Math.round(BASE_CELL * set.scale));
 		const cell = fit ? this.#fitCell(m, coords, lineCell) : usual;
-		this.#look = fit ? { cell, coords, lineCell } : { cell, coords };
+		this.#look = fit ? { cell, coords, lineCell, highlight, arrows } : { cell, coords, highlight, arrows };
 		this.#board.draw(m, this.#look);
 		this.#hover = '';
 
@@ -528,6 +583,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#renderCaption(m);
 		if (editing) this.#renderTools(s, m);
 		else if (this.#tools) {
+			this.#closePalette();
+			this.#palette = null;
 			this.#tools.remove();
 			this.#tools = null;
 		}
@@ -638,13 +695,23 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		this.#toolBtns.clear();
 		let group = el(bar, 'div', 'kifu-group');
 		for (const [tool, ic, title] of TOOLS) {
-			if (tool === 'TR' || tool === 'crop') group = el(bar, 'div', 'kifu-group');
-			const b = iconButton(group, ic, title, () => {
-				if (tool === 'play' && s.tool === 'play') s.togglePlayer();
-				else if (tool === 'label' && s.tool === 'label') s.cycleLabelStyle();
-				else s.setTool(tool);
-			});
+			if (tool === 'shape' || tool === 'crop') group = el(bar, 'div', 'kifu-group');
+			const b = iconButton(group, ic, title, () => this.#pick(s, tool));
 			this.#toolBtns.set(tool, b);
+			if (CHOICES[tool]) {
+				// (a corner notch says it has a palette)
+				b.classList.add('has-palette');
+				// The mouse over the button of the tool in hand shows its palette, and leaving
+				// both puts it away again. (A click opens it to stay, as on a touch screen.)
+				b.addEventListener('pointerenter', (ev) => {
+					if (ev.pointerType !== 'mouse') return;
+					this.#keepPalette();
+					if (this.#paletteFor !== tool && this.#choice(s, tool)?.inHand) this.#openPalette(s, tool, true);
+				});
+				b.addEventListener('pointerleave', (ev) => {
+					if (ev.pointerType === 'mouse') this.#leavePalette();
+				});
+			}
 			// (beside the play tool: passing is playing too)
 			if (tool === 'play') this.#toolBtns.set('pass', iconButton(group, 'pass', 'Pass (for the side to play)', () => s.pass()));
 			if (tool === 'label') {
@@ -678,10 +745,156 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		}
 	}
 
+	/**
+	 * A tool button pressed. One with a palette (see CHOICES) takes up its tool, as last used,
+	 * and shows the palette, the choice in force marked; pressed again while the palette is
+	 * open, it goes on to the next choice. Any other button takes up its tool.
+	 */
+	#pick(s: Session, id: string): void {
+		const p = this.#choice(s, id);
+		if (!p) {
+			s.setTool(id as Tool);
+			return;
+		}
+		if (this.#paletteFor === id) {
+			const list = CHOICES[id];
+			const at = list.findIndex((c) => c.key === p.current);
+			p.choose(list[(at + 1) % list.length].key);
+			// (shown by the mouse coming over, it stays now that it is being used)
+			this.#paletteHover = false;
+			return;
+		}
+		if (!p.inHand) p.takeUp();
+		this.#openPalette(s, id);
+	}
+
+	/**
+	 * For a button with a palette: whether its tool is in hand, which choice is in force (the
+	 * kind last used, while another tool is in hand), how to take the tool up, how to choose.
+	 */
+	#choice(s: Session, id: string): { inHand: boolean; current: string; takeUp: () => void; choose: (key: string) => void } | null {
+		switch (id) {
+			case 'play':
+				return { inHand: s.tool === 'play', current: s.toPlay() === BLACK ? 'B' : 'W', takeUp: () => s.setTool('play'), choose: (k) => s.setPlayer(k === 'B' ? BLACK : WHITE) };
+			case 'shape':
+				return { inHand: isShape(s.tool), current: isShape(s.tool) ? s.tool : s.shape, takeUp: () => s.setTool(s.shape), choose: (k) => s.setTool(k as Shape) };
+			case 'label':
+				return { inHand: s.tool === 'label', current: s.labelStyle, takeUp: () => s.setTool('label'), choose: (k) => s.setLabelStyle(k as 'a' | 'A' | '1') };
+			case 'line':
+				return { inHand: isLine(s.tool), current: isLine(s.tool) ? s.tool : s.lineKind, takeUp: () => s.setTool(s.lineKind), choose: (k) => s.setTool(k as Line) };
+			case 'area':
+				return { inHand: isArea(s.tool), current: isArea(s.tool) ? s.tool : s.areaKind, takeUp: () => s.setTool(s.areaKind), choose: (k) => s.setTool(k as Area) };
+			default:
+				return null;
+		}
+	}
+
+	/**
+	 * The palette, over the button it belongs to (`#paletteFor`, while it is open); what takes
+	 * away its listener for presses elsewhere; whether the mouse showed it by coming over
+	 * (then it goes when the mouse leaves, a moment later: `#paletteTimer`).
+	 */
+	#palette: HTMLElement | null = null;
+	#paletteFor: string | null = null;
+	#paletteOff: (() => void) | null = null;
+	#paletteHover = false;
+	#paletteTimer = 0;
+
+	#openPalette(s: Session, id: string, hover = false): void {
+		this.#closePalette();
+		const bar = this.#tools;
+		const anchor = this.#toolBtns.get(id);
+		if (!bar || !anchor) return;
+		let pal = this.#palette;
+		if (!pal) {
+			pal = this.#palette = el(bar, 'div', 'kifu-palette');
+			pal.addEventListener('pointerenter', (ev) => {
+				if (ev.pointerType === 'mouse') this.#keepPalette();
+			});
+			pal.addEventListener('pointerleave', (ev) => {
+				if (ev.pointerType === 'mouse') this.#leavePalette();
+			});
+		}
+		this.#paletteHover = hover;
+		clear(pal);
+		for (const c of CHOICES[id]) {
+			const choose = (): void => {
+				this.#choice(s, id)?.choose(c.key);
+				this.#closePalette();
+			};
+			const b = c.icon ? iconButton(pal, c.icon, c.title, choose) : textButton(pal, c.text ?? c.key, c.title, choose);
+			b.dataset.choice = c.key;
+		}
+		this.#paletteFor = id;
+		pal.hidden = false;
+		this.#markPalette(s);
+		// centred over the button, kept inside the strip
+		const x = anchor.offsetLeft + anchor.offsetWidth / 2 - pal.offsetWidth / 2;
+		pal.style.setProperty('--kifu-palette-x', `${Math.round(Math.max(0, Math.min(bar.clientWidth - pal.offsetWidth, x)))}px`);
+		// it comes up out of the button: a moment's fade and rise (none for a reader who asks for less motion)
+		const doc = this.#root.ownerDocument;
+		if (!doc.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			pal.animate(
+				[
+					{ opacity: 0, transform: 'translateY(6px) scale(0.92)' },
+					{ opacity: 1, transform: 'none' },
+				],
+				{ duration: 140, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1.2)' },
+			);
+		}
+		// a press anywhere else puts it away (on the button itself, it goes on to the next choice)
+		const away = (ev: PointerEvent): void => {
+			const t = ev.target as Node;
+			if (!pal.contains(t) && !anchor.contains(t)) this.#closePalette();
+		};
+		doc.addEventListener('pointerdown', away, true);
+		this.#paletteOff = () => doc.removeEventListener('pointerdown', away, true);
+	}
+
+	#closePalette(): void {
+		this.#keepPalette();
+		this.#paletteOff?.();
+		this.#paletteOff = null;
+		this.#paletteFor = null;
+		this.#paletteHover = false;
+		if (this.#palette) this.#palette.hidden = true;
+	}
+
+	/** The mouse left the button or its palette: one the mouse showed goes, unless it comes back within a moment. */
+	#leavePalette(): void {
+		if (!this.#paletteHover || !this.#paletteFor) return;
+		window.clearTimeout(this.#paletteTimer);
+		this.#paletteTimer = window.setTimeout(() => this.#closePalette(), 350);
+	}
+
+	/** The mouse is back (or the palette is put away anyway): it stays. */
+	#keepPalette(): void {
+		window.clearTimeout(this.#paletteTimer);
+		this.#paletteTimer = 0;
+	}
+
+	/** The choice in force, marked in the palette. */
+	#markPalette(s: Session): void {
+		const p = this.#paletteFor ? this.#choice(s, this.#paletteFor) : null;
+		if (!p) return;
+		for (const b of this.#palette?.querySelectorAll<HTMLButtonElement>('.kifu-btn') ?? []) b.classList.toggle('is-active', b.dataset.choice === p.current);
+	}
+
 	#renderTools(s: Session, m: Model): void {
 		if (!this.#tools) this.#buildTools(s);
 		const btn = (id: string) => this.#toolBtns.get(id) as HTMLButtonElement;
-		for (const [tool] of TOOLS) btn(tool).classList.toggle('is-active', s.tool === tool);
+		for (const [tool] of TOOLS) {
+			const on = tool === 'shape' ? isShape(s.tool) : tool === 'line' ? isLine(s.tool) : tool === 'area' ? isArea(s.tool) : s.tool === tool;
+			btn(tool).classList.toggle('is-active', on);
+		}
+		// (each of the three shows the kind it stands for)
+		setIcon(btn('shape').firstChild as SVGSVGElement, isShape(s.tool) ? s.tool : s.shape);
+		setIcon(btn('line').firstChild as SVGSVGElement, (isLine(s.tool) ? s.tool : s.lineKind) === 'LN' ? 'line' : 'arrow');
+		setIcon(btn('area').firstChild as SVGSVGElement, (isArea(s.tool) ? s.tool : s.areaKind) === 'DD' ? 'dim' : 'highlight');
+		// a palette stays open while its tool is in hand, the choice in force marked
+		const open = this.#paletteFor ? this.#choice(s, this.#paletteFor) : null;
+		if (open && !open.inHand) this.#closePalette();
+		else if (open) this.#markPalette(s);
 		setIcon(btn('play').firstChild as SVGSVGElement, m.toPlay === 1 ? 'playB' : 'playW');
 		const input = this.#labelInput;
 		if (input) {
@@ -752,7 +965,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 					s.last();
 					break;
 				case 'Escape':
-					if (this.#drag) this.#endDrag(); // (a crop that was being dragged out: never mind)
+					if (this.#paletteOff) this.#closePalette();
+					else if (this.#drag) this.#endDrag(); // (a crop that was being dragged out: never mind)
 					else if (s.edit) this.#toggleLock();
 					else if (s.moved) s.reset();
 					else handled = false;
@@ -779,6 +993,12 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		return !!s && s.edit && s.tool === 'crop' && !this.#away(s);
 	}
 
+	/** Is the tool in hand one that draws on the board, by a click or a drag? */
+	#drawing(): boolean {
+		const s = this.session;
+		return !!s && s.ready && s.edit && !this.#away(s) && (PAINT_TOOLS.has(s.tool) || isLine(s.tool) || isArea(s.tool));
+	}
+
 	#onClick(ev: MouseEvent): void {
 		const s = this.session;
 		if (!s || !s.ready || ev.button !== 0 || this.#cropping() || this.#away(s)) return;
@@ -793,6 +1013,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		return o ? fromShown(o, p[0], p[1], s.w, s.h) : p;
 	}
 
+	#between(a: [number, number], b: [number, number]): Rect {
+		return { x0: Math.min(a[0], b[0]), y0: Math.min(a[1], b[1]), x1: Math.max(a[0], b[0]), y1: Math.max(a[1], b[1]) };
+	}
+
 	#rectTo(p: [number, number]): Rect {
 		const d = this.#drag as [number, number];
 		return { x0: Math.min(d[0], p[0]), y0: Math.min(d[1], p[1]), x1: Math.max(d[0], p[0]), y1: Math.max(d[1], p[1]) };
@@ -801,7 +1025,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	/** The stone of the current move, while editing: it can be dragged to another point. */
 	#currentStone(): { x: number; y: number; color: number } | null {
 		const s = this.session;
-		if (!s || !s.ready || !s.edit || s.tool === 'crop' || this.#away(s)) return null;
+		// (not for the tools that draw by dragging: a line may well start on the last move)
+		if (!s || !s.ready || !s.edit || s.tool === 'crop' || isLine(s.tool) || isArea(s.tool) || this.#away(s)) return null;
 		const n = s.draggable;
 		const m = n ? getMove(n, s.w, s.h) : null;
 		return m && !m.pass ? m : null;
@@ -859,12 +1084,20 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			this.#board.el.setPointerCapture(ev.pointerId);
 			return;
 		}
-		// an edit tool (not play, not crop): the press may stay a click or grow into a drag that paints
+		// a line, an arrow, a rectangle to highlight or dim: drawn from where the press began
 		const s = this.session;
+		if (s && s.edit && ev.button === 0 && (isLine(s.tool) || isArea(s.tool)) && !this.#away(s)) {
+			const p = this.#board.pointAt(ev.clientX, ev.clientY);
+			if (p) {
+				this.#stretch = { line: isLine(s.tool), from: p, to: p, began: false, touch: ev.pointerType !== 'mouse' };
+				return;
+			}
+		}
+		// an edit tool (not play, not crop): the press may stay a click or grow into a drag that paints
 		if (s && s.edit && ev.button === 0 && PAINT_TOOLS.has(s.tool)) {
 			const p = this.#board.pointAt(ev.clientX, ev.clientY);
 			if (p) {
-				this.#paint = { down: p, last: p, began: false };
+				this.#paint = { down: p, last: p, began: false, touch: ev.pointerType !== 'mouse' };
 				return;
 			}
 		}
@@ -879,6 +1112,21 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#onMove(ev: PointerEvent): void {
 		const s = this.session;
 		if (!s || !s.ready) return;
+		const st = this.#stretch;
+		if (st) {
+			const p = this.#board.pointAt(ev.clientX, ev.clientY, true);
+			if (p && (p[0] !== st.to[0] || p[1] !== st.to[1])) {
+				st.to = p;
+				if (!st.began) {
+					// the press has become a drag: the pointer is ours until it is let go
+					st.began = true;
+					this.#board.el.setPointerCapture(ev.pointerId);
+				}
+				if (st.line) this.#board.setLineGhost(st.from, p, s.tool === 'AR');
+				else this.#board.setAreaGhost(this.#between(st.from, p));
+			}
+			return;
+		}
 		if (this.#paint) {
 			const p = this.#board.pointAt(ev.clientX, ev.clientY);
 			if (p && (p[0] !== this.#paint.last[0] || p[1] !== this.#paint.last[1])) {
@@ -936,9 +1184,33 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#onUp(ev: PointerEvent): void {
 		const s = this.session;
+		const st = this.#stretch;
+		if (st) {
+			this.#stretch = null;
+			// A press that stayed on its point is a click: the click event deals with it. A tap
+			// made none (see the touchstart listener): it is clicked here.
+			if (!st.began) {
+				if (st.touch && s) this.#tap(s, st.from);
+				return;
+			}
+			this.#noClickUntil = Date.now() + 400;
+			this.#board.setAreaGhost(null);
+			try {
+				this.#board.el.releasePointerCapture(ev.pointerId);
+			} catch {
+				// the pointer was not captured
+			}
+			if (!s || !s.edit) return;
+			const [x0, y0] = this.#toGame(s, st.from);
+			const [x1, y1] = this.#toGame(s, st.to);
+			if (st.line) s.connect(x0, y0, x1, y1);
+			else s.areaDrag(x0, y0, x1, y1);
+			return;
+		}
 		if (this.#paint) {
-			const began = this.#paint.began;
+			const { began, touch, down } = this.#paint;
 			this.#paint = null;
+			if (!began && touch && s) this.#tap(s, down);
 			if (began) {
 				s?.endStroke();
 				this.#noClickUntil = Date.now() + 400;
@@ -999,5 +1271,14 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 
 	#paintAt(s: Session, p: [number, number]): void {
 		s.paint(...this.#toGame(s, p));
+	}
+
+	/**
+	 * A tap with a tool that draws: the browser made no click of it (see the touchstart
+	 * listener), so it is clicked here, and a click that comes all the same is not taken twice.
+	 */
+	#tap(s: Session, p: [number, number]): void {
+		this.#noClickUntil = Date.now() + 400;
+		s.click(...this.#toGame(s, p));
 	}
 }

@@ -1635,5 +1635,215 @@ await scenario('Delete and Backspace delete the current move while the board is 
 	assert.deepEqual(await notices(page), []);
 });
 
+/* The buttons that offer choices (who plays next, the shape, the label series, arrow or line,
+   highlight or dim) work alike: a click takes up the tool, as last used, and shows a palette over
+   the button with the choice in force marked; a click on the button again goes on to the next
+   choice. A choice in the palette, Esc, or a press anywhere else puts the palette away. */
+await scenario('buttons with choices: a click shows the palette, a click again goes on to the next', {
+	files: { 'S.md': '# S\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n\nafter\n' }, live: ['S.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	await toggleLock(page); await sleep(250);
+	const shape = tool(page, 'Triangle, square');
+	const pal = page.locator('.kifu-palette');
+	const open = async () => (await pal.count()) > 0 && (await pal.isVisible());
+	const choices = () => pal.locator('.kifu-btn').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') + (b.classList.contains('is-active') ? ' (in force)' : '')));
+	const icon = (b) => b.locator('svg').getAttribute('data-icon');
+	const active = (b) => b.evaluate((e) => e.classList.contains('is-active'));
+	// a click: the triangle in hand (the first time), and the palette over the button, inside the strip
+	await shape.click();
+	assert.equal(await active(shape), true);
+	assert.equal(await open(), true);
+	assert.deepEqual(await choices(), ['Triangle (in force)', 'Square', 'Circle', 'Cross']);
+	const pb = await pal.boundingBox();
+	const sb = await shape.boundingBox();
+	const tb = await page.locator('.kifu-tools').boundingBox();
+	assert.ok(pb.y + pb.height <= sb.y, 'over the button');
+	assert.ok(pb.x <= sb.x + sb.width / 2 && sb.x + sb.width / 2 <= pb.x + pb.width, 'above it');
+	assert.ok(pb.x >= tb.x - 1 && pb.x + pb.width <= tb.x + tb.width + 1, 'inside the strip');
+	// a click again: the next shape, the palette still open
+	await shape.click();
+	assert.equal(await open(), true);
+	assert.equal(await icon(shape), 'SQ');
+	assert.deepEqual(await choices(), ['Triangle', 'Square (in force)', 'Circle', 'Cross']);
+	// a press on the board puts the palette away, and the square goes down
+	await clickPoint(page, 0, 'cc');
+	assert.equal(await open(), false);
+	await sleep(600);
+	assert.match(blocks(await doc(page))[0], /SQ\[cc\]/);
+	// with the square in hand, the mouse coming over the button shows the palette already, so the
+	// click goes on to the next shape, the circle; a shape chosen in the palette puts it away
+	await shape.click();
+	assert.equal(await open(), true);
+	assert.equal(await icon(shape), 'CR');
+	await pal.locator('.kifu-btn[aria-label="Cross"]').click();
+	assert.equal(await open(), false);
+	assert.equal(await icon(shape), 'MA');
+	// round past the end: after the cross, the triangle
+	await shape.click();
+	assert.equal(await icon(shape), 'TR');
+	// Esc puts the palette away, and leaves the board unlocked
+	await page.keyboard.press('Escape');
+	assert.equal(await open(), false);
+	assert.deepEqual(await isEditing(page), [true]);
+	// the label series the same way (the box shows the next label); a press elsewhere puts it away
+	const label = tool(page, 'Letter or number');
+	const next = page.locator('.kifu-label');
+	await label.click();
+	assert.deepEqual(await choices(), ['Small letters (a, b, c…) (in force)', 'Capital letters (A, B, C…)', 'Numbers (1, 2, 3…)']);
+	await label.click();
+	assert.equal(await next.inputValue(), 'A');
+	await pal.locator('.kifu-btn[aria-label^="Numbers"]').click();
+	assert.equal(await next.inputValue(), '1');
+	assert.equal(await open(), false);
+	await label.click();
+	assert.equal(await open(), true);
+	await page.mouse.click(5, 5);
+	assert.equal(await open(), false);
+	// who plays next: White, after Black's move; a click again, Black
+	const play = tool(page, 'Play moves');
+	await play.click();
+	assert.deepEqual(await choices(), ['Black plays next', 'White plays next (in force)']);
+	await play.click();
+	assert.deepEqual(await choices(), ['Black plays next (in force)', 'White plays next']);
+	assert.equal(await icon(play), 'playB');
+	await sleep(600);
+	assert.match(blocks(await doc(page))[0], /;B\[ee\][^;]*PL\[B\]/);
+	// another button's palette takes the place of this one
+	await page.evaluate(() => {
+		// (a palette comes up with a moment's rise: count them)
+		window.__rises = 0;
+		const animate = Element.prototype.animate;
+		Element.prototype.animate = function (...args) {
+			if (this.classList?.contains('kifu-palette')) window.__rises++;
+			return animate.apply(this, args);
+		};
+	});
+	const line = tool(page, 'Arrow or line');
+	await line.click();
+	assert.deepEqual(await choices(), ['Arrow (in force)', 'Line']);
+	assert.equal(await pal.count(), 1);
+	assert.equal(await page.evaluate(() => window.__rises), 1);
+	await page.mouse.click(5, 5);
+	assert.equal(await open(), false);
+	// with its tool in hand, the mouse coming over a button shows the palette, and leaving puts it away
+	const lb = await line.boundingBox();
+	const over = () => page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2);
+	const away = () => page.mouse.move(lb.x + lb.width / 2, lb.y + 260);
+	await over();
+	assert.equal(await open(), true);
+	assert.equal(await page.evaluate(() => window.__rises), 2);
+	await away();
+	await sleep(600);
+	assert.equal(await open(), false);
+	// on the way up from the button into the palette it stays, and a choice there puts it away
+	await over();
+	const choice = await pal.locator('.kifu-btn[aria-label="Line"]').boundingBox();
+	await page.mouse.move(choice.x + choice.width / 2, choice.y + choice.height / 2, { steps: 4 });
+	await sleep(600);
+	assert.equal(await open(), true);
+	await page.mouse.down();
+	await page.mouse.up();
+	assert.equal(await open(), false);
+	assert.equal(await icon(line), 'line');
+	// shown by the mouse and then clicked (on to the next choice), it stays when the mouse leaves
+	await over();
+	await line.click();
+	assert.deepEqual(await choices(), ['Arrow (in force)', 'Line']);
+	await away();
+	await sleep(600);
+	assert.equal(await open(), true);
+	await page.mouse.click(5, 5);
+	assert.equal(await open(), false);
+	// over the button of a tool that is not in hand: nothing
+	const area = tool(page, 'Highlight or dim');
+	const ab = await area.boundingBox();
+	await page.mouse.move(ab.x + ab.width / 2, ab.y + ab.height / 2);
+	await sleep(100);
+	assert.equal(await open(), false);
+	assert.deepEqual(await editorLog(page), []);
+	assert.deepEqual(await notices(page), []);
+});
+
+/* For a reader who asks for less motion: animated stripes stay still, and palettes come up without the rise. */
+await scenario('less motion: animated stripes stay still and palettes come up at once', {
+	files: { 'R.md': '# R\n\n```kifu\nhighlight: stripes-animated\n(;GM[1]SZ[9]SL[dd:ee])\n```\n\nafter\n' }, live: ['R.md'], autosave: 150,
+}, async (page) => {
+	// (the setting itself, as CSS and matchMedia() both see it)
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await sleep(300);
+	const hatch = page.locator('.kifu-svg pattern .kifu-hatch-g');
+	assert.equal(await hatch.getAttribute('class'), 'kifu-hatch-g is-sliding'); // (asked to slide)
+	assert.equal(await hatch.evaluate((g) => g.getAnimations().length), 0); // (but still)
+	assert.equal(await page.locator('.kifu-hl.is-striped').count(), 1); // (striped all the same)
+	await toggleLock(page); await sleep(250);
+	await page.evaluate(() => {
+		window.__rises = 0;
+		const animate = Element.prototype.animate;
+		Element.prototype.animate = function (...args) {
+			if (this.classList?.contains('kifu-palette')) window.__rises++;
+			return animate.apply(this, args);
+		};
+	});
+	await tool(page, 'Triangle, square').click();
+	assert.equal(await page.locator('.kifu-palette').isVisible(), true);
+	assert.equal(await page.evaluate(() => window.__rises), 0);
+	assert.deepEqual(await notices(page), []);
+});
+
+/* Arrows and lines are dragged from one point to another; highlighting and dimming take a click
+   on a point or a dragged rectangle. A second click on either button switches between its two. */
+await scenario('arrows and lines by a drag; highlighting and dimming by a click or a dragged rectangle', {
+	files: { 'D.md': '# D\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n\nafter\n' }, live: ['D.md'], autosave: 150,
+}, async (page) => {
+	await sleep(300);
+	await toggleLock(page); await sleep(250);
+	const game = async () => flat(blocks(await doc(page))[0]);
+	const line = tool(page, 'Arrow or line');
+	const area = tool(page, 'Highlight or dim');
+	const icon = (b) => b.locator('svg').getAttribute('data-icon');
+	// an arrow (the first time): dragged from one point to another, here onto the last move
+	await line.click();
+	assert.equal(await icon(line), 'arrow');
+	await dragPoints(page, 0, ['cc', 'dd', 'ee']);
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee]AR[cc:ee])');
+	assert.notEqual(await page.locator('.kifu-line-head').getAttribute('d'), '');
+	// from the last move: an arrow too (the stone is not dragged away)
+	await dragPoints(page, 0, ['ee', 'fe', 'ge']);
+	await sleep(600);
+	assert.equal(await game(), '(;GM[1]SZ[9];B[ee]AR[cc:ee][ee:ge])');
+	// lines, chosen in the button's palette
+	await line.click();
+	await page.locator('.kifu-palette .kifu-btn[aria-label="Line"]').click();
+	assert.equal(await icon(line), 'line');
+	await dragPoints(page, 0, ['aa', 'ba', 'ca']);
+	await sleep(600);
+	assert.match(await game(), /LN\[aa:ca\]/);
+	// highlighting: a click for a point, a drag for a rectangle (written as one)
+	await area.click();
+	assert.equal(await icon(area), 'highlight');
+	await clickPoint(page, 0, 'gg');
+	await dragPoints(page, 0, ['ag', 'bh', 'bi']);
+	await sleep(600);
+	assert.match(await game(), /SL\[ag:bi\]\[gg\]/);
+	assert.notEqual(await page.locator('.kifu-hl').getAttribute('d'), '');
+	// dimming: with highlighting in hand, the mouse over the button shows the palette, and a click goes on to dim
+	await area.click();
+	assert.equal(await icon(area), 'dim');
+	await dragPoints(page, 0, ['hh', 'ii']);
+	await sleep(600);
+	assert.match(await game(), /DD\[hh:ii\]/);
+	assert.notEqual(await page.locator('.kifu-faded').getAttribute('d'), '');
+	// the eraser takes an arrow away by either end
+	await tool(page, 'Eraser').click();
+	await clickPoint(page, 0, 'cc');
+	await sleep(600);
+	assert.doesNotMatch(await game(), /cc:ee/);
+	assert.match(await game(), /AR\[ee:ge\]/);
+	assert.deepEqual(await editorLog(page), []);
+	assert.deepEqual(await notices(page), []);
+});
+
 await browser.close();
 process.exit(report() ? 1 : 0);

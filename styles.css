@@ -164,6 +164,117 @@ body .kifu-panel button.kifu-btn[hidden] {
 	fill: var(--kifu-paper);
 }
 
+/* Highlighted points (SL): a light grey cell, or one with stripes (the pattern's own fill) and a
+   band of the same width along the region's edge, or a small square on the point. The grey and
+   the stripes are drawn in ink and made light as a whole. Dimmed points (DD): a veil of paper. */
+.kifu-hl-g,
+.kifu-sel,
+.kifu-faded {
+	pointer-events: none;
+}
+
+.kifu-hl-g {
+	opacity: 0.15;
+}
+
+.kifu-hl-g.is-striped {
+	opacity: 0.35;
+}
+
+.kifu-hl:not(.is-striped),
+.kifu-hl-copy:not(.is-striped) {
+	fill: var(--kifu-ink);
+}
+
+.kifu-hatch {
+	stroke: var(--kifu-ink);
+}
+
+/* Sliding stripes: on by a stripe and a space each cycle (one tile of the pattern, STRIPE * 2
+   in boardsvg.ts), so that they loop without a jump. */
+.kifu-hatch-g.is-sliding {
+	animation: kifu-stripes-slide 1.2s linear infinite;
+}
+
+@keyframes kifu-stripes-slide {
+	to { transform: translateX(25px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.kifu-hatch-g.is-sliding {
+		animation: none;
+	}
+}
+
+.kifu-hl-edge,
+.kifu-hl-edge-copy {
+	fill: none;
+	stroke: var(--kifu-ink);
+	stroke-linecap: square;
+}
+
+.kifu-sel {
+	fill: var(--kifu-ink);
+}
+
+.kifu-sel.kifu-on-b {
+	fill: var(--kifu-on-black);
+}
+
+.kifu-sel.kifu-on-w {
+	fill: var(--kifu-on-white);
+}
+
+.kifu-faded {
+	fill: var(--kifu-paper);
+	fill-opacity: 0.62;
+}
+
+/* Lines (LN) and arrows (AR): ink with an edge of paper, so they read over black stones and
+   across the lines; over highlighted points the edge shows the highlight instead (a copy of
+   it, seen through .kifu-case-shape, the edge's own shape, in a mask) */
+.kifu-line-case {
+	fill: none;
+	stroke: var(--kifu-paper);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+.kifu-case-shape {
+	fill: none;
+	stroke: #fff;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.kifu-line {
+	fill: none;
+	stroke: var(--kifu-ink);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+.kifu-line-head {
+	fill: var(--kifu-ink);
+	stroke: var(--kifu-ink);
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+/* the rectangle being dragged out to highlight or dim */
+.kifu-area-ghost {
+	fill: var(--kifu-ink);
+	fill-opacity: 0.08;
+	stroke: var(--kifu-ink);
+	stroke-width: 1;
+	stroke-dasharray: 4 3;
+	vector-effect: non-scaling-stroke;
+	opacity: 0.7;
+	pointer-events: none;
+}
+
 .kifu-last.kifu-on-b {
 	fill: var(--kifu-on-black);
 }
@@ -214,6 +325,11 @@ body .kifu-panel button.kifu-btn[hidden] {
 
 .kifu.is-crop .kifu-svg {
 	cursor: crosshair;
+	touch-action: none;
+}
+
+/* a tool that draws by dragging: on a touch screen the finger draws instead of scrolling the note */
+.kifu.is-drawing .kifu-svg {
 	touch-action: none;
 }
 
@@ -643,6 +759,7 @@ body .kifu-panel button.kifu-btn {
 /* ---------------------------------------------------------- editing tools */
 
 .kifu-tools {
+	position: relative;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
@@ -653,6 +770,43 @@ body .kifu-panel button.kifu-btn {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 8px);
 	background: var(--background-primary);
+}
+
+/* the shape button's palette: over the button, the shape in hand outlined */
+.kifu-palette {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: var(--kifu-palette-x, 0);
+	z-index: 2;
+	display: flex;
+	gap: 1px;
+	padding: 3px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-primary);
+	box-shadow: var(--shadow-s);
+	/* (it comes up out of the button it belongs to) */
+	transform-origin: 50% 100%;
+}
+
+/* a choice shown as a character or two (a label series) */
+body .kifu button.kifu-btn.kifu-btn-text {
+	font: 600 14px/1 var(--kifu-font);
+}
+
+/* a notch in the corner: this button has a palette */
+body .kifu button.kifu-btn.has-palette {
+	position: relative;
+}
+
+.kifu-btn.has-palette::after {
+	content: "";
+	position: absolute;
+	right: 2px;
+	bottom: 2px;
+	border-bottom: 4px solid currentColor;
+	border-left: 4px solid transparent;
+	opacity: 0.6;
 }
 
 .kifu-group {

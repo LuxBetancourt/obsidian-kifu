@@ -495,6 +495,116 @@ test('undo: comments are steps of their own, and nothing typed later is lost wit
 	assert.equal(steps, 100);
 });
 
+test('markup: lines and arrows go from point to point; drawn again, they go away', () => {
+	const s = make('(;GM[1]SZ[9];B[ee])');
+	s.setEdit(true);
+	s.setTool('AR');
+	s.connect(...at('cc'), ...at('ee'));
+	assert.deepEqual(s.cur.props.AR, ['cc:ee']);
+	assert.deepEqual(s.model().lines, [{ from: 2 * 9 + 2, to: 4 * 9 + 4, arrow: true }]);
+	// drawn the other way round, the arrow turns
+	s.connect(...at('ee'), ...at('cc'));
+	assert.deepEqual(s.cur.props.AR, ['ee:cc']);
+	// a line between the same points takes its place (SGF allows one between two points)
+	s.setTool('LN');
+	s.connect(...at('cc'), ...at('ee'));
+	assert.deepEqual(s.cur.props.LN, ['cc:ee']);
+	assert.equal(s.cur.props.AR, undefined);
+	// the same line, either way round, goes
+	s.connect(...at('ee'), ...at('cc'));
+	assert.equal(s.cur.props.LN, undefined);
+	// a point to itself is no line, and is no undo step either
+	s.connect(...at('cc'), ...at('cc'));
+	s.undo();
+	assert.deepEqual(s.cur.props.LN, ['cc:ee']);
+	// in a file, "aa:cc" in LN or AR is a line between two points, not a rectangle
+	const f = make('(;GM[1]SZ[9]LN[aa:cc]AR[ii:ee])');
+	assert.deepEqual(f.model().lines, [{ from: 0, to: 20, arrow: false }, { from: 80, to: 40, arrow: true }]);
+});
+
+test('markup: points highlighted one at a time or a rectangle at once (SL)', () => {
+	const s = make('(;GM[1]SZ[9];B[ee];W[cc])');
+	s.setEdit(true);
+	s.first();
+	s.next();
+	s.setTool('SL');
+	s.click(...at('gg'));
+	assert.deepEqual(s.cur.props.SL, ['gg']);
+	s.click(...at('gg'));
+	assert.equal(s.cur.props.SL, undefined);
+	// a rectangle is written as one
+	s.areaDrag(...at('bb'), ...at('dd'));
+	assert.deepEqual(s.cur.props.SL, ['bb:dd']);
+	assert.equal(s.model().selected.size, 9);
+	// dragged from a point that is highlighted, the rectangle is taken off instead
+	s.areaDrag(...at('cc'), ...at('dd'));
+	assert.deepEqual(s.cur.props.SL, ['bb:db', 'bc:bd']);
+	// it belongs to this position only
+	s.next();
+	assert.equal(s.model().selected.size, 0);
+	s.prev();
+	// one undo step a rectangle
+	s.undo();
+	assert.deepEqual(s.cur.props.SL, ['bb:dd']);
+});
+
+test('markup: dimming holds from where it is set until it is changed (DD)', () => {
+	const s = make('(;GM[1]SZ[9];B[ee];W[cc];B[gg])');
+	s.setEdit(true);
+	s.first();
+	s.next();
+	s.setTool('DD');
+	s.areaDrag(...at('aa'), ...at('bb'));
+	assert.deepEqual(s.cur.props.DD, ['aa:bb']);
+	// in force on the moves after it, which say nothing themselves
+	s.next();
+	assert.equal(s.model().dimmed.size, 4);
+	assert.equal(s.cur.props.DD, undefined);
+	// changed there: all that is dimmed from there on is written there
+	s.click(...at('aa'));
+	assert.deepEqual(s.cur.props.DD, ['ba:bb', 'ab']);
+	// none left: DD[] ends it, for the moves after it too
+	s.click(...at('ba'));
+	s.click(...at('ab'));
+	s.click(...at('bb'));
+	assert.deepEqual(s.cur.props.DD, ['']);
+	assert.equal(s.model().dimmed.size, 0);
+	s.next();
+	assert.equal(s.model().dimmed.size, 0);
+	s.prev();
+	// back to what the position before has in force: nothing need be written here at all
+	s.areaDrag(...at('aa'), ...at('bb'));
+	assert.equal(s.cur.props.DD, undefined);
+	assert.equal(s.model().dimmed.size, 4);
+	// (dimming is not something drawn on a point: the eraser leaves it)
+	s.setTool('erase');
+	s.click(...at('aa'));
+	assert.equal(s.model().dimmed.size, 4);
+	assert.match(s.blockBody(), /;B\[ee\]DD\[aa:bb\];W\[cc\];B\[gg\]/);
+});
+
+test('markup: the eraser takes off what is drawn on a point before the stone under it', () => {
+	const s = make('(;GM[1]SZ[9]AB[cc]SL[cc]AR[cc:ee]LN[gg:cc]TR[cc])');
+	s.setEdit(true);
+	s.setTool('erase');
+	s.click(...at('cc'));
+	for (const id of ['SL', 'AR', 'LN', 'TR']) assert.equal(s.cur.props[id], undefined, id);
+	assert.deepEqual(s.cur.props.AB, ['cc']); // the stone, the next time
+	s.click(...at('cc'));
+	assert.equal(s.cur.props.AB, undefined);
+});
+
+test('tools: the shape, line and area buttons take up the kind last used with each', () => {
+	const s = make('(;GM[1]SZ[9])');
+	s.setEdit(true);
+	assert.deepEqual([s.shape, s.lineKind, s.areaKind], ['TR', 'AR', 'SL']);
+	s.setTool('CR');
+	s.setTool('LN');
+	s.setTool('DD');
+	s.setTool('play');
+	assert.deepEqual([s.shape, s.lineKind, s.areaKind], ['CR', 'LN', 'DD']);
+});
+
 test('a comment being typed: shown plain under the board until the typing is over', () => {
 	const s = make('(;SZ[9]C[A **bold** note.];B[ee]C[on *ee*])');
 	s.last();

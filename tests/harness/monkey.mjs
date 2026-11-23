@@ -418,6 +418,20 @@ async function run(browser, arrangement, profile, seed) {
 	const bottom = Array.from({ length: 9 }, (_, x) => String.fromCharCode(97 + x) + 'i');
 	const TOOLS = ['Black stone', 'White stone', 'Black stone', 'White stone', 'Play moves', 'Triangle', 'Square', 'Circle', 'Cross', 'Letter or number'];
 	const BACKABLE = new Set(['Black stone', 'White stone', 'Triangle', 'Square', 'Circle', 'Cross']);
+	// The shapes are chosen in the shape button's palette; a button with a palette shows it when
+	// pressed, and it is put away again (by a choice in it) before the board is clicked.
+	const SHAPE = { Triangle: 'TR', Square: 'SQ', Circle: 'CR', Cross: 'MA' };
+	const inHand = (board, tool) =>
+		SHAPE[tool]
+			? board.locator('.kifu-tools .kifu-btn.has-palette[aria-label^="Triangle"]').evaluate((b, k) => b.classList.contains('is-active') && b.querySelector('svg').dataset.icon === k, SHAPE[tool])
+			: board.locator(`.kifu-tools .kifu-btn[aria-label^="${tool}"]`).first().evaluate((b) => b.classList.contains('is-active'));
+	const takeUp = async (board, tool) => {
+		if (await inHand(board, tool).catch(() => true)) return;
+		await board.locator(`.kifu-tools .kifu-btn[aria-label^="${SHAPE[tool] ? 'Triangle' : tool}"]`).first().click({ timeout: 1500 }).catch(() => {});
+		const pal = board.locator('.kifu-palette');
+		if (!(await pal.isVisible().catch(() => false))) return;
+		await pal.locator(SHAPE[tool] ? `.kifu-btn[aria-label="${tool}"]` : '.kifu-btn.is-active').click({ timeout: 1500 }).catch(() => {});
+	};
 	/** What each block got, in order, as [point, tool]: for the eraser to aim at. */
 	const placed = new Map();
 	let strict = null;
@@ -528,8 +542,7 @@ async function run(browser, arrangement, profile, seed) {
 					}
 				}
 				const tool = one(TOOLS);
-				const button = board.locator(`.kifu-tools .kifu-btn[aria-label^="${tool}"]`);
-				if (!(await button.evaluate((b) => b.classList.contains('is-active')).catch(() => true))) await button.click({ timeout: 1500 }).catch(() => {});
+				await takeUp(board, tool);
 				used(id);
 				const pt = fresh[0];
 				const at = await page.evaluate(([i, pt]) => window.M.aim(i, pt), [i, pt]);
@@ -548,7 +561,7 @@ async function run(browser, arrangement, profile, seed) {
 					/* ...and taken off again: at once, or once it has been written (then the block reads again what it read before) */
 					await sleep(rnd() < 0.6 ? 650 : 40);
 					const again = await page.evaluate(([i, pt]) => window.M.aim(i, pt), [i, pt]);
-					const stillActive = await page.locator('.kifu').nth(i).locator(`.kifu-tools .kifu-btn[aria-label^="${tool}"]`).evaluate((b) => b.classList.contains('is-active')).catch(() => false);
+					const stillActive = await inHand(page.locator('.kifu').nth(i), tool).catch(() => false);
 					if (again && again.editing && again.ord >= 0 && ids[again.ord] === id && stillActive) {
 						await page.mouse.click(again.x, again.y);
 						used(id);

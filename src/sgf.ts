@@ -244,6 +244,34 @@ export function points(vals: string[] | undefined): string[] {
 	return out;
 }
 
+/**
+ * A set of points written as compactly as SGF allows: rectangles ("aa:cc") for blocks of
+ * points, single points for the rest. Rows are taken top to bottom, each run of points as
+ * wide as it goes and then as deep as the rows below repeat it.
+ */
+export function compressPoints(set: Iterable<string>): string[] {
+	const has = new Set(set);
+	const used = new Set<string>();
+	const free = (x: number, y: number): boolean => has.has(xy2pt(x, y)) && !used.has(xy2pt(x, y));
+	const cells = [...has].map((p) => [coord(p.charCodeAt(0)), coord(p.charCodeAt(1))]).filter(([x, y]) => x >= 0 && y >= 0);
+	cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+	const out: string[] = [];
+	for (const [x, y] of cells) {
+		if (!free(x, y)) continue;
+		let x1 = x;
+		while (free(x1 + 1, y)) x1++;
+		let y1 = y;
+		const rowFree = (r: number): boolean => {
+			for (let c = x; c <= x1; c++) if (!free(c, r)) return false;
+			return true;
+		};
+		while (rowFree(y1 + 1)) y1++;
+		for (let r = y; r <= y1; r++) for (let c = x; c <= x1; c++) used.add(xy2pt(c, r));
+		out.push(x1 === x && y1 === y ? xy2pt(x, y) : `${xy2pt(x, y)}:${xy2pt(x1, y1)}`);
+	}
+	return out;
+}
+
 /** The move played in a node, if any. Off-board points (such as "tt") are passes. */
 export function getMove(node: SgfNode, w = 19, h = 19): Move | null {
 	let v = node.props.B;

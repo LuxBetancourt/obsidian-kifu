@@ -52,12 +52,14 @@ While a board is unlocked the whole board is shown, with the part that will be h
 
 | Tool | What it does |
 | --- | --- |
-| ① Play | Plays moves, alternating colours, and builds the tree: go back and play something else to add a variation. Click the tool again to change who plays next from here. |
+| ① Play | Plays moves, alternating colours, and builds the tree: go back and play something else to add a variation. Its palette says who plays next from here, black or white. |
 | ⏩ Pass | Records a pass for the side to play, as a move of its own (`B[]` or `W[]`). |
 | ● ○ Stones | Puts a stone down without it being a move (for setting up a position). Click a stone of the same colour to take it off. |
-| △ □ ○ ✕ | Marks. They belong to the move you are on, so every move can carry its own. |
-| A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. Click the tool again to switch between `a`, `A` and `1`. |
-| Eraser | Removes a mark or label; a second click removes the stone under it. |
+| △ Shapes | A triangle, square, circle or cross, chosen in the palette. Marks belong to the move you are on, so every move can carry its own. |
+| A | Labels. The little box holds the next label: type `a`, `A`, `1`, `51`… and each click counts on from there. The palette switches between `a`, `A` and `1`. |
+| ↗ Arrows and lines | Drag from one point to another to draw an arrow, or a line (chosen in the palette). Drawing the same one again takes it away. An arrow has a filled head, an open head (←) or a double line (⇐): the **Arrows** setting, or `arrows: open` for one board. |
+| ▨ Highlight and dim | Click a point, or drag across a rectangle, to highlight it: light grey, or diagonal stripes (with or without a border along the region's edge, still or slowly sliding), or a small square (the **Highlighted points** setting, or `highlight: stripes` for one board). Sliding stripes stand still when the system asks for less motion. Choose dim in the palette to dim points instead, fading the stones and lines there; dimming carries on to the moves after it until you change it. A drag that starts on a point already highlighted (or dimmed) takes the rectangle off. |
+| Eraser | Removes what is drawn on a point (a shape, a label, a highlight, the arrows and lines that start or end there); a second click removes the stone under it. |
 | Crop | Drag to choose the part of the board the locked board shows. Double-click (or double-tap) to go back to the automatic crop. |
 | ⚑ Start | Makes the position on the board the one the locked board opens at, by writing a `move:` line. Click it again on that position to take the choice back. Only positions on the main line can be chosen: step there with ‹ › first. A problem chosen this way is solved from that position. Deleting that position (or a move before it) takes the line away as well. |
 | # | Makes the locked board a *numbered figure* of the main line, or takes the numbers off again. Whatever a `numbers:` line said before is put back, so a range like `51-100`, or an `off`, is not lost by trying the switch. |
@@ -67,9 +69,13 @@ While a board is unlocked the whole board is shown, with the part that will be h
 | ↑ | Move this variation up, towards being the main line. |
 | 🗑 | Delete this move and everything after it. |
 
-**Click and drag** with the stones, the marks, the labels or the eraser to put down (or take off) a run of points in one stroke; labels count on as you go. A plain click still does what it did: on a stone of the same colour, or a mark that is already there, it takes it off. One undo puts the whole stroke back.
+**Palettes.** The buttons with a small notch in the corner (play, shapes, labels, arrows, highlights) offer a choice. A click takes up the tool as you last used it and shows its choices above the button, the one in force marked; click the button again to go on to the next, or click a choice. Esc, or a click anywhere else (on the board, say), puts the palette away. With the tool already in hand, resting the pointer on its button brings the palette up too, and moving away puts it away again.
 
-**Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it; anywhere else it scrolls as usual. If the record has another stone set up on that same point, it shows through while you drag.
+**Click and drag** with the stones, the marks, the labels or the eraser to put down (or take off) a run of points in one stroke; labels count on as you go. A plain click still does what it did: on a stone of the same colour, or a mark that is already there, it takes it off. One undo puts the whole stroke back. On a touch screen, with any tool that draws (these, and the arrows and highlights), a finger draws instead of scrolling the note.
+
+**Moving a stone:** drag the stone of the current move (the one the board is on, usually the last one played) to another point. The moves after it stay as they are; a point where it could not have been played (a stone is there, or another variation plays there) leaves it where it was. One undo puts it back. On a touch screen a finger that starts on that stone drags it. If the record has another stone set up on that same point, it shows through while you drag. (With the arrow or highlight tool a drag from that stone draws instead.)
+
+These are SGF's own markup (`TR` `SQ` `CR` `MA`, `LB`, `AR` `LN`, `SL` `DD`), so other Go programs read them too, though not every program draws them all.
 
 Two things worth knowing:
 
@@ -341,12 +347,14 @@ Option lines come first in the block, one per line, before any SGF.
 | `comments` | `on` / `off` | show move comments under the board |
 | `problem` | `yes` / `no` | judge moves or not |
 | `style` | `paper` / `theme` | white paper, or the theme's colours |
+| `highlight` | `grey` / `stripes` / `stripes-border` / `stripes-animated` / `stripes-border-animated` / `square` | how highlighted points look |
+| `arrows` | `filled` / `open` / `double` | how arrows look: a filled head, an open head, or a double line |
 | `align` | `left` / `center` / `right` | |
 | `randomize` | `on` / `off` | show the board turned, mirrored and maybe recoloured, a new way each time the note opens |
 
 ## Settings
 
-**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
+**Settings → Kifu** holds the defaults: scale, colours, crop, coordinates, alignment, new board size, whether played moves are numbered, whether comments show under the board, how highlights and arrows look, how replies are chosen (a random saved answer, or always the first) and how long they wait, whether the panel hides a problem's answers, and whether unlocking brings the panel forward. Every one of them is only a default: an option line in a block wins.
 
 **What's new:** once after each update, a window shows the new features, each with a short animation (loaded from the plugin's page on GitHub when the window opens). A fresh install shows nothing. Turn it off under **Settings → Kifu → Updates**, or with the link at the bottom of the window.
 

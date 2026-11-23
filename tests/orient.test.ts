@@ -59,6 +59,10 @@ test('a picture turned and recoloured', () => {
 		grid,
 		labels: new Map([[1, '2']]),
 		marks: new Map([[0, 'TR']]),
+		// an arrow from the corner to the far corner, a highlight and a dimmed point
+		lines: [{ from: 0, to: 5, arrow: true }],
+		selected: new Set([2]),
+		dimmed: new Set([3]),
 		last: 1,
 		notes: [],
 		toPlay: 1,
@@ -74,6 +78,9 @@ test('a picture turned and recoloured', () => {
 	assert.equal(r.grid[4], 1);
 	assert.equal(r.labels.get(4), '2');
 	assert.equal(r.marks.get(5), 'TR');
+	assert.deepEqual(r.lines, [{ from: 5, to: 0, arrow: true }]); // (turned with the board, head and all)
+	assert.deepEqual([...r.selected], [3]);
+	assert.deepEqual([...r.dimmed], [2]);
 	assert.equal(r.last, 4);
 	assert.deepEqual(r.view, { x0: 1, y0: 1, x1: 2, y1: 1 });
 	assert.equal(r.toPlay, 2);

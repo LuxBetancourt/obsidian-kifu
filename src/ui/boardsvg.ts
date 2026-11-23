@@ -26,6 +26,14 @@ export function coordSides(w: number, h: number, v: Rect): { right: boolean; top
 /** Width of the band that holds coordinates. */
 const BAND = 80;
 
+/**
+ * How highlighted points (SL) look: a light grey cell, a diagonally striped one (with or
+ * without a border along the edge of the region; the stripes still or sliding along), or a
+ * small square on the point.
+ */
+export type Highlight = 'grey' | 'stripes' | 'stripes-border' | 'stripes-animated' | 'stripes-border-animated' | 'square';
+export const HIGHLIGHTS: Highlight[] = ['grey', 'stripes', 'stripes-border', 'stripes-animated', 'stripes-border-animated', 'square'];
+
 export interface Look {
 	/** Pixels between two lines. */
 	cell: number;
@@ -35,7 +43,15 @@ export interface Look {
 	 * `cell`: a board drawn larger to fill a space keeps the look of one at its usual size.
 	 */
 	lineCell?: number;
+	highlight?: Highlight;
+	arrows?: ArrowStyle;
 }
+
+/** (each board's own ids for the stripes it fills highlights with and the clips of its lines and highlights) */
+let serial = 0;
+
+/** The width of a stripe of a striped highlight, and of the space between two: an eighth of a line spacing. */
+const STRIPE = 12.5;
 
 /** Width of the coordinates band, in pixels, for a board whose lines are sized for `lineCell`. */
 export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
@@ -64,15 +80,103 @@ function markPath(kind: string, cx: number, cy: number): string {
 /** What a hovering tool previews: a mark kind, a label, or nothing. */
 export type MarkGhost = 'TR' | 'SQ' | 'CR' | 'MA' | 'label' | null;
 
+/** How arrows look: a filled head, an open head (←), or a double line with an open head (⇐). */
+export type ArrowStyle = 'filled' | 'open' | 'double';
+export const ARROW_STYLES: ArrowStyle[] = ['filled', 'open', 'double'];
+
+/**
+ * A line or an arrow from one point to another: what is stroked (`shaft`: the line, and an
+ * open head's arms), what is filled (`head`: a filled head), and the outline of it all that
+ * gets an edge of paper (`casing`). Each end can be drawn back from its point's centre
+ * (`trimA`, `trimB`), to the edge of a stone there, say; between two points close together
+ * the near end gives way first, so that there is room for a head and a bit of shaft. The
+ * head grows with the stroke but never takes more than half of a short arrow.
+ */
+function linePaths(
+	ax: number, ay: number, bx: number, by: number, arrow: boolean, stroke: number,
+	trimA = 0, trimB = 0, style: ArrowStyle = 'filled',
+): { shaft: string; head: string; casing: string } {
+	const f = (n: number): string => n.toFixed(1);
+	const pt = (x: number, y: number): string => `${f(x)} ${f(y)}`;
+	const len = Math.hypot(bx - ax, by - ay);
+	const ux = (bx - ax) / len;
+	const uy = (by - ay) / len;
+	let short = (arrow ? 24 + stroke * 2.4 : 0) + 12 - (len - trimA - trimB);
+	if (short > 0) {
+		const a = Math.min(trimA, short);
+		trimA -= a;
+		short -= a;
+		trimB -= Math.min(trimB, short);
+	}
+	const x0 = ax + ux * trimA;
+	const y0 = ay + uy * trimA;
+	const x1 = bx - ux * trimB;
+	const y1 = by - uy * trimB;
+	const line = `M${pt(x0, y0)}L${pt(x1, y1)}`;
+	if (!arrow) return { shaft: line, head: '', casing: line };
+	const hl = Math.min((len - trimA - trimB) / 2, 24 + stroke * 2.4);
+	const cx = x1 - ux * hl;
+	const cy = y1 - uy * hl;
+	// (the two corners of the head's base, `hw` either side of the shaft)
+	const arms = (hw: number): string => `M${pt(cx - uy * hw, cy + ux * hw)}L${pt(x1, y1)}L${pt(cx + uy * hw, cy - ux * hw)}`;
+	if (style === 'open') {
+		const shaft = line + arms(hl * 0.55);
+		return { shaft, head: '', casing: shaft };
+	}
+	if (style === 'double') {
+		// two lines either side of the middle, running into the arms of a wide open head
+		const o = stroke * 1.3;
+		const hw = Math.max(hl * 0.8, o * 2.2);
+		const t = (o * hl) / hw; // (how far back from the tip an arm is `o` from the middle)
+		const ex = x1 - ux * t;
+		const ey = y1 - uy * t;
+		const side = (s: number): string => `M${pt(x0 - uy * o * s, y0 + ux * o * s)}L${pt(ex - uy * o * s, ey + ux * o * s)}`;
+		const shaft = side(1) + side(-1) + arms(hw);
+		return { shaft, head: '', casing: shaft + `M${pt(x0, y0)}L${pt(ex, ey)}` };
+	}
+	const hw = hl * 0.42;
+	const shaft = `M${pt(x0, y0)}L${pt(cx, cy)}`;
+	const head = `M${pt(x1, y1)}L${pt(cx - uy * hw, cy + ux * hw)}L${pt(cx + uy * hw, cy - ux * hw)}z`;
+	return { shaft, head, casing: shaft + head };
+}
+
 /** Font size for a label of a given length. */
 const FONT = [0, 62, 54, 46, 38, 32];
 
 export class BoardSvg {
 	readonly el: SVGSVGElement;
+	/**
+	 * Highlighted points, under the lines: the cells, grey or striped, and (striped with a
+	 * border) a band along the edge of the region, clipped to it (`hlClip`). They are one group,
+	 * light as a whole, so that where the band and the stripes meet they do not darken each other.
+	 */
+	private hlGroup: SVGGElement;
+	private hl: SVGPathElement;
+	private hlEdge: SVGPathElement;
+	private hlClip: SVGPathElement;
 	private fixed: SVGGElement;
 	private black: SVGPathElement;
 	private white: SVGPathElement;
+	/** Dimmed points: a veil of paper over their lines and stones. */
+	private faded: SVGPathElement;
 	private over: SVGGElement;
+	/**
+	 * Lines and arrows, over everything on the board: a paper edge, the ink, the heads. The
+	 * edge is masked out over highlighted points (`caseMask`): along stripes running the same
+	 * way, it made a glaring white channel; on the shading the ink reads well enough by itself.
+	 */
+	private lineCase: SVGPathElement;
+	/** The highlight once more, seen only through the edges (`caseShape`, a mask): over highlighted points an edge shows the highlight, not paper. */
+	private caseShape: SVGPathElement;
+	private caseHl: SVGGElement;
+	private caseHlFill: SVGPathElement;
+	private caseHlEdge: SVGPathElement;
+	private hatch: SVGGElement;
+	private arrowStyle: ArrowStyle = 'filled';
+	private lineInk: SVGPathElement;
+	private lineHead: SVGPathElement;
+	private clip: SVGRectElement;
+	private readonly id = ++serial;
 	private dim: SVGPathElement;
 	private frame: SVGPathElement;
 	private ghost: SVGCircleElement;
@@ -92,10 +196,38 @@ export class BoardSvg {
 
 	constructor(parent: HTMLElement) {
 		this.el = svg(parent, 'svg', { class: 'kifu-svg', role: 'img', 'aria-label': 'Go board' });
+		const defs = svg(this.el, 'defs');
+		// (stripes rising to the right, as wide as the space between them, the same in every cell
+		// so that a region reads as one)
+		// Two stripes a tile apart, so that the hatching can slide on by a whole tile and loop
+		// without a jump (styles.css). It is the group inside the tile that moves: an animated
+		// patternTransform or tile x is run but never repainted (Chromium, when the board was
+		// drawn before it was on the page; WebKit, always).
+		const pattern = svg(defs, 'pattern', { id: `kifu-stripes-${this.id}`, patternUnits: 'userSpaceOnUse', width: STRIPE * 2, height: STRIPE * 2, patternTransform: 'rotate(45)' });
+		this.hatch = svg(pattern, 'g', { class: 'kifu-hatch-g' });
+		for (const x of [STRIPE, -STRIPE]) svg(this.hatch, 'line', { x1: x, y1: 0, x2: x, y2: STRIPE * 2, 'stroke-width': STRIPE, class: 'kifu-hatch' });
+		this.clip = svg(svg(defs, 'clipPath', { id: `kifu-clip-${this.id}` }), 'rect');
+		this.hlClip = svg(svg(defs, 'clipPath', { id: `kifu-hl-clip-${this.id}` }), 'path');
+		// (everywhere, less the highlighted cells; far larger than any board)
+		const all = { x: -1e4, y: -1e4, width: 3e4, height: 3e4 };
+		const mask = svg(defs, 'mask', { id: `kifu-case-${this.id}`, maskUnits: 'userSpaceOnUse', ...all });
+		this.caseShape = svg(mask, 'path', { class: 'kifu-case-shape' });
+		this.hlGroup = svg(this.el, 'g', { class: 'kifu-hl-g' });
+		this.hl = svg(this.hlGroup, 'path', { class: 'kifu-hl' });
+		// (a stroke twice the stripe's width along the edge, clipped to the region: a stripe's width inside it)
+		this.hlEdge = svg(this.hlGroup, 'path', { class: 'kifu-hl-edge', 'stroke-width': STRIPE * 2, 'clip-path': `url(#kifu-hl-clip-${this.id})` });
 		this.fixed = svg(this.el, 'g');
 		this.black = svg(this.el, 'path', { class: 'kifu-b' });
 		this.white = svg(this.el, 'path', { class: 'kifu-w' });
+		this.faded = svg(this.el, 'path', { class: 'kifu-faded' });
 		this.over = svg(this.el, 'g');
+		const lines = svg(this.el, 'g', { 'clip-path': `url(#kifu-clip-${this.id})` });
+		this.lineCase = svg(lines, 'path', { class: 'kifu-line-case' });
+		this.caseHl = svg(lines, 'g', { class: 'kifu-hl-g', mask: `url(#kifu-case-${this.id})` });
+		this.caseHlFill = svg(this.caseHl, 'path', { class: 'kifu-hl-copy' });
+		this.caseHlEdge = svg(this.caseHl, 'path', { class: 'kifu-hl-edge-copy', 'stroke-width': STRIPE * 2, 'clip-path': `url(#kifu-hl-clip-${this.id})` });
+		this.lineInk = svg(lines, 'path', { class: 'kifu-line' });
+		this.lineHead = svg(lines, 'path', { class: 'kifu-line-head' });
 		this.dim = svg(this.el, 'path', { class: 'kifu-dim', 'fill-rule': 'evenodd' });
 		this.frame = svg(this.el, 'path', { class: 'kifu-crop' });
 		this.ghost = svg(this.el, 'circle', { class: 'kifu-ghost', r: R });
@@ -133,6 +265,7 @@ export class BoardSvg {
 			this.el.setAttribute('viewBox', `${this.vx} ${this.vy} ${this.vw} ${this.vh}`);
 			this.el.setAttribute('width', String(Math.round(this.vw / k)));
 			this.el.setAttribute('height', String(Math.round(this.vh / k)));
+			for (const [a, v] of [['x', X0], ['y', Y0], ['width', X1 - X0], ['height', Y1 - Y0]] as const) this.clip.setAttribute(a, String(v));
 			this.drawFixed(w, h, view, line, border, k, band, cell, lc);
 		}
 
@@ -174,6 +307,112 @@ export class BoardSvg {
 		const inView = (x: number, y: number) => x >= view.x0 && x <= view.x1 && y >= view.y0 && y <= view.y1;
 		const stroke = Math.max(6, 1.5 * k).toFixed(1);
 		const on = (i: number) => (m.grid[i] === 1 ? 'kifu-on-b' : m.grid[i] === 2 ? 'kifu-on-w' : 'kifu-on-e');
+
+		// Highlighted points: a cell shaded grey or striped under the lines, stopping at the
+		// board's real edges; or, in the "square" look, a small square on the point, under any
+		// mark. Dimmed points: the whole cell veiled in paper, stones and lines alike.
+		const style = look.highlight ?? 'grey';
+		const box = (x: number, y: number, toEdge: boolean): [number, number, number, number] => {
+			let x0 = x * U;
+			let x1 = x0 + U;
+			let y0 = y * U;
+			let y1 = y0 + U;
+			if (toEdge) {
+				if (x === 0) x0 = HALF;
+				if (x === w - 1) x1 = x * U + HALF;
+				if (y === 0) y0 = HALF;
+				if (y === h - 1) y1 = y * U + HALF;
+			}
+			return [x0, y0, x1, y1];
+		};
+		const cellPath = (x: number, y: number, toEdge: boolean): string => {
+			const [x0, y0, x1, y1] = box(x, y, toEdge);
+			return `M${x0} ${y0}H${x1}V${y1}H${x0}z`;
+		};
+		const striped = style.startsWith('stripes');
+		const bordered = style === 'stripes-border' || style === 'stripes-border-animated';
+		// (the border: the sides of the region, where a cell has no highlighted neighbour, even one out of sight)
+		const outside = (x: number, y: number): boolean => x < 0 || y < 0 || x >= w || y >= h || !m.selected.has(y * w + x);
+		let hd = '';
+		let ed = '';
+		m.selected.forEach((i) => {
+			const x = i % w;
+			const y = Math.floor(i / w);
+			if (!inView(x, y)) return;
+			if (style !== 'square') {
+				hd += cellPath(x, y, true);
+				if (bordered) {
+					const [x0, y0, x1, y1] = box(x, y, true);
+					if (outside(x, y - 1)) ed += `M${x0} ${y0}H${x1}`;
+					if (outside(x, y + 1)) ed += `M${x0} ${y1}H${x1}`;
+					if (outside(x - 1, y)) ed += `M${x0} ${y0}V${y1}`;
+					if (outside(x + 1, y)) ed += `M${x1} ${y0}V${y1}`;
+				}
+				return;
+			}
+			const cx = x * U + HALF;
+			const cy = y * U + HALF;
+			const cls = `kifu-sel ${on(i)}`;
+			want.push({ key: `s${i} ${cls}`, make: () => svgNode(doc, 'path', { d: `M${cx - 18} ${cy - 18}h36v36h-36z`, class: cls }) });
+		});
+		this.hlClip.setAttribute('d', hd);
+		// the highlight, and its copy that the edges of lines and arrows show over it
+		for (const [g, fill, band, cls] of [
+			[this.hlGroup, this.hl, this.hlEdge, 'kifu-hl'],
+			[this.caseHl, this.caseHlFill, this.caseHlEdge, 'kifu-hl-copy'],
+		] as const) {
+			g.setAttribute('class', striped ? 'kifu-hl-g is-striped' : 'kifu-hl-g');
+			fill.setAttribute('d', hd);
+			fill.setAttribute('class', striped ? `${cls} is-striped` : cls);
+			if (striped) fill.setAttribute('fill', `url(#kifu-stripes-${this.id})`);
+			else fill.removeAttribute('fill');
+			band.setAttribute('d', ed);
+		}
+		// (sliding stripes: still for a reader who asks for less motion, in styles.css)
+		this.hatch.classList.toggle('is-sliding', style.endsWith('-animated'));
+		let fd = '';
+		m.dimmed.forEach((i) => {
+			const x = i % w;
+			const y = Math.floor(i / w);
+			if (inView(x, y)) fd += cellPath(x, y, false);
+		});
+		this.faded.setAttribute('d', fd);
+
+		// Lines and arrows, over everything else on the board, each with a thin edge of paper
+		// so that it reads across the lines or over a stone it passes. An end on a stone (or a
+		// mark or label) stops at the stone's edge, so that an arrow points at a stone rather
+		// than covering it and its number. (One end in sight is enough: the rest is clipped to
+		// the part shown.)
+		const lw = Math.max(6, 1.5 * k);
+		const edge = Math.max(3, k);
+		const taken = (i: number): boolean => m.grid[i] !== 0 || m.marks.has(i) || m.labels.has(i);
+		this.arrowStyle = look.arrows ?? 'filled';
+		let shafts = '';
+		let heads = '';
+		let casings = '';
+		for (const l of m.lines) {
+			const ax = l.from % w;
+			const ay = Math.floor(l.from / w);
+			const bx = l.to % w;
+			const by = Math.floor(l.to / w);
+			if (!inView(ax, ay) && !inView(bx, by)) continue;
+			const trimA = taken(l.from) ? R + edge : 0;
+			const trimB = taken(l.to) ? R + edge : 0;
+			const p = linePaths(ax * U + HALF, ay * U + HALF, bx * U + HALF, by * U + HALF, l.arrow, lw, trimA, trimB, this.arrowStyle);
+			shafts += p.shaft;
+			heads += p.head;
+			casings += p.casing;
+		}
+		const cw = (lw + 2 * edge).toFixed(1);
+		this.lineCase.setAttribute('d', casings);
+		this.lineCase.setAttribute('stroke-width', cw);
+		this.caseShape.setAttribute('d', casings);
+		this.caseShape.setAttribute('stroke-width', cw);
+		this.lineInk.setAttribute('d', shafts);
+		this.lineInk.setAttribute('stroke-width', lw.toFixed(1));
+		this.lineHead.setAttribute('d', heads);
+		this.lineHead.setAttribute('stroke-width', (lw / 2).toFixed(1));
+
 		m.marks.forEach((kind, i) => {
 			const x = i % w;
 			const y = Math.floor(i / w);
@@ -382,6 +621,23 @@ export class BoardSvg {
 		}
 		const stroke = Math.max(6, 1.5 * this.px).toFixed(1);
 		svg(this.markGhost, 'path', { d: markPath(kind, cx, cy), class: `kifu-mark kifu-ghost-mark ${on}`, 'stroke-width': stroke });
+	}
+
+	/** The line or arrow being dragged out, from `a` to `b` (null hides it). */
+	setLineGhost(a: [number, number] | null, b: [number, number], arrow: boolean): void {
+		clear(this.markGhost);
+		if (!a || (a[0] === b[0] && a[1] === b[1])) return;
+		const lw = Math.max(6, 1.5 * this.px);
+		const p = linePaths(a[0] * U + HALF, a[1] * U + HALF, b[0] * U + HALF, b[1] * U + HALF, arrow, lw, 0, 0, this.arrowStyle);
+		svg(this.markGhost, 'path', { d: p.shaft, class: 'kifu-line kifu-ghost-mark', 'stroke-width': lw.toFixed(1) });
+		if (p.head) svg(this.markGhost, 'path', { d: p.head, class: 'kifu-line-head kifu-ghost-mark', 'stroke-width': (lw / 2).toFixed(1) });
+	}
+
+	/** The rectangle being dragged out to highlight or dim (null hides it). */
+	setAreaGhost(r: Rect | null): void {
+		clear(this.markGhost);
+		if (!r) return;
+		svg(this.markGhost, 'path', { d: `M${r.x0 * U} ${r.y0 * U}H${(r.x1 + 1) * U}V${(r.y1 + 1) * U}H${r.x0 * U}z`, class: 'kifu-area-ghost' });
 	}
 
 	/** Board point under a mouse position, or null when it is outside the drawn part. */

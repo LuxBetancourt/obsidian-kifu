@@ -130,6 +130,38 @@ for (const [engine, type] of [['webkit', webkit], ['chromium', chromium]]) {
 			assert.ok(Math.abs((await foot()) - (before + 120)) <= 2, `the comment is ${await foot()}px, not ${before + 120}px`);
 		});
 	}
+	// A finger dragged on an unlocked board with a tool that draws (here an arrow) draws, and
+	// the note, long enough to scroll, does not scroll instead. (Chromium: its protocol can move a touch.)
+	if (engine === 'chromium') {
+		const long = note + '\n' + Array.from({ length: 80 }, (_, i) => `Filler paragraph ${i + 1}.`).join('\n\n') + '\n';
+		await scenario(`${engine}, iPad (gen 7): a finger draws an arrow on an unlocked board, and the note does not scroll`, { device: devices['iPad (gen 7)'], files: { 'P.md': long }, autosave: 100, panes: [{ path: 'P.md', mode: 'source' }] }, async (page) => {
+			await sleep(100);
+			await lockBtn(page).tap();
+			await tool(page, 'Arrow or line').tap();
+			const scrolled = () => page.evaluate(() => Math.max(...[document.scrollingElement, ...document.querySelectorAll('*')].map((e) => e.scrollTop)));
+			const before = await scrolled();
+			const a = await pointXY(page, 0, 'pe');
+			const b = await pointXY(page, 0, 'pk');
+			const cdp = await page.context().newCDPSession(page);
+			const touch = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
+			await touch('touchStart', a);
+			for (let k = 1; k <= 8; k++) await touch('touchMove', { x: a.x + ((b.x - a.x) * k) / 8, y: a.y + ((b.y - a.y) * k) / 8 });
+			await touch('touchEnd', null);
+			await sleep(800);
+			assert.match(await doc(page), /AR\[pe:pk\]/);
+			assert.equal(await scrolled(), before);
+			// and painting a run of stones with a finger (the click-and-drag of the stone and mark tools)
+			await tool(page, 'Black stone').tap();
+			const c = await pointXY(page, 0, 'ng');
+			const d = await pointXY(page, 0, 'nk');
+			await touch('touchStart', c);
+			for (let k = 1; k <= 8; k++) await touch('touchMove', { x: c.x, y: c.y + ((d.y - c.y) * k) / 8 });
+			await touch('touchEnd', null);
+			await sleep(800);
+			assert.match(await doc(page), /\[ng\]\[nh\]\[ni\]\[nj\]\[nk\]/);
+			assert.equal(await scrolled(), before);
+		});
+	}
 	failed += report();
 	await browser.close();
 }

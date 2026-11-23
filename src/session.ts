@@ -10,6 +10,7 @@ import {
 	Color,
 	SgfNode,
 	boardSize,
+	compressPoints,
 	coord,
 	eachNode,
 	escapeText,
@@ -49,10 +50,29 @@ import { Place, squash } from './blocks';
 import { relinkOptionLine, rewriteComments } from './links';
 import type { KifuSettings } from './config';
 
-export type Tool = 'play' | 'black' | 'white' | 'TR' | 'SQ' | 'CR' | 'MA' | 'label' | 'erase' | 'crop';
+/**
+ * What a click (or a drag) on an unlocked board does. The SGF markup tools go by their
+ * property: the symbols TR, SQ, CR and MA; lines LN and arrows AR, drawn from point to
+ * point; SL highlights points and DD dims them, a point or a rectangle at a time.
+ */
+export type Tool = 'play' | 'black' | 'white' | Shape | 'label' | Line | Area | 'erase' | 'crop';
+export type Shape = 'TR' | 'SQ' | 'CR' | 'MA';
+export type Line = 'LN' | 'AR';
+export type Area = 'SL' | 'DD';
 export type Status = 'correct' | 'incorrect' | null;
 
-const MARKS = ['TR', 'SQ', 'CR', 'MA'];
+export const SHAPES: Shape[] = ['TR', 'SQ', 'CR', 'MA'];
+const MARKS: string[] = SHAPES;
+export const isShape = (t: Tool): t is Shape => (SHAPES as string[]).includes(t);
+export const isLine = (t: Tool): t is Line => t === 'LN' || t === 'AR';
+export const isArea = (t: Tool): t is Area => t === 'SL' || t === 'DD';
+
+/** A line or an arrow, between two points (as indexes into the grid). */
+export interface MarkLine {
+	from: number;
+	to: number;
+	arrow: boolean;
+}
 /** Undo keeps at most this many steps, and at most this much game text. */
 const UNDO_STEPS = 100;
 const UNDO_CHARS = 3_000_000;
@@ -95,6 +115,12 @@ export interface Model {
 	labels: Map<number, string>;
 	/** TR, SQ, CR or MA on a point. */
 	marks: Map<number, string>;
+	/** Lines (LN) and arrows (AR) of the current position. */
+	lines: MarkLine[];
+	/** Highlighted points (SL). */
+	selected: Set<number>;
+	/** Dimmed points (DD: set on this position or an earlier one, and still in force). */
+	dimmed: Set<number>;
 	/** Point to flag as the latest move, or -1. */
 	last: number;
 	notes: FigureNote[];
@@ -169,6 +195,15 @@ function addPoint(node: SgfNode, id: string, value: string): void {
 	node.props[id] = (vals ? (id === 'LB' ? vals : points(vals)) : []).concat(value);
 }
 
+/** Write a point list (highlights, dimming) as compactly as SGF allows; an empty one goes. */
+function setPointList(node: SgfNode, id: string, set: Set<string>): void {
+	if (set.size) node.props[id] = compressPoints(set);
+	else delete node.props[id];
+}
+
+/** Does a line or arrow ("aa:cc") start or end at a point? */
+const touches = (v: string, pt: string): boolean => v.slice(0, 2) === pt || v.slice(3, 5) === pt;
+
 function bumpLabel(s: string): string {
 	if (/^\d+$/.test(s)) return String(parseInt(s) + 1);
 	if (/^[a-yA-Y]$/.test(s)) return String.fromCharCode(s.charCodeAt(0) + 1);
@@ -223,6 +258,10 @@ export class Session {
 	 */
 	typing: SgfNode | null = null;
 	tool: Tool = 'play';
+	/** What the shape, line and area buttons take up when they are chosen: the kind last used with each. */
+	shape: Shape = 'TR';
+	lineKind: Line = 'AR';
+	areaKind: Area = 'SL';
 	nextLabel = 'a';
 	/** True once a click-drag paint stroke has taken its single undo snapshot (see paint()). */
 	private strokeOpen = false;
@@ -799,6 +838,16 @@ export class Session {
 			const i = index(v);
 			if (i >= 0 && v[2] === ':') labels.set(i, unescapeText(v.slice(3)));
 		}
+		// lines and arrows: pairs of points ("aa:cc" is a line from one to the other, not a rectangle)
+		const lines: MarkLine[] = [];
+		for (const [id, arrow] of [['LN', false], ['AR', true]] as const) {
+			for (const v of cur.props[id] ?? []) {
+				const from = index(v.slice(0, 2));
+				const to = v[2] === ':' ? index(v.slice(3, 5)) : -1;
+				if (from >= 0 && to >= 0 && from !== to) lines.push({ from, to, arrow });
+			}
+		}
+		const indexes = (pts: string[]): Set<number> => new Set(pts.map(index).filter((i) => i >= 0));
 		const resting = this.restingView();
 		const wanted = parseBool(this.opts.comments) ?? this.host.settings.showComments;
 		const text = (cur === this.home ? this.opts.caption : undefined) ?? (wanted ? getText(cur, 'C') : '');
@@ -818,6 +867,9 @@ export class Session {
 			grid,
 			labels,
 			marks,
+			lines,
+			selected: indexes(points(cur.props.SL)),
+			dimmed: indexes(this.dimmedAt(cur)),
 			// the latest move gets a dot when nothing else is written on it
 			last: cur !== this.home && pos.last >= 0 && !labels.has(pos.last) ? pos.last : -1,
 			notes,
@@ -1197,16 +1249,30 @@ export class Session {
 
 	setTool(tool: Tool): void {
 		if (tool === 'label' && this.tool !== 'label') this.nextLabel = this.freeLabel();
+		if (isShape(tool)) this.shape = tool;
+		else if (isLine(tool)) this.lineKind = tool;
+		else if (isArea(tool)) this.areaKind = tool;
 		this.tool = tool;
 		this.emit();
 	}
 
-	/** Click the label tool while it is already chosen to cycle its series: a… → A… → 1… → a…. */
-	cycleLabelStyle(): void {
+	/** The series the label tool counts in: a…, A… or 1…. */
+	get labelStyle(): 'a' | 'A' | '1' {
+		return /^\d+$/.test(this.nextLabel) ? '1' : /^[A-Z]$/.test(this.nextLabel) ? 'A' : 'a';
+	}
+
+	/** Count labels in another series, from its first label not on the board yet. */
+	setLabelStyle(style: 'a' | 'A' | '1'): void {
 		if (!this.edit) return;
-		this.nextLabel = /^\d+$/.test(this.nextLabel) ? 'a' : /^[A-Z]$/.test(this.nextLabel) ? '1' : 'A';
+		this.nextLabel = style;
 		this.nextLabel = this.freeLabel();
 		this.emit();
+	}
+
+	/** The next series: a… → A… → 1… → a…. */
+	cycleLabelStyle(): void {
+		const style = this.labelStyle;
+		this.setLabelStyle(style === 'a' ? 'A' : style === 'A' ? '1' : 'a');
 	}
 
 	/** First label of the current series that is not on the board yet. */
@@ -1274,14 +1340,132 @@ export class Session {
 				this.changed(true);
 				return;
 			}
-			case 'erase': {
-				if (!this.marked(pt) && !board.g[i]) return;
+			case 'LN':
+			case 'AR':
+				return; // (drawn from one point to another by dragging: see connect)
+			case 'SL': {
+				const sel = new Set(points(cur.props.SL));
+				if (!sel.delete(pt)) sel.add(pt);
 				this.snapshot();
-				if (!this.clearMarks(pt)) this.setStone(i, pt, 0);
+				setPointList(cur, 'SL', sel);
+				this.changed(true);
+				return;
+			}
+			case 'DD': {
+				const dim = new Set(this.dimmedAt(cur));
+				if (!dim.delete(pt)) dim.add(pt);
+				this.snapshot();
+				this.setDimmed(dim);
+				this.changed(true);
+				return;
+			}
+			case 'erase': {
+				if (!this.drawnOn(pt) && !board.g[i]) return;
+				this.snapshot();
+				if (!this.eraseDrawn(pt)) this.setStone(i, pt, 0);
 				this.changed(true);
 				return;
 			}
 		}
+	}
+
+	/**
+	 * Draw a line or an arrow, whichever the tool is, from one point to another. Drawn again
+	 * it goes away. It replaces whatever else joined the two points: SGF allows one.
+	 */
+	connect(x0: number, y0: number, x1: number, y1: number): void {
+		const tool = this.tool;
+		if (!this.edit || !isLine(tool) || (x0 === x1 && y0 === y1)) return;
+		const inside = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < this.w && y < this.h;
+		if (!inside(x0, y0) || !inside(x1, y1)) return;
+		const a = xy2pt(x0, y0);
+		const b = xy2pt(x1, y1);
+		const cur = this.cur;
+		// (a line is the same line either way round; an arrow is not the same arrow)
+		const had = (cur.props[tool] ?? []).some((v) => v === `${a}:${b}` || (tool === 'LN' && v === `${b}:${a}`));
+		this.snapshot();
+		for (const id of ['LN', 'AR']) {
+			const vals = cur.props[id];
+			if (!vals) continue;
+			const kept = vals.filter((v) => v !== `${a}:${b}` && v !== `${b}:${a}`);
+			if (kept.length) cur.props[id] = kept;
+			else delete cur.props[id];
+		}
+		if (!had) cur.props[tool] = [...(cur.props[tool] ?? []), `${a}:${b}`];
+		this.changed(true);
+	}
+
+	/**
+	 * Highlight or dim, whichever the tool is, the rectangle between two points: the point the
+	 * drag began on says which way, on when it was off, off when it was on. One undo step.
+	 */
+	areaDrag(x0: number, y0: number, x1: number, y1: number): void {
+		const tool = this.tool;
+		if (!this.edit || !isArea(tool)) return;
+		const cur = this.cur;
+		const set = new Set(tool === 'SL' ? points(cur.props.SL) : this.dimmedAt(cur));
+		const on = !set.has(xy2pt(x0, y0));
+		let change = false;
+		for (let y = Math.max(0, Math.min(y0, y1)); y <= Math.min(this.h - 1, Math.max(y0, y1)); y++) {
+			for (let x = Math.max(0, Math.min(x0, x1)); x <= Math.min(this.w - 1, Math.max(x0, x1)); x++) {
+				const p = xy2pt(x, y);
+				if (on !== set.has(p)) {
+					if (on) set.add(p);
+					else set.delete(p);
+					change = true;
+				}
+			}
+		}
+		if (!change) return;
+		this.snapshot();
+		if (tool === 'SL') setPointList(cur, 'SL', set);
+		else this.setDimmed(set);
+		this.changed(true);
+	}
+
+	/** The points dimmed at a position: a DD holds from where it is set until another replaces it (DD[] ends it). */
+	private dimmedAt(n: SgfNode): string[] {
+		for (let a: SgfNode | null = n; a; a = a.parent) if (a.props.DD) return points(a.props.DD);
+		return [];
+	}
+
+	/**
+	 * Dim exactly these points from the current position on. What is written is the least
+	 * that says so: nothing, when the position before already has just these in force.
+	 */
+	private setDimmed(want: Set<string>): void {
+		const cur = this.cur;
+		delete cur.props.DD;
+		const before = new Set(this.dimmedAt(cur));
+		const same = before.size === want.size && [...want].every((p) => before.has(p));
+		if (!same) cur.props.DD = want.size ? compressPoints(want) : [''];
+	}
+
+	/** Is anything drawn on a point: a shape, a label, a highlight, a line or an arrow that starts or ends there? */
+	private drawnOn(pt: string): boolean {
+		const p = this.cur.props;
+		return this.marked(pt) || points(p.SL).includes(pt) || [...(p.LN ?? []), ...(p.AR ?? [])].some((v) => touches(v, pt));
+	}
+
+	/** Take off what is drawn on a point (see drawnOn; dimming is not drawn on it). Whether there was any. */
+	private eraseDrawn(pt: string): boolean {
+		const cur = this.cur;
+		let any = this.clearMarks(pt);
+		const sel = new Set(points(cur.props.SL));
+		if (sel.delete(pt)) {
+			setPointList(cur, 'SL', sel);
+			any = true;
+		}
+		for (const id of ['LN', 'AR']) {
+			const vals = cur.props[id];
+			if (!vals) continue;
+			const kept = vals.filter((v) => !touches(v, pt));
+			if (kept.length === vals.length) continue;
+			if (kept.length) cur.props[id] = kept;
+			else delete cur.props[id];
+			any = true;
+		}
+		return any;
 	}
 
 	/**
@@ -1345,9 +1529,9 @@ export class Session {
 				return;
 			}
 			case 'erase': {
-				if (!this.marked(pt) && !board.g[i]) return;
+				if (!this.drawnOn(pt) && !board.g[i]) return;
 				commit();
-				if (!this.clearMarks(pt)) this.setStone(i, pt, 0);
+				if (!this.eraseDrawn(pt)) this.setStone(i, pt, 0);
 				this.changed(true);
 				return;
 			}
@@ -1477,6 +1661,11 @@ export class Session {
 		this.snapshot();
 		this.cur.props.PL = [this.toPlay() === BLACK ? 'W' : 'B'];
 		this.changed(true);
+	}
+
+	/** Who plays next from here. */
+	setPlayer(color: Color): void {
+		if (this.toPlay() !== color) this.togglePlayer();
 	}
 
 	/** The mark set directly on the current move (not inherited, not guessed from a comment). */
