@@ -20,6 +20,24 @@ export interface News {
 /** Newest first. A feature belongs to the version that brought it. */
 export const NEWS: News[] = [
 	{
+		version: '1.8.0',
+		title: 'Shapes, arrows and highlights',
+		text: 'While a board is unlocked, put triangles, squares, circles and crosses on it, drag from point to point for an arrow or a line, and highlight or dim points: click one, or drag across a rectangle. The buttons with a notch in the corner show their choices above them.',
+		image: 'markup.gif',
+	},
+	{
+		version: '1.8.0',
+		title: 'Count the territory',
+		text: 'The highlight button\'s choices include territory: marked by hand for either side, or worked out for you. Taken up, it guesses which stones are dead and counts both sides at once, estimating what is still open in a game not over. A click on stones makes them dead or alive again.',
+		image: 'territory.gif',
+	},
+	{
+		version: '1.8.0',
+		title: 'Keys for the tools',
+		text: 'With the keyboard on a board, Enter unlocks it and a letter takes up a tool: B and W for stones, T, S, C and X for shapes, L for labels, A for arrows, H for highlights, E for the eraser. Press it again for the next choice. The buttons\' tooltips show their keys.',
+		image: 'keys.gif',
+	},
+	{
 		version: '1.7.0',
 		title: 'Open SGF files',
 		text: 'Click an SGF file in the file explorer, or a link to one, and it opens in a tab of its own as a board: play through it, or unlock it and edit the file. A file of several games has a picker. To start one, right-click a folder: New SGF.',
