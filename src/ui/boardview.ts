@@ -353,7 +353,10 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const want = s.refocus;
 		if (want && Date.now() < want.until) {
 			// We rewrote the block while its board had the keyboard, and this is the
-			// replacement: take the keyboard back once we are on the page.
+			// replacement: take the keyboard back once we are on the page. That is the moment
+			// the drawing going on now is over, not a frame later: the old board has left the
+			// page in this same moment, and a key pressed before the next frame (which comes
+			// late when the computer is busy) would go to the body and be lost.
 			const root = this.#root;
 			let tries = 20;
 			const take = (): void => {
@@ -378,7 +381,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 					root.focus({ preventScroll: true });
 				}
 			};
-			(root.ownerDocument.defaultView ?? window).requestAnimationFrame(take);
+			// (the editor puts the new drawing on the page after this, in the same step)
+			queueMicrotask(take);
 		}
 	}
 

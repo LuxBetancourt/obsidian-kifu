@@ -311,8 +311,8 @@ await record('territory', {
 	await sleep(1500);
 });
 
-// 7. Keys: Enter unlocks, a letter takes up a tool, Esc locks. (Each key waits for the save of the
-// clicks before it: a key pressed in the instant a save redraws the board is lost, and the GIF with it.)
+// 7. Keys: Enter unlocks, a letter takes up a tool, Esc locks. (Each key comes a moment after the
+// clicks before it, so the stones and marks can be seen, and each is checked to have taken its tool up.)
 await record('keys', {
 	files: { 'Keys.md': '# From the keyboard\n\n```kifu\nview: full\nscale: 160%\n(;GM[1]FF[4]SZ[9])\n```\n' },
 	panes: [{ path: 'Keys.md', mode: 'source' }],

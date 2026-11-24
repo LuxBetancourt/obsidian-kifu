@@ -1925,6 +1925,41 @@ await scenario('keys for the tools: a letter takes one up, again goes on to its 
 	assert.deepEqual(await notices(page), []);
 });
 
+/* A write redraws the board under the keyboard. The new board takes the keyboard in the same moment
+   as the old one leaves the page, not a frame later: a key pressed then is the board's, not lost on
+   the body. (Here the frames come half a second late, as they may when the computer is busy.) */
+for (const syncRender of [true, false]) {
+	await scenario(`a key pressed the moment a write redraws the board is not lost [processor run ${syncRender ? 'in toDOM' : 'a microtask later'}]`, {
+		files: { 'K.md': '# K\n\n```kifu\n(;GM[1]SZ[9];B[ee])\n```\n\nafter\n' }, live: ['K.md'], autosave: 150, lp: { syncRender },
+	}, async (page) => {
+		await sleep(300);
+		const on = (title) => tool(page, title).evaluate((b) => b.classList.contains('is-active'));
+		await page.locator('.kifu').first().evaluate((e) => e.focus());
+		await page.keyboard.press('Enter');
+		await sleep(250);
+		await page.keyboard.press('w');
+		assert.equal(await on('White stone'), true);
+		await page.evaluate(() => {
+			window.__old = document.querySelector('.kifu');
+			const raf = (window.__raf = window.requestAnimationFrame.bind(window));
+			window.requestAnimationFrame = (cb) => setTimeout(() => raf(cb), 500);
+		});
+		await clickPoint(page, 0, 'cc');
+		// (written 400 ms after the click: the key goes in as soon as the board has been drawn again)
+		await page.waitForFunction(() => !window.__old.isConnected && document.querySelector('.kifu'), null, { polling: 5 });
+		await page.keyboard.press('t');
+		assert.equal(await on('Triangle, square'), true, 'the key did not reach the board');
+		assert.equal(await active(page), 'DIV.kifu');
+		await page.evaluate(() => { window.requestAnimationFrame = window.__raf; });
+		await clickPoint(page, 0, 'gg');
+		await sleep(900);
+		assert.match(flat(blocks(await doc(page))[0]), /;B\[ee\]AW\[cc\]TR\[gg\]\)$/);
+		assert.equal(await active(page), 'DIV.kifu');
+		assert.deepEqual(await editorLog(page), []);
+		assert.deepEqual(await notices(page), []);
+	});
+}
+
 /* Arrows and lines are dragged from one point to another; highlighting and dimming take a click
    on a point or a dragged rectangle. A second click on either button switches between its two. */
 await scenario('arrows and lines by a drag; highlighting and dimming by a click or a dragged rectangle', {
