@@ -25,6 +25,16 @@ export function coordSides(w: number, h: number, v: Rect): { right: boolean; top
 
 /** Width of the band that holds coordinates. */
 const BAND = 80;
+/** Size of the coordinates' type. */
+const COORD = 38;
+/**
+ * The largest the coordinates' type may be on a board drawn smaller than usual to fit a
+ * space: the numbers one above the other, and the letters side by side, keep some room
+ * between them.
+ */
+const COORD_FIT = 60;
+/** Coordinates smaller than this many pixels can not be read: a board drawn that small to fit has none. */
+const COORD_LEAST = 6;
 
 /**
  * How highlighted points (SL) look: a light grey cell, a diagonally striped one (with or
@@ -43,6 +53,8 @@ export interface Look {
 	 * `cell`: a board drawn larger to fill a space keeps the look of one at its usual size.
 	 */
 	lineCell?: number;
+	/** The cell the coordinates are sized for, when it is not `lineCell` (see fitCell). */
+	coordCell?: number;
 	highlight?: Highlight;
 	arrows?: ArrowStyle;
 }
@@ -53,8 +65,24 @@ let serial = 0;
 /** The width of a stripe of a striped highlight, and of the space between two: an eighth of a line spacing. */
 const STRIPE = 12.5;
 
-/** Width of the coordinates band, in pixels, for a board whose lines are sized for `lineCell`. */
-export const bandPixels = (lineCell: number): number => (BAND * lineCell) / U;
+/**
+ * A board drawn to fill `room` pixels across, `cols` lines wide, with lines sized for
+ * `lineCell`: the pixels between two lines (whole ones), and the cell its coordinates are
+ * sized for (0: it has none). The coordinates are as on a board of the usual size while that
+ * fits between the lines. On a board drawn smaller they shrink with it, and when they would be
+ * too small to read they are left out, and the board has their room.
+ */
+export function fitCell(room: number, cols: number, lineCell: number, coords: boolean): { cell: number; coordCell: number } {
+	const whole = (c: number): number => Math.max(6, Math.min(200, Math.floor(c)));
+	if (coords) {
+		const cell = whole((room - (BAND * lineCell) / U) / cols);
+		if ((cell * COORD_FIT) / COORD >= lineCell) return { cell, coordCell: lineCell };
+		// (the band, as wide as the type is large, grows with the cell)
+		const small = whole(room / (cols + (BAND * COORD_FIT) / (COORD * U)));
+		if ((small * COORD_FIT) / U >= COORD_LEAST) return { cell: small, coordCell: (small * COORD_FIT) / COORD };
+	}
+	return { cell: whole(room / cols), coordCell: 0 };
+}
 
 /** Half the side of a territory square (the "square" highlight's is 18). */
 const TERRITORY = 14;
@@ -247,7 +275,8 @@ export class BoardSvg {
 		const border = line * 2; // px
 		const ring = Math.max(1, lc / 22) * k; // outline of a white stone, units
 		// (the band and its text keep their size in pixels too)
-		const band = look.coords ? (BAND * lc) / cell : 0;
+		const cc = look.coordCell ?? lc;
+		const band = look.coords ? (BAND * cc) / cell : 0;
 		// Nudge everything by half a pixel when that puts the lines exactly on the pixel grid.
 		const shift = (line + cell) % 2 ? 0.5 * k : 0;
 		const X0 = view.x0 * U;
@@ -262,14 +291,14 @@ export class BoardSvg {
 		this.vw = X1 - X0 + band;
 		this.vh = Y1 - Y0 + band;
 
-		const key = `${w} ${h} ${view.x0} ${view.y0} ${view.x1} ${view.y1} ${cell} ${band} ${lc}`;
+		const key = `${w} ${h} ${view.x0} ${view.y0} ${view.x1} ${view.y1} ${cell} ${band} ${lc} ${cc}`;
 		if (key !== this.fixedKey) {
 			this.fixedKey = key;
 			this.el.setAttribute('viewBox', `${this.vx} ${this.vy} ${this.vw} ${this.vh}`);
 			this.el.setAttribute('width', String(Math.round(this.vw / k)));
 			this.el.setAttribute('height', String(Math.round(this.vh / k)));
 			for (const [a, v] of [['x', X0], ['y', Y0], ['width', X1 - X0], ['height', Y1 - Y0]] as const) this.clip.setAttribute(a, String(v));
-			this.drawFixed(w, h, view, line, border, k, band, cell, lc);
+			this.drawFixed(w, h, view, line, border, k, band, cell, cc);
 		}
 
 		// Stones: every one of a colour in one path. The start of each ("M x y") and the arc
@@ -527,7 +556,7 @@ export class BoardSvg {
 	}
 
 	/** Lines, border, star points and coordinates: redrawn only when the geometry changes. */
-	private drawFixed(w: number, h: number, v: Rect, line: number, border: number, k: number, band: number, cell: number, lc: number): void {
+	private drawFixed(w: number, h: number, v: Rect, line: number, border: number, k: number, band: number, cell: number, cc: number): void {
 		clear(this.fixed);
 		const X0 = v.x0 * U;
 		const Y0 = v.y0 * U;
@@ -576,7 +605,7 @@ export class BoardSvg {
 		if (s) svg(this.fixed, 'path', { d: s, class: 'kifu-star' });
 
 		if (band) {
-			const fs = (38 * lc) / cell;
+			const fs = (COORD * cc) / cell;
 			const sides = coordSides(w, h, v);
 			const nx = sides.right ? X1 + band / 2 : X0 - band / 2;
 			const ly = sides.top ? Y0 - band / 2 : Y1 + band / 2;

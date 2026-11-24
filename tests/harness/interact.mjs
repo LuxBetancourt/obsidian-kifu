@@ -2194,6 +2194,71 @@ await scenario('the Bases view: a note whose first board is an embedded link', {
 	assert.match(await cards.nth(4).locator('.kifu-bases-none.is-error').textContent(), /OGS has no game 404, or it is not public\./);
 });
 
+/* A board drawn smaller than usual to fit its card (a 19x19 in a narrow one) had coordinates
+   as large as on a board of the usual size: the numbers were piled on one another, the letters
+   crowded together. They are now no larger than fits between its lines, and when that is too
+   small to read the board has none (and has their room). */
+await scenario('the Bases view: coordinates fit between the lines of a board drawn small, and go when too small to read', {
+	files: {
+		'Full.md': '```kifu\n(;GM[1]SZ[19]C[Black to play])\n```\n',
+		'Mid.md': '```kifu\n(;GM[1]SZ[13];B[jd];W[dj];B[jj])\n```\n',
+		'Nine.md': '```kifu\n(;GM[1]SZ[9];B[ee])\n```\n',
+	},
+	panes: [], data: { scale: 1.5, coords: true },
+}, async (page) => {
+	// three cards in a row, each a third of the view's width (less its padding and the gaps)
+	await page.evaluate(() => {
+		const h = window.harness;
+		const v = h.app.vault;
+		const entries = ['Full.md', 'Mid.md', 'Nine.md'].map((path) => ({ file: v.getAbstractFileByPath(path), getValue: () => null }));
+		const config = { get: (k) => (k === 'boardScale' ? 60 : true), getOrder: () => ['file.name'], getDisplayName: (p) => p };
+		const host = document.createElement('div');
+		host.style.width = '940px';
+		document.getElementById('main').appendChild(host);
+		const view = h.app._basesViews.get('kifu-boards').factory({ app: h.app, config, data: { groupedData: [{ hasKey: () => false, entries }] } }, host);
+		view.load();
+		view.onDataUpdated();
+		window.__host = host;
+	});
+	await sleep(500);
+	// for each board: its line spacing and the coordinates' size in pixels, and whether any two
+	// numbers (one above the other) or any two letters (side by side) run into each other
+	const measure = () => page.evaluate(() => [...document.querySelectorAll('.kifu-bases-card .kifu-svg')].map((svg) => {
+		const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+		const px = svg.getBoundingClientRect().width / vb[2];
+		const coords = [...svg.querySelectorAll('.kifu-coord')];
+		const boxes = (re) => coords.filter((t) => re.test(t.textContent)).map((t) => t.getBoundingClientRect());
+		const nums = boxes(/^\d+$/).sort((a, b) => a.top - b.top);
+		const letters = boxes(/^[A-Z]$/).sort((a, b) => a.left - b.left);
+		return {
+			cell: Math.round(px * 100 * 10) / 10,
+			font: coords.length ? Math.round(Number(coords[0].getAttribute('font-size')) * px * 100) / 100 : 0,
+			// (the drawing's width in units: a line spacing is 100, the coordinates' band comes on top)
+			width: vb[2],
+			numbersApart: nums.every((b, i) => i === 0 || b.top >= nums[i - 1].bottom),
+			lettersApart: letters.every((b, i) => i === 0 || b.left >= letters[i - 1].right),
+		};
+	}));
+	const wide = await measure();
+	// every board has its coordinates, none of them running into the next
+	assert.ok(wide.every((b) => b.font > 0 && b.numbersApart && b.lettersApart), JSON.stringify(wide));
+	// no larger than fits between the lines: at most six tenths of the line spacing
+	assert.ok(wide.every((b) => b.font <= b.cell * 0.6 + 0.01), JSON.stringify(wide));
+	// the 19x19 and the 13x13 are drawn smaller than usual, their coordinates too; the 9x9's
+	// still fit as they are on a board of the usual size (38 % of 36 pixels at a scale of 1.5)
+	assert.ok(wide[0].font < 13 && wide[1].font < 13, JSON.stringify(wide));
+	assert.ok(Math.abs(wide[2].font - 13.68) < 0.1, JSON.stringify(wide));
+	// a narrower view: the 19x19's coordinates would be too small to read, so it has none,
+	// and no band for them (the drawing is the board alone); the others keep theirs
+	await page.evaluate(() => { window.__host.style.width = '724px'; });
+	await sleep(400);
+	const narrow = await measure();
+	assert.equal(narrow[0].font, 0, JSON.stringify(narrow));
+	assert.equal(narrow[0].width, 1900);
+	assert.ok(narrow[1].font >= 6 && narrow[2].font >= 6 && narrow.every((b) => b.numbersApart && b.lettersApart), JSON.stringify(narrow));
+	assert.deepEqual(await notices(page), []);
+});
+
 /* Right-clicking a move in the tree: a menu of what the toolbar does to the current
    move, done to that one. Editing items only while unlocked; the board goes there first. */
 await scenario('right-clicking a move in the move tree: go there, mark, promote, flag, comment, delete', {

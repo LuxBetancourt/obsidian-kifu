@@ -209,7 +209,7 @@ A base can show its notes as **Kifu boards**: choose it in the base's view menu,
 
 - As in Cards, the first property is the card's **title**: the file name, unless you put another property first (a formula such as `file.asLink("Problem " + number)` makes titles like "Problem 3") or untick it, and then the name is not shown at all. With no properties ticked, a card is just its board. The rest are listed under the title, empty ones left out.
 - The boards can be played: solve a problem or step through a game right in the grid. Nothing is written from here; click anywhere on a card but its board to open the note (with Ctrl or Cmd, or the middle button, in a new tab) and edit it there.
-- The view's settings choose the **board size**, and whether the boards are **playable** or just pictures (a click then opens the note).
+- The view's settings choose the **board size**, and whether the boards are **playable** or just pictures (a click then opens the note). Coordinates, if you have them on, get smaller to fit a small board, and are left out when they would be too small to read; a larger board size brings them back.
 - A board that points at an SGF file (`sgf:`) shows that file's game. A note with no board says so.
 - Boards are drawn as their cards come into sight, so a base of hundreds of problems stays quick, and a card whose note has not changed is kept as it is when the base updates (a problem half solved stays half solved).
 

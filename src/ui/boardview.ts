@@ -7,7 +7,7 @@ import { Rect, parseBool, parseScale } from '../options';
 import type { Area, Line, Model, Session, SessionView, Shape, Tool } from '../session';
 import { isArea, isLine, isShape } from '../session';
 import { BLACK, WHITE, getMove } from '../sgf';
-import { ARROW_STYLES, BoardSvg, HIGHLIGHTS, MarkGhost, bandPixels } from './boardsvg';
+import { ARROW_STYLES, BoardSvg, HIGHLIGHTS, MarkGhost, fitCell } from './boardsvg';
 import { clear, el, icon, iconButton, renderComment, setIcon, textButton } from './dom';
 import { fromShown, orientModel, shownColor } from '../orient';
 
@@ -594,11 +594,15 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 		const o = s.orientation;
 		const m = o ? orientModel(s.model(), o) : s.model();
 		// "scale: fit" (a card in a base): as large as the space allows, with lines, outlines
-		// and coordinates as on a board of the usual size
-		const fit = /^fit$/i.test(s.opts.scale ?? '');
-		const lineCell = Math.max(6, Math.round(BASE_CELL * set.scale));
-		const cell = fit ? this.#fitCell(m, coords, lineCell) : usual;
-		this.#look = fit ? { cell, coords, lineCell, highlight, arrows } : { cell, coords, highlight, arrows };
+		// and coordinates as on a board of the usual size (coordinates no larger than fit
+		// between the lines, though, and none too small to read: see fitCell)
+		if (/^fit$/i.test(s.opts.scale ?? '')) {
+			const lineCell = Math.max(6, Math.round(BASE_CELL * set.scale));
+			const { cell, coordCell } = this.#fitCell(m, coords, lineCell);
+			this.#look = { cell, coords: coordCell > 0, lineCell, coordCell, highlight, arrows };
+		} else {
+			this.#look = { cell: usual, coords, highlight, arrows };
+		}
 		this.#board.draw(m, this.#look);
 		this.#hover = '';
 
@@ -643,8 +647,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 	#fitObserver: ResizeObserver | null = null;
 	#fitWidth = 0;
 
-	/** The cell that makes the board fill the width it has (and redraw when that changes). */
-	#fitCell(m: Model, coords: boolean, lineCell: number): number {
+	/** The cell that makes the board fill the width it has (and redraw when that changes), and its coordinates' (see fitCell). */
+	#fitCell(m: Model, coords: boolean, lineCell: number): { cell: number; coordCell: number } {
 		if (!this.#fitObserver) {
 			this.#fitObserver = new ResizeObserver(() => {
 				const width = this.#root.clientWidth;
@@ -661,10 +665,8 @@ export class BoardView extends MarkdownRenderChild implements SessionView {
 			parseFloat(root.paddingLeft) - parseFloat(root.paddingRight) -
 			parseFloat(frame.paddingLeft) - parseFloat(frame.paddingRight);
 		// (not laid out yet: the usual size, until the observer says how wide it is)
-		if (!(room > 0)) return lineCell;
-		const cols = m.view.x1 - m.view.x0 + 1;
-		const band = coords ? bandPixels(lineCell) : 0;
-		return Math.max(6, Math.min(200, Math.floor((room - band) / cols)));
+		if (!(room > 0)) return { cell: lineCell, coordCell: coords ? lineCell : 0 };
+		return fitCell(room, m.view.x1 - m.view.x0 + 1, lineCell, coords);
 	}
 
 	#renderCaption(m: Model): void {
